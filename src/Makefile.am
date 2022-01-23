@@ -197,10 +197,12 @@ flexemu_SOURCES = \
 	mc6809in.cpp \
 	mc6809st.cpp \
 	mc6821.cpp \
+	mc6522.cpp \
 	mc6850.cpp \
 	mmu.cpp \
 	ndircont.cpp \
 	pia1.cpp \
+	via1.cpp \
 	pia2.cpp \
 	pia2v5.cpp \
 	qtgui.cpp \
@@ -278,6 +280,7 @@ flexemu_SOURCES = \
 	mc6809.h \
 	mc6809st.h \
 	mc6821.h \
+	mc6522.h \
 	mc6850.h \
 	mdcrtape.h \
 	memory.h \
@@ -287,6 +290,7 @@ flexemu_SOURCES = \
 	mmu.h \
 	ndircont.h \
 	pia1.h \
+	via1.h \
 	pia2.h \
 	pia2v5.h \
 	propsui.h \

@@ -63,6 +63,11 @@
 /* the range is: $fc00 - ffff                   */
 /* It has to be a multiple of 1024              */
 #define GENIO_BASE  0xfc00
+#define GENIO_END   0xffff
+// 2nd memory mapped I/O is at E0xx
+#define GENIO_BASE2 0xe000
+#define GENIO_END2  0xe0ff
+
 #define ROM_BASE    0xf000   /* Start addr. of ROM up to 0xffff */
 
 #define ORIGINAL_FREQUENCY 1.3396f

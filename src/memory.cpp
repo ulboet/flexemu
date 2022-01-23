@@ -223,7 +223,8 @@ bool Memory::add_io_device(
         size = sizeOfIo;
     }
 
-    if (base_address < GENIO_BASE || ((int)base_address + size > 0xffff))
+// io-device addressess outside the IO-regions, then return false
+    if (! ((base_address >= GENIO_BASE && ((int)base_address + size <= GENIO_END)) || (base_address >= GENIO_BASE2 && ((int)base_address + size <= GENIO_END2))))
     {
         return false;
     }
@@ -345,4 +346,3 @@ void Memory::CopyFrom(const Byte *buffer, size_t address, size_t aSize)
 
     memcpy(memory.get() + address, buffer, secureSize);
 }
-

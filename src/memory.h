@@ -111,9 +111,9 @@ public:
 
     // The following memory Byte/Word access methods are
     // inlined for optimized performance.
-    inline void write_byte(Word address, Byte value)
+   inline void write_byte(Word address, Byte value)
     {
-        if ((address & GENIO_BASE) == GENIO_BASE)
+        if (((address & GENIO_BASE) == GENIO_BASE) || ((address & GENIO_BASE2) == GENIO_BASE2))
         {
             auto iterator = ioAccessForAddressMap.find(address);
 
@@ -147,7 +147,7 @@ public:
 
     inline Byte read_byte(Word address)
     {
-        if ((address & GENIO_BASE) == GENIO_BASE)
+        if (((address & GENIO_BASE) == GENIO_BASE) || ((address & GENIO_BASE2) == GENIO_BASE2))
         {
             auto iterator = ioAccessForAddressMap.find(address);
 

@@ -180,9 +180,9 @@ am_flexemu_OBJECTS = flexemu-absgui.$(OBJEXT) flexemu-acia1.$(OBJEXT) \
 	flexemu-logfilui.$(OBJEXT) flexemu-main.$(OBJEXT) \
 	flexemu-mc146818.$(OBJEXT) flexemu-mc6809.$(OBJEXT) \
 	flexemu-mc6809in.$(OBJEXT) flexemu-mc6809st.$(OBJEXT) \
-	flexemu-mc6821.$(OBJEXT) flexemu-mc6850.$(OBJEXT) \
+	flexemu-mc6522.$(OBJEXT) flexemu-mc6821.$(OBJEXT) flexemu-mc6850.$(OBJEXT) \
 	flexemu-mmu.$(OBJEXT) flexemu-ndircont.$(OBJEXT) \
-	flexemu-pia1.$(OBJEXT) flexemu-pia2.$(OBJEXT) \
+	flexemu-pia1.$(OBJEXT) flexemu-via1.$(OBJEXT) flexemu-pia2.$(OBJEXT) \
 	flexemu-pia2v5.$(OBJEXT) flexemu-qtgui.$(OBJEXT) \
 	flexemu-schedule.$(OBJEXT) flexemu-sodiff.$(OBJEXT) \
 	flexemu-terminal.$(OBJEXT) flexemu-vico1.$(OBJEXT) \
@@ -280,9 +280,9 @@ am__depfiles_remade = ./$(DEPDIR)/dsktool-dsktool.Po \
 	./$(DEPDIR)/flexemu-logfilui_moc.Po \
 	./$(DEPDIR)/flexemu-main.Po ./$(DEPDIR)/flexemu-mc146818.Po \
 	./$(DEPDIR)/flexemu-mc6809.Po ./$(DEPDIR)/flexemu-mc6809in.Po \
-	./$(DEPDIR)/flexemu-mc6809st.Po ./$(DEPDIR)/flexemu-mc6821.Po \
+	./$(DEPDIR)/flexemu-mc6809st.Po ./$(DEPDIR)/flexemu-mc6821.Po ./$(DEPDIR)/flexemu-mc6522.Po\
 	./$(DEPDIR)/flexemu-mc6850.Po ./$(DEPDIR)/flexemu-mmu.Po \
-	./$(DEPDIR)/flexemu-ndircont.Po ./$(DEPDIR)/flexemu-pia1.Po \
+	./$(DEPDIR)/flexemu-ndircont.Po ./$(DEPDIR)/flexemu-via1.Po  \
 	./$(DEPDIR)/flexemu-pia2.Po ./$(DEPDIR)/flexemu-pia2v5.Po \
 	./$(DEPDIR)/flexemu-qtgui.Po ./$(DEPDIR)/flexemu-qtgui_moc.Po \
 	./$(DEPDIR)/flexemu-schedule.Po ./$(DEPDIR)/flexemu-sodiff.Po \
@@ -812,10 +812,12 @@ flexemu_SOURCES = \
 	mc6809in.cpp \
 	mc6809st.cpp \
 	mc6821.cpp \
+	mc6522.cpp \
 	mc6850.cpp \
 	mmu.cpp \
 	ndircont.cpp \
 	pia1.cpp \
+	via1.cpp \
 	pia2.cpp \
 	pia2v5.cpp \
 	qtgui.cpp \
@@ -893,6 +895,7 @@ flexemu_SOURCES = \
 	mc6809.h \
 	mc6809st.h \
 	mc6821.h \
+	mc6522.h \
 	mc6850.h \
 	mdcrtape.h \
 	memory.h \
@@ -902,6 +905,7 @@ flexemu_SOURCES = \
 	mmu.h \
 	ndircont.h \
 	pia1.h \
+	via1.h \
 	pia2.h \
 	pia2v5.h \
 	propsui.h \
@@ -1346,10 +1350,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6809in.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6809st.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6821.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6522.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6850.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mmu.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-ndircont.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia1.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-via1.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia2.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia2v5.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-qtgui.Po@am__quote@ # am--include-marker
@@ -2357,6 +2363,20 @@ flexemu-mc6821.obj: mc6821.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-mc6821.obj `if test -f 'mc6821.cpp'; then $(CYGPATH_W) 'mc6821.cpp'; else $(CYGPATH_W) '$(srcdir)/mc6821.cpp'; fi`
 
+flexemu-mc6522.o: mc6522.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-mc6522.o -MD -MP -MF $(DEPDIR)/flexemu-mc6522.Tpo -c -o flexemu-mc6522.o `test -f 'mc6522.cpp' || echo '$(srcdir)/'`mc6522.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/flexemu-mc6522.Tpo $(DEPDIR)/flexemu-mc6522.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='mc6522.cpp' object='flexemu-mc6522.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-mc6522.o `test -f 'mc6522.cpp' || echo '$(srcdir)/'`mc6522.cpp
+
+flexemu-mc6522.obj: mc6522.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-mc6522.obj -MD -MP -MF $(DEPDIR)/flexemu-mc6522.Tpo -c -o flexemu-mc6522.obj `if test -f 'mc6522.cpp'; then $(CYGPATH_W) 'mc6522.cpp'; else $(CYGPATH_W) '$(srcdir)/mc6522.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/flexemu-mc6522.Tpo $(DEPDIR)/flexemu-mc6522.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='mc6522.cpp' object='flexemu-mc6522.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-mc6522.obj `if test -f 'mc6522.cpp'; then $(CYGPATH_W) 'mc6522.cpp'; else $(CYGPATH_W) '$(srcdir)/mc6522.cpp'; fi`
+
 flexemu-mc6850.o: mc6850.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-mc6850.o -MD -MP -MF $(DEPDIR)/flexemu-mc6850.Tpo -c -o flexemu-mc6850.o `test -f 'mc6850.cpp' || echo '$(srcdir)/'`mc6850.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/flexemu-mc6850.Tpo $(DEPDIR)/flexemu-mc6850.Po
@@ -2412,6 +2432,20 @@ flexemu-pia1.obj: pia1.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='pia1.cpp' object='flexemu-pia1.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-pia1.obj `if test -f 'pia1.cpp'; then $(CYGPATH_W) 'pia1.cpp'; else $(CYGPATH_W) '$(srcdir)/pia1.cpp'; fi`
+
+flexemu-via1.o: via1.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-via1.o -MD -MP -MF $(DEPDIR)/flexemu-via1.Tpo -c -o flexemu-via1.o `test -f 'via1.cpp' || echo '$(srcdir)/'`via1.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/flexemu-via1.Tpo $(DEPDIR)/flexemu-via1.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='via1.cpp' object='flexemu-via1.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-via1.o `test -f 'via1.cpp' || echo '$(srcdir)/'`via1.cpp
+
+flexemu-via1.obj: via1.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-via1.obj -MD -MP -MF $(DEPDIR)/flexemu-via1.Tpo -c -o flexemu-via1.obj `if test -f 'via1.cpp'; then $(CYGPATH_W) 'via1.cpp'; else $(CYGPATH_W) '$(srcdir)/via1.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/flexemu-via1.Tpo $(DEPDIR)/flexemu-via1.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='via1.cpp' object='flexemu-via1.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -c -o flexemu-via1.obj `if test -f 'via1.cpp'; then $(CYGPATH_W) 'via1.cpp'; else $(CYGPATH_W) '$(srcdir)/via1.cpp'; fi`
 
 flexemu-pia2.o: pia2.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(flexemu_CXXFLAGS) $(CXXFLAGS) -MT flexemu-pia2.o -MD -MP -MF $(DEPDIR)/flexemu-pia2.Tpo -c -o flexemu-pia2.o `test -f 'pia2.cpp' || echo '$(srcdir)/'`pia2.cpp
@@ -3380,10 +3414,12 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-mc6809in.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809st.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6821.Po
+	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6850.Po
 	-rm -f ./$(DEPDIR)/flexemu-mmu.Po
 	-rm -f ./$(DEPDIR)/flexemu-ndircont.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia1.Po
+	-rm -f ./$(DEPDIR)/flexemu-via1.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2v5.Po
 	-rm -f ./$(DEPDIR)/flexemu-qtgui.Po
@@ -3541,10 +3577,12 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-mc6809in.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809st.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6821.Po
+	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6850.Po
 	-rm -f ./$(DEPDIR)/flexemu-mmu.Po
 	-rm -f ./$(DEPDIR)/flexemu-ndircont.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia1.Po
+	-rm -f ./$(DEPDIR)/flexemu-via1.Po	
 	-rm -f ./$(DEPDIR)/flexemu-pia2.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2v5.Po
 	-rm -f ./$(DEPDIR)/flexemu-qtgui.Po

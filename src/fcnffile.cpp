@@ -32,7 +32,7 @@
 const std::set<std::string> FlexemuConfigFile::validDevices =
     std::set<std::string>{
         "mmu", "acia1", "pia1", "pia2", "fdc",
-        "drisel", "command", "vico1", "vico2", "rtc"
+        "drisel", "command", "vico1", "vico2", "rtc", "via1"
     };
 
 FlexemuConfigFile::FlexemuConfigFile(const char *aFileName) :
@@ -89,7 +89,7 @@ std::vector<sIoDeviceMapping> FlexemuConfigFile::ReadIoDevices()
             mapping.byteSize = -1;
             addressStream << std::hex << addressString;
             addressStream >> baseAddress;
-            if (baseAddress < GENIO_BASE || baseAddress > 0xffff)
+            if (baseAddress < GENIO_BASE2 || ((baseAddress > GENIO_END2) && (baseAddress < GENIO_BASE)) || baseAddress > GENIO_END)
             {
                 throw FlexException(FERR_INVALID_LINE_IN_FILE,
                                     iter.first + "=" + iter.second,
@@ -120,7 +120,6 @@ std::vector<sIoDeviceMapping> FlexemuConfigFile::ReadIoDevices()
                                 iniFile.GetFileName());
         }
     }
-
     return deviceMappings;
 }
 
