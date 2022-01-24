@@ -272,12 +272,12 @@ bool NafsDirectoryContainer::IsFlexFilename(const char *pfilename,
 
     extension[0] = '\0';
     dot    = '\0';
-#ifdef _WIN32
+//#ifdef _WIN32
     format = "%1[A-Za-z]%7[A-Za-z0-9_-]";
-#endif
-#ifdef UNIX
-    format = "%1[a-z]%7[a-z0-9_-]";
-#endif
+//#endif
+//#ifdef UNIX
+//    format = "%1[a-z]%7[a-z0-9_-]";
+//#endif
     result = sscanf(pfilename, format, &name[0], &name[1]);
 
     if (!result || result == EOF)
@@ -287,21 +287,21 @@ bool NafsDirectoryContainer::IsFlexFilename(const char *pfilename,
 
     if (result == 1)
     {
-#ifdef _WIN32
+//#ifdef _WIN32
         format = "%*1[A-Za-z]%c%1[A-Za-z]%2[A-Za-z0-9_-]";
-#endif
-#ifdef UNIX
-        format = "%*1[a-z]%c%1[a-z]%2[a-z0-9_-]";
-#endif
+//#endif
+//#ifdef UNIX
+//        format = "%*1[a-z]%c%1[a-z]%2[a-z0-9_-]";
+//#endif
     }
     else
     {
-#ifdef _WIN32
+//#ifdef _WIN32
         format = "%*1[A-Za-z]%*7[A-Za-z0-9_-]%c%1[A-Za-z]%2[A-Za-z0-9_-]";
-#endif
-#ifdef UNIX
-        format = "%*1[a-z]%*7[a-z0-9_-]%c%1[a-z]%2[a-z0-9_-]";
-#endif
+//#endif
+//#ifdef UNIX
+//        format = "%*1[a-z]%*7[a-z0-9_-]%c%1[a-z]%2[a-z0-9_-]";
+//#endif
     }
 
     result = sscanf(pfilename, format, &dot, &extension[0], &extension[1]);
@@ -316,8 +316,8 @@ bool NafsDirectoryContainer::IsFlexFilename(const char *pfilename,
         return false;
     }
 
-    strupper(name);
-    strupper(extension);
+//    strupper(name);
+//    strupper(extension);
 
     ret_name = name;
     ret_extension = extension;
@@ -364,8 +364,8 @@ std::string NafsDirectoryContainer::get_unix_filename(
     {
         std::string basename(dir_entry.filename, 0U, FLEX_BASEFILENAME_LENGTH);
         std::string extension(dir_entry.file_ext, 0U, FLEX_FILEEXT_LENGTH);
-        strlower(basename);
-        strlower(extension);
+//        strlower(basename);
+//        strlower(extension);
         return basename + '.' + extension;
     }
 
@@ -913,7 +913,7 @@ void NafsDirectoryContainer::modify_random_file(const char *path,
 void NafsDirectoryContainer::fill_flex_directory(bool is_write_protected)
 {
     std::vector<std::string> filenames; // List of to be added files
-    std::unordered_set<std::string> lc_filenames; // Compare lower case filen.
+    std::unordered_set<std::string> lc_filenames; // Compare lower case filenames.
     std::unordered_set<std::string> random_filenames; // random files.
     struct stat sbuf;
 
@@ -923,7 +923,7 @@ void NafsDirectoryContainer::fill_flex_directory(bool is_write_protected)
         std::string name;
         std::string extension;
 
-        strlower(lc_filename);
+//        strlower(lc_filename);
 
         // CDFS-Support: look for file name in file 'random'
         if (is_write_protected)
@@ -972,7 +972,7 @@ void NafsDirectoryContainer::fill_flex_directory(bool is_write_protected)
             {
                 continue;
             }
-            strlower(filename);
+//            strlower(filename);
             bool is_random = (pentry.dwFileAttributes &
                               FILE_ATTRIBUTE_HIDDEN) ? true : false;
 

@@ -141,7 +141,7 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
             attributes |= WRITE_PROTECT;
         }
 
-        strupper(fileName);
+//        strupper(fileName);
         dirEntry.SetTotalFileName(fileName.c_str());
         auto fileSize = (findData.nFileSizeLow + 251U) / 252U * SECTOR_SIZE;
         dirEntry.SetFileSize(fileSize);
@@ -215,7 +215,7 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
             attributes |= WRITE_PROTECT;
         }
 
-        strupper(fileName);
+//        strupper(fileName);
         dirEntry.SetTotalFileName(fileName.c_str());
         dirEntry.SetFileSize((sbuf.st_size + 251) / 252 * SECTOR_SIZE);
         lt = localtime(&(sbuf.st_mtime));
@@ -244,7 +244,7 @@ bool DirectoryContainerIteratorImp::DeleteCurrent()
     }
 
     filePath = dirEntry.GetTotalFileName();
-    strlower(filePath);
+//    strlower(filePath);
     filePath = base->GetPath() + PATHSEPARATOR + filePath;
 #ifdef UNIX
 
@@ -307,10 +307,10 @@ bool DirectoryContainerIteratorImp::RenameCurrent(const char *newName)
     std::string dst(newName);
     FlexDirEntry de;
 #ifdef UNIX
-    strlower(src);
+//    strlower(src);
 #endif
     // When renaming always prefer lowercase filenames
-    strlower(dst);
+//    strlower(dst);
 
     // prevent overwriting of an existing file
     if (base->FindFile(dst.c_str(), de))
@@ -362,7 +362,7 @@ bool DirectoryContainerIteratorImp::SetDateCurrent(const BDate &date)
     }
 
     filePath = dirEntry.GetTotalFileName();
-    strlower(filePath);
+//    strlower(filePath);
     filePath = base->GetPath() + PATHSEPARATORSTRING + filePath;
 
     if (stat(filePath.c_str(), &sbuf) >= 0)
@@ -423,7 +423,7 @@ bool DirectoryContainerIteratorImp::SetAttributesCurrent(Byte attributes)
     struct stat sbuf;
 
     filePath = dirEntry.GetTotalFileName();
-    strlower(filePath);
+//    strlower(filePath);
     filePath = base->GetPath() + PATHSEPARATORSTRING + filePath;
 
     if (!stat(filePath.c_str(), &sbuf))

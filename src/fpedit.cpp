@@ -145,7 +145,8 @@ void FlexFilenameDelegate::setModelData(QWidget *editor,
 {
     auto *model = static_cast<FlexplorerTableModel *>(abstractModel);
     auto *filenameEditor = static_cast<QLineEdit *>(editor);
-    auto newFilename = filenameEditor->text().toUpper();
+//    auto newFilename = filenameEditor->text().toUpper();
+    auto newFilename = filenameEditor->text();
 
     try
     {

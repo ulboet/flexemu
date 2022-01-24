@@ -537,8 +537,8 @@ std::string FileContainerCheck::GetUnixFilename(
     {
         std::string basename(dir_entry.filename, 0U, FLEX_BASEFILENAME_LENGTH);
         std::string extension(dir_entry.file_ext, 0U, FLEX_FILEEXT_LENGTH);
-        strlower(basename);
-        strlower(extension);
+//        strlower(basename);
+//        strlower(extension);
         return basename + '.' + extension;
     }
 

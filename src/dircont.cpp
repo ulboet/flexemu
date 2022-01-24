@@ -363,7 +363,7 @@ FlexFileBuffer DirectoryContainer::ReadToBuffer(const char *fileName)
     FlexFileBuffer buffer;
     std::string filePath(fileName);
 
-    strlower(filePath);
+//    strlower(filePath);
     filePath = directory + PATHSEPARATORSTRING + filePath;
 
     if (!buffer.ReadFromFile(filePath.c_str()))
@@ -389,7 +389,7 @@ bool DirectoryContainer::WriteFromBuffer(const FlexFileBuffer &buffer,
     }
 
 #ifdef UNIX
-    strlower(lowerFileName);
+//    strlower(lowerFileName);
 #endif
     filePath = directory + PATHSEPARATORSTRING + lowerFileName;
 
@@ -444,7 +444,7 @@ bool    DirectoryContainer::SetDate(const char *fileName, const BDate &date)
     std::string filePath;
     std::string lowerFileName(fileName);
 
-    strlower(lowerFileName);
+//    strlower(lowerFileName);
     filePath = directory + PATHSEPARATORSTRING + lowerFileName;
 
     if (stat(filePath.c_str(), &sbuf) >= 0)
@@ -500,7 +500,7 @@ bool DirectoryContainer::SetAttributes(const char *fileName, Byte setMask,
         struct stat sbuf;
         std::string lowerFileName(fileName);
 
-        strlower(lowerFileName);
+//       strlower(lowerFileName);
         auto filePath(directory + PATHSEPARATORSTRING + lowerFileName);
 
         if (!stat(filePath.c_str(), &sbuf))
@@ -536,7 +536,7 @@ bool    DirectoryContainer::SetRandom(const char *fileName)
     struct stat sbuf;
     std::string lowerFileName(fileName);
 
-    strlower(lowerFileName);
+//    strlower(lowerFileName);
     auto filePath(directory + PATHSEPARATORSTRING + lowerFileName);
 
     if (!stat(filePath.c_str(), &sbuf))
@@ -560,7 +560,8 @@ bool DirectoryContainer::IsFlexFilename(const char *pfilename,
     char    ext[4];
 
     dot    = '\0';
-    result = sscanf(pfilename, "%1[a-z]%7[a-z0-9_-]", name, &name[1]);
+//    result = sscanf(pfilename, "%1[a-z]%7[a-z0-9_-]", name, &name[1]);
+    result = sscanf(pfilename, "%1[A-Za-z]%7[A-Za-z0-9_-]", name, &name[1]);
 
     if (!result || result == EOF)
     {
@@ -569,12 +570,14 @@ bool DirectoryContainer::IsFlexFilename(const char *pfilename,
 
     if (result == 1)
     {
-        result = sscanf(pfilename, "%*1[a-z]%c%1[a-z]%2[a-z0-9_-]",
+//        result = sscanf(pfilename, "%*1[a-z]%c%1[a-z]%2[a-z0-9_-]",
+        result = sscanf(pfilename, "%*1[A-Za-z]%c%1[A-Za-z]%2[A-Za-z0-9_-]",        
                         &dot, ext, &ext[1]);
     }
     else
     {
-        result = sscanf(pfilename, "%*1[a-z]%*7[a-z0-9_-]%c%1[a-z]%2[a-z0-9_-]",
+//        result = sscanf(pfilename, "%*1[a-z]%*7[a-z0-9_-]%c%1[a-z]%2[a-z0-9_-]",
+        result = sscanf(pfilename, "%*1[A-Za-z]%*7[A-Za-z0-9_-]%c%1[A-Za-z]%2[A-Za-z0-9_-]",
                         &dot, ext, &ext[1]);
     }
 
@@ -588,8 +591,8 @@ bool DirectoryContainer::IsFlexFilename(const char *pfilename,
         return false;
     }
 
-    strupper(name);
-    strupper(ext);
+//    strupper(name);
+//    strupper(ext);
 
     if (pname)
     {
