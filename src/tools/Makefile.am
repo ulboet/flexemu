@@ -12,7 +12,8 @@ bin_PROGRAMS = \
 	rcvflex \
 	send2flx \
 	testdaa \
-	toflex
+	toflex \
+	s19toflex
 
 AM_CFLAGS = @OS_TYPE@
 
@@ -22,6 +23,7 @@ rcvflex_LINK  = $(CCLD) -o $@
 toflex_LINK   = $(CCLD) -o $@
 send2flx_LINK = $(CCLD) -o $@
 testdaa_LINK  = $(CCLD) -o $@
+s19toflex_LINK = $(CCLD) -o $@
 
 bin2s19_SOURCES  = bin2s19.c
 fromflex_SOURCES = fromflex.c
@@ -29,4 +31,4 @@ rcvflex_SOURCES  = rcvflex.c
 toflex_SOURCES   = toflex.c
 send2flx_SOURCES = send2flx.c
 testdaa_SOURCES  = testdaa.c
-
+s19toflex_SOURCES = s19toflex.c
