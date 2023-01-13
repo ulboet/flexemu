@@ -24,6 +24,7 @@
 #define FPMDICH_INCLUDED
 
 #include "misc1.h"
+#include "efiletim.h"
 #include "warnoff.h"
 #include <QPair>
 #include <QPoint>
@@ -34,6 +35,7 @@
 #include <memory>
 
 class FlexDateDelegate;
+class FlexDateTimeDelegate;
 class FlexFilenameDelegate;
 class FlexAttributesDelegate;
 class FlexplorerTableModel;
@@ -53,7 +55,7 @@ class FlexplorerMdiChild : public QTableView
     Q_OBJECT
 
 public:
-    FlexplorerMdiChild(const QString &path);
+    FlexplorerMdiChild(const QString &path, struct sFPOptions &options);
     FlexplorerMdiChild() = delete;
     virtual ~FlexplorerMdiChild();
 
@@ -67,6 +69,8 @@ public:
     void DeselectAll();
     int FindFiles(const QString &pattern);
     int DeleteSelected();
+    int InjectFiles(const QStringList &filePaths);
+    int ExtractSelected(const QString &targetDirectory);
     int ViewSelected();
     QVector<QString> GetSelectedFilenames() const;
     QString GetSupportedAttributes() const;
@@ -80,6 +84,9 @@ public:
 
 signals:
     void SelectionHasChanged();
+
+public slots:
+    void OnFileTimeAccessChanged();
 
 private slots:
     void IsActivated(const QModelIndex &index);
@@ -100,14 +107,18 @@ private:
     int PasteFrom(const QMimeData &mimeData);
     QMimeData *GetMimeDataForSelected(int *count = nullptr);
     QMimeData *GetHtmlMimeDataForSelected();
+    void UpdateDateDelegate();
+    void MultiSelect(const QVector<int> &rowIndices);
 
     std::unique_ptr<FlexplorerTableModel> model;
     std::unique_ptr<FlexDateDelegate> dateDelegate;
+    std::unique_ptr<FlexDateTimeDelegate> dateTimeDelegate;
     std::unique_ptr<FlexFilenameDelegate> filenameDelegate;
     std::unique_ptr<FlexAttributesDelegate> attributesDelegate;
     QPoint dragStartPosition;
     int selectedFilesCount;
     int selectedFilesByteSize;
+    struct sFPOptions &options;
 
     static const QString mimeTypeFlexDiskImageFile;
 };

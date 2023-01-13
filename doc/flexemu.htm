@@ -237,7 +237,7 @@ default is
 
 <h3 id="preferences">Flexemu Preferences</h3>
 <div class="justify">
-In <b>flexemu</b> menu Edit->Preferences opens the preferences dialog.
+In <b>flexemu</b> menu Edit-&gt;Preferences opens the preferences dialog.
 The following preferences can be modified.
 </div>
 <p>
@@ -251,6 +251,9 @@ The following preferences can be modified.
  <tr>
   <th>V5</th>
   <th>V7</th>
+ </tr>
+ <tr>
+  <th colspan="5">Emulated Hardware</td>
  </tr>
  <tr>
   <td>Emulated hardware</td>
@@ -283,6 +286,9 @@ The following preferences can be modified.
   <td><b>-</b></td>
   <td><b>&check;</b></td>
   <td>Emulate realtime clock</td>
+ </tr>
+ <tr>
+  <th colspan="5">User Interface</td>
  </tr>
  <tr>
   <td>Screen size</td>
@@ -331,6 +337,9 @@ The following preferences can be modified.
   <td>off</td>
  </tr>
  <tr>
+  <th colspan="5">Memory</td>
+ </tr>
+ <tr>
   <td>RAM extension</td>
   <td>
    <ul>
@@ -342,6 +351,9 @@ The following preferences can be modified.
   <td><b>&check;<br><b>-</b><br><b>-</b></b></td>
   <td><b>&check;<br><b>&check;</b><br><b>&check;</b></b></td>
   <td>2 x 96 KByte</td>
+ </tr>
+ <tr>
+  <th colspan="5">Files and Directories</td>
  </tr>
  <tr>
   <td>Disk/Monitor directory</td>
@@ -399,6 +411,41 @@ The following preferences can be modified.
   <td><b>&check;</b></td>
   <td><b>-</b></td>
   <td>Not set</td>
+ </tr>
+ <tr>
+  <th colspan="5">Terminal (Linux only)</td>
+ </tr>
+ <tr>
+  <td>Ignore output of NUL (0x00) characters</td>
+  <td>
+			In terminal mode the output of NUL characters can be ignored. Their initial
+			usage to wait until the teleprinter returns to the first printing position
+			is not needed any more. There are terminals which incorrectly display it as
+			a space. For details see:
+			<a href="https://en.wikipedia.org/wiki/Null_character">
+				Wikipedia Null character</a>. Some terminals also use NUL characters in
+			escape sequences.
+		</td>
+  <td><b>&check;</b></td>
+  <td><b>&check;</b></td>
+  <td>on</td>
+ </tr>
+ <tr>
+  <td>Ignore output of ESC (0x1B) characters</td>
+  <td>
+			In terminal mode the output of ESC characters can be ignored. This option
+			has to be switched off, to send escape sequences to the terminal. When doing
+			this it is recommended to change <a href="flexmem.htm#ttyesc">TTYESC</a>
+			to a different character than ESC using
+			<a href="flexuser.htm#ttyset">TTYSET DOS Utility</a>.
+			This can avoid the terminal to stick in an escape sequence.
+		</td>
+  <td><b>&check;</b></td>
+  <td><b>&check;</b></td>
+  <td>on</td>
+ </tr>
+ <tr>
+  <th colspan="5">Expert Preferences</td>
  </tr>
  <tr>
   <td>Undocumented instructions</td>
@@ -545,6 +592,22 @@ four digit hexadecimal address:
   <td>
     Stop Instruction logging when the value of the PC is equal to the Stop
     Address.
+  </td>
+ </tr>
+ <tr>
+  <td>Log cycle count</td>
+  <td>off</td>
+  <td>
+    Log the number of cycles the CPU executed since the last reset.
+  </td>
+ </tr>
+ <tr>
+  <td>Log register values</td>
+  <td>all off</td>
+  <td>
+    Log a combination of CPU register values. The PC address is always logged.
+    Register values are logged before executing the instruction on the current
+    PC address.
   </td>
  </tr>
  <tr>

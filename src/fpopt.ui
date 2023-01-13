@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>640</width>
-    <height>80</height>
+    <height>290</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -21,8 +21,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>0</width>
-    <height>0</height>
+    <width>640</width>
+    <height>290</height>
    </size>
   </property>
   <property name="maximumSize">
@@ -42,7 +42,7 @@
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout_1">
    <item>
-    <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0">
+    <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,0">
      <property name="spacing">
       <number>6</number>
      </property>
@@ -79,6 +79,94 @@
         </widget>
        </item>
       </layout>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,10">
+       <property name="sizeConstraint">
+        <enum>QLayout::SetMinimumSize</enum>
+       </property>
+       <item>
+        <widget class="QLabel" name="l_fileTimeAccess">
+         <property name="text">
+          <string>File Time (FLEX extension)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="cb_fileTimeAccess">
+         <property name="minimumSize">
+          <size>
+           <width>250</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maxVisibleItems">
+          <number>3</number>
+         </property>
+         <item>
+          <property name="text">
+           <string>Not Supported</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Display</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Display and Copy</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="g_injectFiles">
+       <property name="title">
+        <string>Inject Files</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_3">
+        <item>
+         <widget class="QCheckBox" name="c_injectTextFileConvert">
+          <property name="text">
+           <string>Convert text files to FLEX text files</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="c_injectTextFileAskUser">
+          <property name="text">
+           <string>Always ask user</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="g_extractFiles">
+       <property name="title">
+        <string>Extract Files</string>
+       </property>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QCheckBox" name="c_extractTextFileConvert">
+          <property name="text">
+           <string>Convert text files to host text files</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="c_extractTextFileAskUser">
+          <property name="text">
+           <string>Always ask user</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </item>
      <item>
       <spacer name="verticalSpacer">

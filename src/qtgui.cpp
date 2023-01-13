@@ -53,7 +53,7 @@
 #include <QIODevice>
 #include <QTextStream>
 #include <QWidget>
-#include <QDesktopWidget>
+#include <QScreen>
 #include <QToolBar>
 #include <QMainWindow>
 #include <QMessageBox>
@@ -84,6 +84,7 @@
 #include "warnon.h"
 #include <cmath>
 
+int QtGui::preferencesTabIndex = 0;
 
 QtGui::QtGui(
     Mc6809 &x_cpu,
@@ -151,6 +152,9 @@ QtGui::QtGui(
     CreateStatusBar(*mainLayout);
 
     setWindowState(Qt::WindowActive);
+    // Resize needed here to overwrite previous adjustSize()
+    // with 2/3 screen limit.
+    resize(sizeHint());
     const auto flexemuIcon = QIcon(":/resource/flexemu.png");
     setWindowIcon(flexemuIcon);
 
@@ -176,6 +180,10 @@ QtGui::QtGui(
     SetCpuDialogMonospaceFont(QApplication::font().pointSize());
     UpdateCpuFrequencyCheck();
     UpdateCpuUndocumentedCheck();
+    if (options.isSmooth)
+    {
+        ToggleSmoothDisplay();
+    }
 
     OnIconSize(0);
 }
@@ -265,10 +273,12 @@ void QtGui::OnPreferences()
     const auto preferencesIcon = GetPreferencesIcon(isRestartNeeded);
     dialog.setWindowIcon(preferencesIcon);
     ui.TransferDataToDialog(options);
+    ui.SetTabIndex(preferencesTabIndex);
     dialog.resize({0, 0});
     dialog.setModal(true);
     dialog.setSizeGripEnabled(true);
     auto result = dialog.exec();
+    preferencesTabIndex = ui.GetTabIndex();
 
     if (result == QDialog::Accepted)
     {
@@ -327,10 +337,17 @@ void QtGui::OnPreferences()
                     OnScreenSize(options.pixelSize - 1);
                     break;
 
+                case FlexemuOptionId::IsDisplaySmooth:
+                    ToggleSmoothDisplay();
+                    break;
+
                 case FlexemuOptionId::CanFormatDrive0:
                 case FlexemuOptionId::CanFormatDrive1:
                 case FlexemuOptionId::CanFormatDrive2:
                 case FlexemuOptionId::CanFormatDrive3:
+                case FlexemuOptionId::FileTimeAccess:
+                case FlexemuOptionId::IsTerminalIgnoreESC:
+                case FlexemuOptionId::IsTerminalIgnoreNUL:
                     isWriteOptions = true;
                     break;
 
@@ -453,10 +470,15 @@ void QtGui::OnCpuDialogToggle()
         }
         else
         {
-            auto desktop = QApplication::desktop();
+            int screenHeight = 0;
+
+            if (!QGuiApplication::screens().isEmpty())
+            {
+                screenHeight = QGuiApplication::screens().first()->geometry().height();
+            }
 
             y = frameGeometry().y() + frameGeometry().height() + 1;
-            if (y + cpuDialog->frameGeometry().height() < desktop->height())
+            if (y + cpuDialog->frameGeometry().height() < screenHeight)
             {
                 position = QPoint(x, y);
             }
@@ -844,7 +866,11 @@ void QtGui::CreateFileActions(QLayout& layout)
     const auto exitIcon = QIcon(":/resource/exit.png");
     exitAction = fileMenu->addAction(exitIcon, tr("E&xit"));
     connect(exitAction, &QAction::triggered, this, &QtGui::OnExit);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    exitAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::CTRL | Qt::Key_Q));
+#else
     exitAction->setShortcut(QKeySequence(Qt::SHIFT + Qt::CTRL + Qt::Key_Q));
+#endif
     exitAction->setStatusTip(tr("Exit the application"));
     fileToolBar->addAction(exitAction);
 }
@@ -864,7 +890,11 @@ void QtGui::CreateEditActions(QLayout& layout)
     SetPreferencesStatusText(isRestartNeeded);
     connect(preferencesAction, &QAction::triggered,
             this, &QtGui::OnPreferences);
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    const auto keySequence = QKeySequence(Qt::SHIFT | Qt::CTRL | Qt::Key_P);
+#else
     const auto keySequence = QKeySequence(Qt::SHIFT + Qt::CTRL + Qt::Key_P);
+#endif
     preferencesAction->setShortcut(keySequence);
     editToolBar->addAction(preferencesAction);
 }
@@ -1107,7 +1137,7 @@ QAction *QtGui::CreateIconSizeAction(QMenu &menu, uint index)
 }
 
 QAction *QtGui::CreateScreenSizeAction(
-        const QIcon &icon, QMenu &menu, uint index)
+        const QIcon &icon, QMenu &menu, int index)
 {
     static const QVector<QString> menuText{
         tr("&Default"),
@@ -1119,7 +1149,11 @@ QAction *QtGui::CreateScreenSizeAction(
 
     assert (index <= 4);
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    auto keySequence = QKeySequence(Qt::CTRL | (Qt::Key_1 + index));
+#else
     auto keySequence = QKeySequence(Qt::CTRL + (Qt::Key_1 + index));
+#endif
     auto *action = menu.addAction(icon, menuText[index]);
     connect(action, &QAction::triggered,
         this, [&,index](){ OnScreenSize(index); });
@@ -1209,7 +1243,12 @@ void QtGui::OnDiskStatus(Word driveNumber)
         model.setColumnCount(2);
         if (info.IsValid())
         {
-            model.setRowCount(info.GetIsFlexFormat() ? 9 : 6);
+            auto rowCount = info.GetIsFlexFormat() ? 9 : 6;
+            if (info.GetType() & TYPE_DSK_CONTAINER)
+            {
+                ++rowCount;
+            }
+            model.setRowCount(rowCount);
             info.GetTrackSector(tracks, sectors);
             model.setItem(row++, 0, new QStandardItem(tr("Drive")));
             model.setItem(row++, 0, new QStandardItem(tr("Type")));
@@ -1224,6 +1263,10 @@ void QtGui::OnDiskStatus(Word driveNumber)
             model.setItem(row++, 0, new QStandardItem(tr("Sectors")));
             model.setItem(row++, 0, new QStandardItem(tr("Write-protect")));
             model.setItem(row++, 0, new QStandardItem(tr("FLEX format")));
+            if (info.GetType() & TYPE_DSK_CONTAINER)
+            {
+                model.setItem(row++, 0, new QStandardItem(tr("JVC header")));
+            }
             row = 0;
             text = QString::asprintf("#%u", driveNumber);
             model.setItem(row++, 1, new QStandardItem(text));
@@ -1248,6 +1291,28 @@ void QtGui::OnDiskStatus(Word driveNumber)
             model.setItem(row++, 1, new QStandardItem(text));
             text = info.GetIsFlexFormat() ? tr("yes") : tr("no");
             model.setItem(row++, 1, new QStandardItem(text));
+            if (info.GetType() & TYPE_DSK_CONTAINER)
+            {
+                auto header = info.GetJvcFileHeader();
+
+                if (header.empty())
+                {
+                    text = tr("none");
+                }
+                else
+                {
+                    text = "";
+                    for (Word index = 0; index < header.size(); ++index)
+                    {
+                        if (index != 0)
+                        {
+                            text += ",";
+                        }
+                        text += QString::number((Word)header[index]);
+                    }
+                }
+                model.setItem(row++, 1, new QStandardItem(text));
+            }
         }
         else
         {
@@ -1461,11 +1526,15 @@ void QtGui::ToggleFullScreenMode()
     SetFullScreenMode(!IsFullScreenMode());
 }
 
-void QtGui::ToggleSmoothDisplay() const
+void QtGui::ToggleSmoothDisplay()
 {
     e2screen->ToggleSmoothDisplay();
     UpdateSmoothDisplayCheck();
     QTimer::singleShot(0, this, &QtGui::OnRepaintScreen);
+
+    oldOptions.isSmooth = e2screen->IsSmoothDisplay();
+    options.isSmooth = e2screen->IsSmoothDisplay();
+    WriteOneOption(options, FlexemuOptionId::IsDisplaySmooth);
 }
 
 void QtGui::SetFullScreenMode(bool isFullScreen)
@@ -1574,10 +1643,10 @@ void QtGui::AdjustSize()
 
 void QtGui::OnResize()
 {
-    // To adjust the window size the adjustSize has to be processed
+    // To adjust the window size resize() has to be processed
     // within the event loop, e.g. with a singleShot timer.
     // See also: QtGui::AdjustSize().
-    adjustSize();
+    resize(sizeHint());
 }
 
 QUrl QtGui::CreateDocumentationUrl(const QString &docDir,
@@ -1768,9 +1837,9 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
         {
             sRGBQUAD colorEntry;
 
-            colorEntry.red = qRed(rgbColor);
-            colorEntry.green = qGreen(rgbColor);
-            colorEntry.blue = qBlue(rgbColor);
+            colorEntry.red = static_cast<Byte>(qRed(rgbColor));
+            colorEntry.green = static_cast<Byte>(qGreen(rgbColor));
+            colorEntry.blue = static_cast<Byte>(qBlue(rgbColor));
             colorEntry.reserved = '\0';
             memcpy(pData, &colorEntry, sizeof(colorEntry));
             pData += sizeof(colorEntry);
@@ -1785,6 +1854,11 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
     // Default color index: If no video source is available use highest
     // available color
     Byte colorIndex = options.isInverse ? 0x00U : 0x3FU;
+    Byte colorIndexOffset = 0U;
+    if (options.isInverse)
+    {
+        colorIndexOffset = static_cast<Byte>((64U / options.nColors) - 1U);
+    }
 
     memset(pixels, '\0', sizeof(pixels));
 
@@ -1796,7 +1870,6 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
 
         if (videoRam != nullptr)
         {
-
             pixels[0] = videoRam[0];
 
             if (options.nColors > 2)
@@ -1817,50 +1890,50 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
             /* Loop from MSBit to LSBit */
             for (pixelBitMask = 0x80U; pixelBitMask; pixelBitMask >>= 1)
             {
-                colorIndex = 0U; /* calculated color index */
+                colorIndex = colorIndexOffset; /* calculated color index */
 
                 if (pixels[0] & pixelBitMask)
                 {
-                    colorIndex |= GREEN_HIGH;    // 0x0C, green high
+                    colorIndex += GREEN_HIGH;    // 0x0C, green high
                 }
 
                 if (options.nColors > 8)
                 {
                     if (pixels[2] & pixelBitMask)
                     {
-                        colorIndex |= RED_HIGH;    // 0x0D, red high
+                        colorIndex += RED_HIGH;    // 0x0D, red high
                     }
 
                     if (pixels[4] & pixelBitMask)
                     {
-                        colorIndex |= BLUE_HIGH;    // 0x0E, blue high
+                        colorIndex += BLUE_HIGH;    // 0x0E, blue high
                     }
 
                     if (pixels[1] & pixelBitMask)
                     {
-                        colorIndex |= GREEN_LOW;    // 0x04, green low
+                        colorIndex += GREEN_LOW;    // 0x04, green low
                     }
 
                     if (pixels[3] & pixelBitMask)
                     {
-                        colorIndex |= RED_LOW;    // 0x05, red low
+                        colorIndex += RED_LOW;    // 0x05, red low
                     }
 
                     if (pixels[5] & pixelBitMask)
                     {
-                        colorIndex |= BLUE_LOW;    // 0x06, blue low
+                        colorIndex += BLUE_LOW;    // 0x06, blue low
                     }
                 }
                 else
                 {
                     if (pixels[2] & pixelBitMask)
                     {
-                        colorIndex |= RED_HIGH;    // 0x0D, red high
+                        colorIndex += RED_HIGH;    // 0x0D, red high
                     }
 
                     if (pixels[4] & pixelBitMask)
                     {
-                        colorIndex |= BLUE_HIGH;    // 0x0E, blue high
+                        colorIndex += BLUE_HIGH;    // 0x0E, blue high
                     }
                 }
                 *(pData)++ = colorIndex;

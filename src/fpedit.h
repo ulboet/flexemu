@@ -23,13 +23,14 @@
 #ifndef FPEDIT_INCLUDED
 #define FPEDIT_INCLUDED
 
+#include "efiletim.h"
 #include "warnoff.h"
+#include <QStringList>
 #include <QStyledItemDelegate>
 #include <QRegularExpressionValidator>
 #include "warnon.h"
 
 class QWidget;
-class QStringList;
 class QModelIndex;
 class QAbstractItemModel;
 class QStyledOptionViewItem;
@@ -48,15 +49,46 @@ private:
     QVector<QString> filenames;
 };
 
+// Delegate to edit date and time.
 class FlexDateDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 
+    const FileTimeAccess &fileTimeAccess;
     QWidget *parentWidget;
 
 public:
-    explicit FlexDateDelegate(QWidget *parentWidget);
+    FlexDateDelegate(const FileTimeAccess &fileTimeAccess,
+                     QWidget *parentWidget);
 
+    QString displayText(const QVariant &value, const QLocale &locale)
+        const override;
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                          const QModelIndex &index) const override;
+    void setEditorData(QWidget *editor,
+                       const QModelIndex &index) const override;
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override;
+
+    void updateEditorGeometry(QWidget *editor,
+                              const QStyleOptionViewItem &option,
+                              const QModelIndex &index) const override;
+};
+
+// Delegate to edit date.
+class FlexDateTimeDelegate : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+    const FileTimeAccess &fileTimeAccess;
+    QWidget *parentWidget;
+
+public:
+    FlexDateTimeDelegate(const FileTimeAccess &fileTimeAccess,
+                         QWidget *parentWidget);
+
+    QString displayText(const QVariant &value, const QLocale &locale)
+        const override;
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
                           const QModelIndex &index) const override;
     void setEditorData(QWidget *editor,

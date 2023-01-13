@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include "misc1.h"
 #include <string>
+#include <vector>
 #include "bdate.h"
 
 
@@ -41,12 +42,13 @@ private:
     std::string name;   // name of disk
     unsigned int number;// disk number
     int     type;       // container type
-    int     free;       // Number of bytes free
-    int     totalSize;  // Number of total bytes writable
+    uint64_t free; // Number of bytes free
+    uint64_t totalSize; // Number of total bytes writable
     Byte attributes; // Disk attributes
     bool    is_flex_format;// This container contains a FLEX file system.
     bool    is_write_protected;// This container is write protected.
     bool    is_valid;   // This container info is valid.
+    std::vector<Byte> jvc_header; // JVC header Bytes, size==0 if not present.
 
 public:
     FlexContainerInfo();        // public constructor
@@ -69,21 +71,21 @@ public:
         path = p;
         is_valid = true;
     };
-    inline void         SetFree(int f)
+    inline void SetFree(uint64_t f)
     {
         free = f;
         is_valid = true;
     };
-    inline int          GetFree() const
+    inline uint64_t GetFree() const
     {
         return free;
     };
-    inline void         SetTotalSize(int s)
+    inline void SetTotalSize(uint64_t s)
     {
         totalSize = s;
         is_valid = true;
     };
-    inline int          GetTotalSize() const
+    inline uint64_t GetTotalSize() const
     {
         return totalSize;
     };
@@ -104,11 +106,6 @@ public:
     inline void         SetDate(const BDate &d)
     {
         date = d;
-        is_valid = true;
-    };
-    inline void         SetDate(int d, int m, int y)
-    {
-        date.SetDate(d, m, y);
         is_valid = true;
     };
     inline void         SetTrackSector(int t, int s)
@@ -163,6 +160,15 @@ public:
     inline bool GetIsWriteProtected() const
     {
         return is_write_protected;
+    };
+    inline void SetJvcFileHeader(const std::vector<Byte> &header)
+    {
+        jvc_header = header;
+        is_valid = true;
+    };
+    inline std::vector<Byte> GetJvcFileHeader() const
+    {
+        return jvc_header;
     };
     inline bool IsValid() const
     {

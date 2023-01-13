@@ -29,6 +29,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include "efiletim.h"
 
 // Maximum size of one emulated pixel on screen
 #define MAX_PIXELSIZE (5)
@@ -53,11 +54,15 @@ enum class FlexemuOptionId : uint8_t
     IsEurocom2V5,
     IsUseUndocumented,
     IsUseRtc,
+    IsTerminalIgnoreESC,
+    IsTerminalIgnoreNUL,
     Frequency,
     Color,
     NColors,
     IsInverse,
     PixelSize,
+    FileTimeAccess,
+    IsDisplaySmooth,
 };
 using FlexemuOptionIds = std::vector<FlexemuOptionId>;
 
@@ -80,11 +85,15 @@ const FlexemuOptionIds allFlexemuOptionIds {
     FlexemuOptionId::IsEurocom2V5,
     FlexemuOptionId::IsUseUndocumented,
     FlexemuOptionId::IsUseRtc,
+    FlexemuOptionId::IsTerminalIgnoreESC,
+    FlexemuOptionId::IsTerminalIgnoreNUL,
     FlexemuOptionId::Frequency,
     FlexemuOptionId::Color,
     FlexemuOptionId::NColors,
     FlexemuOptionId::IsInverse,
     FlexemuOptionId::PixelSize,
+    FlexemuOptionId::FileTimeAccess,
+    FlexemuOptionId::IsDisplaySmooth,
 };
 
 struct sOptions
@@ -106,6 +115,9 @@ struct sOptions
     bool useRtc;
     bool term_mode;
     bool canFormatDrive[4];
+    bool isTerminalIgnoreESC; // Terminal mode: Ignore ESC (0x1B) characters
+    bool isTerminalIgnoreNUL; // Terminal mode: Ignore NUL (0x00) characters
+    FileTimeAccess fileTimeAccess;
     short int reset_key; // must be short int because of sscanf !!!
     float frequency;
 
@@ -114,6 +126,7 @@ struct sOptions
     std::string doc_dir; // Directory containing html documenation.
     int nColors; // Number of colors or gray scale values { 2, 8, 64 }.
     bool isInverse; // Display inverse colors or gray scale values.
+    bool isSmooth; // Display mode is smooth display.
     int pixelSize; // Size of one pixel on the screen { 1, 2, 3, 4, 5 }.
                    // It depends on the screen dimensions on which flexemu
                    // is executed.

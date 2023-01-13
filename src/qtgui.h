@@ -114,7 +114,7 @@ public:
     void output_to_graphic() override;
 
 protected:
-    void redraw_cpuview_impl(const Mc6809CpuStatus &status);
+    void redraw_cpuview_impl(const Mc6809CpuStatus &status) override;
 
 private slots:
     void OnExit();
@@ -157,7 +157,7 @@ private:
     void CreateCpuActions(QLayout &layout);
     void CreateHelpActions(QLayout &layout);
     void CreateHorizontalSpacer(QLayout &layout);
-    QAction *CreateScreenSizeAction(const QIcon &icon, QMenu &menu, uint index);
+    QAction *CreateScreenSizeAction(const QIcon &icon, QMenu &menu, int index);
     QAction *CreateIconSizeAction(QMenu &menu, uint index);
     void CreateStatusToolBar(QLayout &layout);
     void CreateStatusBar(QLayout &layout);
@@ -171,7 +171,7 @@ private:
     void update_block(int blockNumber);
     void UpdateDiskStatus(int floppyIndex, DiskStatus status);
     void UpdateInterruptStatus(tIrqType irqType, bool status);
-    void ToggleSmoothDisplay() const;
+    void ToggleSmoothDisplay();
     void ToggleCpuFrequency();
     void ToggleCpuUndocumented();
     void ToggleFullScreenMode();
@@ -278,6 +278,8 @@ private:
     E2floppy *fdc;
     sOptions &options;
     sOptions oldOptions;
+
+    static int preferencesTabIndex;
 };
 #endif
 

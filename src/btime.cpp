@@ -2,8 +2,8 @@
     btime.cpp
 
 
-    Basic class for platform independent high resolution time support
-    Copyright (C) 2001-2022  W. Schwotzer
+    FLEXplorer, An explorer for any FLEX file or disk container
+    Copyright (C) 2022 W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,15 +20,22 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifdef _WIN32
-    #include "misc1.h"
-#endif
 #include "btime.h"
+#include <iostream>
+#include <iomanip>
 
-// This class could also be realized as a envelope/letter pattern
-// but this is still the most efficient C++ implementation
 
-BTime::BTime() : lapTime(0)
+BTime::BTime(int h, int m, int s)
+    : hour(h)
+    , minute(m)
+    , second(s)
+{
+}
+
+BTime::BTime(const BTime &src)
+    : hour(src.hour)
+    , minute(src.minute)
+    , second(src.second)
 {
 }
 
@@ -36,126 +43,108 @@ BTime::~BTime()
 {
 }
 
-void BTime::ResetRelativeTime()
+BTime BTime::Now()
 {
-    lapTime = GetTimeUsll();
+    auto time_now = time((time_t *)nullptr);
+    auto *lt = localtime(&time_now);
+
+    return BTime(lt->tm_hour, lt->tm_min, lt->tm_sec);
 }
 
-QWord BTime::GetRelativeTimeMsl(bool reset /*= false*/)
+const std::string BTime::AsString(Format format) const
 {
-    return GetRelativeTimeUsll(reset) / 1000U;
-}
+    std::stringstream stream;
 
-QWord BTime::GetTimeMsl()
-{
-    return GetTimeUsll() / 1000U;
-}
-
-
-#ifdef UNIX
-QWord BTime::GetRelativeTimeUsll(bool reset /*= false*/)
-{
-    QWord currentTime = GetTimeUsll();
-    QWord result = currentTime - lapTime;
-
-    if (reset)
+    switch (format)
     {
-        lapTime = currentTime;
+        case Format::HHMMSS:
+            stream << std::setfill('0') <<
+                std::setw(2) << hour << ':' <<
+                std::setw(2) << minute << ':' <<
+                std::setw(2) << second;
+            break;
+
+        case Format::HHMM:
+            stream << std::setfill('0') <<
+                std::setw(2) << hour << ':' <<
+                std::setw(2) << minute;
+            break;
     }
 
-    return result;
+    return stream.str();
 }
 
-double BTime::GetRelativeTimeUsf(bool  reset /*= false*/)
+void BTime::Get(int &h, int &m, int &s) const
 {
-    QWord currentTime = GetTimeUsll();
-    double result = (double)(currentTime - lapTime);
-
-    if (reset)
-    {
-        lapTime = currentTime;
-    }
-
-    return result;
+    h = hour;
+    m = minute;
+    s = second;
 }
 
-// return time in us as a unsigned int 64 Bit value
-QWord BTime::GetTimeUsll()
+void BTime::Set(int h, int m, int s)
 {
-    struct timeval tv;
-
-    gettimeofday(&tv, nullptr);
-    return ((QWord)tv.tv_sec * 1000000 + tv.tv_usec);
+    hour = h;
+    minute = m;
+    second = s;
 }
 
-// return time in us as a double value
-double BTime::GetTimeUsf()
+void BTime::Set(const BTime &src)
 {
-    struct timeval tv;
-
-    gettimeofday(&tv, nullptr);
-    return ((double)tv.tv_sec * 1000000.0 + tv.tv_usec);
+    hour = src.hour;
+    minute = src.minute;
+    second = src.second;
 }
-#endif
 
-#ifdef _WIN32
-QWord BTime::GetRelativeTimeUsll(bool reset /*= false*/)
+int BTime::GetHour() const
 {
-    QWord currentTime = GetTimeUsll();
-    QWord result = currentTime - lapTime;
-
-    if (reset)
-    {
-        lapTime = currentTime;
-    }
-
-    return result;
+    return hour;
 }
 
-double BTime::GetRelativeTimeUsf(bool  reset /*= false*/)
+int BTime::GetMinute() const
 {
-    QWord currentTime = GetTimeUsll();
-    double result = (double)(SQWord)(currentTime - lapTime);
-
-    if (reset)
-    {
-        lapTime = currentTime;
-    }
-
-    return result;
+    return minute;
 }
 
-// return time in us as a unsigned int 64 Bit value
-QWord BTime::GetTimeUsll()
+int BTime::GetSecond() const
 {
-    LARGE_INTEGER count, freq;
-
-    if (QueryPerformanceCounter(&count))
-    {
-        QueryPerformanceFrequency(&freq);
-        return (QWord)count.QuadPart * 1000000 / (QWord)freq.QuadPart;
-    }
-    else
-    {
-        return 0;
-    }
-
+    return second;
 }
 
-// return time in us as a double value
-double BTime::GetTimeUsf()
+size_t BTime::ToSeconds() const
 {
-    LARGE_INTEGER count, freq;
-
-    if (QueryPerformanceCounter(&count))
-    {
-        QueryPerformanceFrequency(&freq);
-        return (double)count.QuadPart * 1000000 / (double)freq.QuadPart;
-    }
-    else
-    {
-        return 0.0;
-    }
-
+    return static_cast<size_t>(hour) * 3600U + minute * 60U + second;
 }
-#endif
+
+BTime &BTime::operator = (const BTime &src)
+{
+    hour = src.hour;
+    minute = src.minute;
+    second = src.second;
+    return *this;
+}
+
+bool operator == (const BTime &rhs, const BTime &lhs)
+{
+    return rhs.ToSeconds() == lhs.ToSeconds();
+}
+
+bool operator < (const BTime &rhs, const BTime &lhs)
+{
+    return rhs.ToSeconds() < lhs.ToSeconds();
+}
+
+bool operator > (const BTime &rhs, const BTime &lhs)
+{
+    return rhs.ToSeconds() > lhs.ToSeconds();
+}
+
+bool operator <= (const BTime &rhs, const BTime &lhs)
+{
+    return !(rhs > lhs);
+}
+
+bool operator >= (const BTime &rhs, const BTime &lhs)
+{
+    return !(rhs < lhs);
+}
+

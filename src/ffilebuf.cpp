@@ -31,7 +31,6 @@
 #include "flexerr.h"
 #include "fdirent.h"
 #include "filecntb.h"
-#include <sstream>
 #include <algorithm>
 
 
@@ -279,9 +278,16 @@ void FlexFileBuffer::TraverseForFlexTextFileConversion(
         {
             if (spaces)
             {
-                // Expand space compression.
-                fct(0x09);
-                fct(static_cast<Byte>(spaces));
+                if (spaces == 1)
+                {
+                    fct(' ');
+                }
+                else
+                {
+                    // Expand space compression.
+                    fct(0x09);
+                    fct(static_cast<Byte>(spaces));
+                }
                 spaces = 0;
             }
 
@@ -381,9 +387,10 @@ bool FlexFileBuffer::IsFlexTextFile() const
         Byte c = buffer[i];
 
         // Allowed characters of a FLEX text file are:
-        // ASCII LF, ASCII CR, ASCII NUL, ASCII CANCEL and
+        // ASCII LF, ASCII CR, ASCII NUL, ASCII CANCEL, ASCII FF and
         // any character >= ASCII Space.
-        if (c >= ' ' || c == 0x0a || c == 0x0d || c == 0x00 || c == 0x18)
+        if (c >= ' ' || c == 0x0a || c == 0x0d || c == 0x00 || c == 0x18 ||
+            c == 0x0c)
         {
             continue;
         }
@@ -586,7 +593,9 @@ bool FlexFileBuffer::ReadFromFile(const char *path)
 
                 SetAdjustedFilename(getFileName(path).c_str());
                 struct tm *lt = localtime(&(sbuf.st_mtime));
-                SetDate(lt->tm_mday, lt->tm_mon + 1, lt->tm_year + 1900);
+                SetDateTime(
+                        BDate(lt->tm_mday, lt->tm_mon + 1, lt->tm_year + 1900),
+                        BTime(lt->tm_hour, lt->tm_min));
 
                 return true;
             }
@@ -596,30 +605,25 @@ bool FlexFileBuffer::ReadFromFile(const char *path)
     return false;
 }
 
-// Adjust the file name so that it is
-// conformous to 8.3
-void FlexFileBuffer::SetAdjustedFilename(const char *afileName)
+// Adjust the file name so that it conforms to 8.3
+// Copy file name into file header struct.
+void FlexFileBuffer::SetAdjustedFilename(const std::string &fileName)
 {
-    const char *p, *pe;
-
-    memset(fileHeader.fileName, '\0', FLEX_FILENAME_LENGTH);
-    pe = strrchr(afileName, '.');
-    strncpy(fileHeader.fileName, afileName, 8);
-    p = strrchr(fileHeader.fileName, '.');
-
-    if (p != nullptr)
+    auto pos = fileName.find('.');
+    auto baseNameSize = (pos == std::string::npos) ?
+        FLEX_BASEFILENAME_LENGTH : std::min(pos, FLEX_BASEFILENAME_LENGTH);
+    auto adjustedFileName = fileName.substr(0U, baseNameSize);
+    if (pos != std::string::npos)
     {
-        *(const_cast<char *>(p)) = '\0';
+        auto extension = fileName.substr(pos + 1U, FLEX_FILEEXT_LENGTH);
+        if (!extension.empty())
+        {
+            adjustedFileName.append(".").append(extension);
+        }
     }
-
-    if (pe != nullptr)
-    {
-        char ext[5];
-
-        memset(ext, '\0', 5);
-        strncpy(ext, pe, 4);
-        strcat(fileHeader.fileName, ext);
-    }
+    strupper(adjustedFileName);
+    memset(fileHeader.fileName, '\0', sizeof(fileHeader.fileName));
+    strcpy(fileHeader.fileName, adjustedFileName.c_str());
 }
 
 void FlexFileBuffer::CopyHeaderBigEndianFrom(const tFlexFileHeader &src)
@@ -727,29 +731,22 @@ tFlexFileHeader FlexFileBuffer::GetHeaderBigEndian() const
     return result;
 }
 
-void FlexFileBuffer::SetDate(const BDate &new_date)
+void FlexFileBuffer::SetDateTime(const BDate &new_date, const BTime &new_time)
 {
     fileHeader.day = static_cast<Word>(new_date.GetDay());
     fileHeader.month = static_cast<Word>(new_date.GetMonth());
     fileHeader.year = static_cast<Word>(new_date.GetYear());
+    fileHeader.hour = static_cast<Word>(new_time.GetHour());
+    fileHeader.minute = static_cast<Word>(new_time.GetMinute());
 }
 
-void FlexFileBuffer::SetDate(int day, int month, int year)
+BDate FlexFileBuffer::GetDate() const
 {
-    fileHeader.day = static_cast<Word>(day);
-    fileHeader.month = static_cast<Word>(month);
-    fileHeader.year = static_cast<Word>(year);
+    return BDate(fileHeader.day, fileHeader.month, fileHeader.year);
 }
 
-const BDate FlexFileBuffer::GetDate() const
+BTime FlexFileBuffer::GetTime() const
 {
-    BDate date;
-
-    date.Assign(
-            fileHeader.day,
-            fileHeader.month,
-            fileHeader.year);
-
-    return date;
+    return BTime(fileHeader.hour, fileHeader.minute, 0U);
 }
 

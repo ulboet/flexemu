@@ -24,12 +24,14 @@
 #define FPWIN_INCLUDED
 
 #include "misc1.h"
+#include "efiletim.h"
 #include "warnoff.h"
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
 #include "warnon.h"
 #include <functional>
+#include "sfpopts.h"
 
 
 class FlexplorerMdiChild;
@@ -50,9 +52,13 @@ class FLEXplorer : public QMainWindow
     Q_OBJECT
 
 public:
-    FLEXplorer();
+    FLEXplorer() = delete;
+    FLEXplorer(struct sFPOptions &options);
 
-    bool OpenContainerForPath(const QString &path, bool isLast = true);
+    bool OpenContainerForPath(QString path, bool isLast = true);
+
+signals:
+    void FileTimeAccessHasChanged();
 
 private slots:
     void NewContainer();
@@ -67,6 +73,8 @@ private slots:
     void DeselectAll();
     void FindFiles();
     void DeleteSelected();
+    void InjectFiles();
+    void ExtractSelected();
     void ViewSelected();
     void AttributesSelected();
     void Info();
@@ -94,15 +102,15 @@ private:
     void CreateWindowsActions();
     void CreateHelpActions();
     void CreateStatusBar();
-    FlexplorerMdiChild *CreateMdiChild(const QString &path);
+    FlexplorerMdiChild *CreateMdiChild(const QString &path,
+                                       struct sFPOptions &options);
     FlexplorerMdiChild *ActiveMdiChild() const;
     QMdiSubWindow *FindMdiChild(const QString &path) const;
-    void changeEvent(QEvent *event);
-    void ReadDefaultOptions();
-    void WriteDefaultOptions();
+    void changeEvent(QEvent *event) override;
     void UpdateSelectedFiles();
     void UpdateMenus();
     static QStringList GetSupportedFiles(const QMimeData *mimeData);
+    void SetFileTimeAccess(FileTimeAccess fileTimeAccess);
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -121,6 +129,8 @@ protected:
     QAction *newContainerAction;
     QAction *openContainerAction;
     QAction *openDirectoryAction;
+    QAction *injectAction;
+    QAction *extractAction;
     QAction *selectAllAction;
     QAction *deselectAllAction;
     QAction *findFilesAction;
@@ -146,6 +156,9 @@ protected:
     QSize optionsDialogSize;
     QSize attributesDialogSize;
     QString findPattern;
+    QString injectDirectory;
+    QString extractDirectory;
+    sFPOptions &options;
 };
 
 #endif

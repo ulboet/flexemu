@@ -25,6 +25,7 @@
 
 #include "misc1.h"
 #include <stdio.h>
+#include "efiletim.h"
 #include "filecont.h"
 #include "filecnts.h"
 #include "fdirent.h"
@@ -54,6 +55,7 @@ protected:
     BFilePtr    fp;
     s_floppy    param;
     DWord       file_size;
+    const FileTimeAccess &ft_access;
 
     // Variables only used for FLX format when formatting a disk
     bool        is_flex_format; // true when this is a FLEX compatible format.
@@ -68,7 +70,8 @@ public:
     FlexFileContainer() = delete;
     FlexFileContainer(const FlexFileContainer &) = delete;
     FlexFileContainer(FlexFileContainer &&);
-    FlexFileContainer(const char *path, const char *mode);
+    FlexFileContainer(const char *path, const char *mode,
+                      const FileTimeAccess &fileTimeAccess);
     virtual ~FlexFileContainer();       // public destructor
 
     FlexFileContainer &operator= (const FlexFileContainer &) = delete;
@@ -79,43 +82,47 @@ public:
     static std::string bootSectorFile;
     static FlexFileContainer *Create(const char *dir, const char *name,
                                      int t, int s,
+                                     const FileTimeAccess &fileTimeAccess,
                                      int fmt = TYPE_DSK_CONTAINER);
-    bool CheckFilename(const char *fileName) const;
-    bool ReadSector(Byte *buffer, int trk, int sec, int side = -1) const;
-    bool WriteSector(const Byte *buffer, int trk, int sec, int side = -1);
+    bool CheckFilename(const char *fileName) const override;
+    bool ReadSector(Byte *buffer, int trk, int sec, int side = -1)
+        const override;
+    bool WriteSector(const Byte *buffer, int trk, int sec, int side = -1)
+        override;
     bool FormatSector(const Byte *buffer, int trk, int sec, int side,
-                      int sizecode);
+                      int sizecode) override;
     // Return true if file container is identified as a FLEX compatible
     // file container.
-    bool IsFlexFormat() const;
-    bool IsWriteProtected() const;
-    bool IsTrackValid(int track) const;
-    bool IsSectorValid(int track, int sector) const;
-    int  GetBytesPerSector() const;
-    bool GetInfo(FlexContainerInfo &info) const;
-    int  GetContainerType() const;
+    bool IsFlexFormat() const override;
+    bool IsWriteProtected() const override;
+    bool IsTrackValid(int track) const override;
+    bool IsSectorValid(int track, int sector) const override;
+    int  GetBytesPerSector() const override;
+    bool GetInfo(FlexContainerInfo &info) const override;
+    int  GetContainerType() const override;
 
     // enhanced interface (to be used within flexdisk)
 public:
-    std::string GetPath() const;
-    FileContainerIf *begin()
+    std::string GetPath() const override;
+    FileContainerIf *begin() override
     {
         return this;
     };
-    FileContainerIf *end()   const
+    FileContainerIf *end() const override
     {
         return nullptr;
     };
-    bool FindFile(const char *fileName, FlexDirEntry &entry);
-    bool DeleteFile(const char *fileName);
-    bool RenameFile(const char *oldName, const char *newName);
-    bool SetAttributes(const char *fileName, Byte setMask, Byte clearMask);
-    FlexFileBuffer ReadToBuffer(const char *fileName);
+    bool FindFile(const char *fileName, FlexDirEntry &entry) override;
+    bool DeleteFile(const char *fileName) override;
+    bool RenameFile(const char *oldName, const char *newName) override;
+    bool SetAttributes(const char *fileName, Byte setMask, Byte clearMask)
+        override;
+    FlexFileBuffer ReadToBuffer(const char *fileName) override;
     bool WriteFromBuffer(const FlexFileBuffer &buffer,
-                         const char *fileName = nullptr);
+                         const char *fileName = nullptr) override;
     bool FileCopy(const char *sourceName, const char *destName,
-                  FileContainerIf &destination);
-    std::string GetSupportedAttributes() const;
+                  FileContainerIf &destination) override;
+    std::string GetSupportedAttributes() const override;
 
     // internal interface
 protected:
@@ -132,6 +139,7 @@ protected:
     bool GetFlexTracksSectors(Word &tracks, Word &sectors, Word offset) const;
     bool IsFlexFileFormat(int type) const;
     st_t ExtendDirectory(s_dir_sector last_dir_sector, const st_t &st_last);
+    std::vector<Byte> GetJvcFileHeader() const;
 
     static void     Create_sys_info_sector(
         Byte    sec_buf[],
@@ -155,7 +163,7 @@ protected:
         const char *name,
         int type);
 private:
-    FileContainerIteratorImpPtr IteratorFactory();
+    FileContainerIteratorImpPtr IteratorFactory() override;
 
 };  // class FlexFileContainer
 

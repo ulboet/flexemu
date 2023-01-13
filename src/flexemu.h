@@ -34,23 +34,12 @@
 
 #include "typedefs.h"
 
-enum
-{
-    FLEX_FILENAME_LENGTH = 13
-};
 
 enum class DiskStatus
 {
     EMPTY,
     INACTIVE,
     ACTIVE
-};
-
-enum class GuiType
-{
-    NONE = 0,
-    XTOOLKIT = 2,
-    WINDOWS = 3,
 };
 #endif
 

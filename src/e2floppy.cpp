@@ -35,15 +35,13 @@
 #include "soptions.h"
 
 
-E2floppy::E2floppy(struct sOptions &x_options)
-    : selected(4)
+E2floppy::E2floppy(const struct sOptions &x_options)
+    : selected(MAX_DRIVES)
     , pfs(nullptr)
     , writeTrackState(WriteTrackState::Inactive)
     , options(x_options)
 {
-    Word i;
-
-    for (i = 0; i <= 4; i++)
+    for (auto i = 0U; i <= MAX_DRIVES; i++)
     {
         track[i] = 1; // position all drives to track != 0  !!!
         drive_status[i] = DiskStatus::EMPTY;
@@ -57,7 +55,7 @@ E2floppy::~E2floppy()
 {
     std::lock_guard<std::mutex> guard(status_mutex);
 
-    for (Word drive_nr = 0; drive_nr < 4; drive_nr++)
+    for (auto drive_nr = 0U; drive_nr < MAX_DRIVES; drive_nr++)
     {
         if (floppy[drive_nr].get() != nullptr)
         {
@@ -76,7 +74,7 @@ E2floppy::~E2floppy()
 
 bool E2floppy::umount_drive(Word drive_nr)
 {
-    if (drive_nr > 3 || (floppy[drive_nr].get() == nullptr))
+    if (drive_nr >= MAX_DRIVES || (floppy[drive_nr].get() == nullptr))
     {
         return false;
     }
@@ -98,7 +96,7 @@ bool E2floppy::umount_drive(Word drive_nr)
 
 bool E2floppy::mount_drive(const char *path, Word drive_nr, tMountOption option)
 {
-    if (drive_nr > 3 || path == nullptr || strlen(path) == 0)
+    if (drive_nr >= MAX_DRIVES || path == nullptr || strlen(path) == 0)
     {
         return false;
     }
@@ -134,7 +132,8 @@ bool E2floppy::mount_drive(const char *path, Word drive_nr, tMountOption option)
             try
             {
                 pfloppy = FileContainerIfSectorPtr(
-                 new NafsDirectoryContainer(containerPath.c_str()));
+                 new NafsDirectoryContainer(
+                     containerPath.c_str(), options.fileTimeAccess));
             }
             catch (FlexException &)
             {
@@ -165,14 +164,16 @@ bool E2floppy::mount_drive(const char *path, Word drive_nr, tMountOption option)
                 try
                 {
                     pfloppy = FileContainerIfSectorPtr(
-                     new FlexRamFileContainer(containerPath.c_str(), "rb+"));
+                     new FlexRamFileContainer(containerPath.c_str(), "rb+",
+                                              options.fileTimeAccess));
                 }
                 catch (FlexException &)
                 {
                     try
                     {
                         pfloppy = FileContainerIfSectorPtr(
-                         new FlexRamFileContainer(containerPath.c_str(), "rb"));
+                         new FlexRamFileContainer(containerPath.c_str(), "rb",
+                                                  options.fileTimeAccess));
                     }
                     catch (FlexException &)
                     {
@@ -186,7 +187,8 @@ bool E2floppy::mount_drive(const char *path, Word drive_nr, tMountOption option)
                 try
                 {
                     pfloppy = FileContainerIfSectorPtr(
-                      new FlexFileContainer(containerPath.c_str(), mode));
+                      new FlexFileContainer(containerPath.c_str(), mode,
+                                            options.fileTimeAccess));
                 }
                 catch (FlexException &)
                 {
@@ -196,7 +198,8 @@ bool E2floppy::mount_drive(const char *path, Word drive_nr, tMountOption option)
                         {
                             pfloppy = FileContainerIfSectorPtr(
                              new FlexFileContainer(containerPath.c_str(),
-                                                   "rb"));
+                                                   "rb",
+                                                   options.fileTimeAccess));
                         }
                         catch (FlexException &)
                         {
@@ -249,29 +252,26 @@ void E2floppy::disk_directory(const char *x_disk_dir)
 
 void E2floppy::mount_all_drives(std::string drive[])
 {
-    Word drive_nr;
-
-    for (drive_nr = 0; drive_nr < 4; drive_nr++)
+    for (Word drive_nr = 0U; drive_nr < MAX_DRIVES; drive_nr++)
     {
         mount_drive(drive[drive_nr].c_str(), drive_nr);
     }
 
-    selected = 4;           // deselect all drives
+    selected = MAX_DRIVES; // deselect all drives
     pfs = nullptr;
 }  // mount_all_drives
 
 bool E2floppy::umount_all_drives()
 {
-    Word drive_nr;
-    bool result;
+    bool result = true;
 
-    result = true;
-
-    for (drive_nr = 0; drive_nr < 4; drive_nr++)
+    for (Word drive_nr = 0U; drive_nr < MAX_DRIVES; drive_nr++)
+    {
         if (!umount_drive(drive_nr))
         {
             result = false;
         }
+    }
 
     return result;
 }  // umount_all_drives
@@ -306,6 +306,28 @@ std::string E2floppy::drive_info_string(Word drive_nr)
                << std::endl
                << "FLEX format:" << (info.GetIsFlexFormat() ? "yes" : "no")
                << std::endl;
+        if (info.GetType() & TYPE_DSK_CONTAINER)
+        {
+            auto header = info.GetJvcFileHeader();
+
+            stream << "JVC header: ";
+            if (header.empty())
+            {
+                stream << "none";
+            }
+            else
+            {
+                for (Word index = 0; index < header.size(); ++index)
+                {
+                    if (index != 0)
+                    {
+                        stream << ",";
+                    }
+                    stream << (Word)header[index];
+                }
+            }
+            stream << std::endl;
+        }
     }
 
     return stream.str().c_str();
@@ -314,7 +336,7 @@ std::string E2floppy::drive_info_string(Word drive_nr)
 // get info for corresponding drive. If drive is not ready the result is empty.
 FlexContainerInfo E2floppy::drive_info(Word drive_nr)
 {
-    if (drive_nr <= 3)
+    if (drive_nr < MAX_DRIVES)
     {
         std::lock_guard<std::mutex> guard(status_mutex);
 
@@ -353,12 +375,11 @@ const char *E2floppy::open_mode(char *path)
 } // open_mode
 
 
-bool E2floppy::update_all_drives()
+bool E2floppy::sync_all_drives(tMountOption option)
 {
-    Word drive_nr;
     bool result = true;
 
-    for (drive_nr = 0; drive_nr < 4; drive_nr++)
+    for (Word drive_nr = 0U; drive_nr < MAX_DRIVES; ++drive_nr)
     {
         if (floppy[drive_nr].get() == nullptr)
         {
@@ -366,30 +387,34 @@ bool E2floppy::update_all_drives()
             continue;
         }
 
-        if (!update_drive(drive_nr))
+        if (!sync_drive(drive_nr, option))
         {
             result = false;
         }
     }
 
     return result;
-} // update_all_drives
+} // sync_all_drives
 
-bool E2floppy::update_drive(Word drive_nr)
+bool E2floppy::sync_drive(Word drive_nr, tMountOption option)
 {
-    if (drive_nr > 3)
+    bool result = true;
+
+    // Return false if invalid drive number or drive not ready.
+    if (drive_nr >= MAX_DRIVES || floppy[drive_nr].get() == nullptr)
     {
         return false;
     }
 
-    if (floppy[drive_nr].get() == nullptr)
+    if (floppy[drive_nr]->GetContainerType() & TYPE_DIRECTORY)
     {
-        // error if drive not ready
-        return false;
+        auto path = floppy[drive_nr]->GetPath();
+        result = umount_drive(drive_nr);
+        result &= mount_drive(path.c_str(), drive_nr, option);
     }
 
-    return true;
-} // update_drive
+    return result;
+} // sync_drive
 
 void E2floppy::resetIo()
 {
@@ -398,9 +423,9 @@ void E2floppy::resetIo()
 
 void E2floppy::select_drive(Byte new_selected)
 {
-    if (new_selected > 4)
+    if (new_selected > MAX_DRIVES)
     {
-        new_selected = 4;
+        new_selected = MAX_DRIVES;
     }
 
     if (new_selected != selected)
@@ -637,13 +662,11 @@ bool E2floppy::isWriteProtect() const
     return pfs->IsWriteProtected();
 }  // isWriteProtect
 
-void E2floppy::get_drive_status(DiskStatus stat[4])
+void E2floppy::get_drive_status(DiskStatus stat[MAX_DRIVES])
 {
-    Word i;
-
     std::lock_guard<std::mutex> guard(status_mutex);
 
-    for (i = 0; i < 4; ++i)
+    for (auto i = 0U; i < MAX_DRIVES; ++i)
     {
         stat[i] = drive_status[i];
 
@@ -658,6 +681,7 @@ bool E2floppy::format_disk(SWord trk, SWord sec, const char *name,
                            int type /* = TYPE_DSK_CONTAINER */)
 {
     FileContainerIfSectorPtr pfloppy;
+    FileTimeAccess fileTimeAccess = FileTimeAccess::NONE;
 
     try
     {
@@ -668,7 +692,8 @@ bool E2floppy::format_disk(SWord trk, SWord sec, const char *name,
             case TYPE_NAFS_DIRECTORY:
                 pfloppy = FileContainerIfSectorPtr(
                 NafsDirectoryContainer::Create(
-                    disk_dir.c_str(), name, trk, sec, type));
+                    disk_dir.c_str(), name, options.fileTimeAccess, trk, sec,
+                    type));
                 break;
 #endif
 
@@ -676,7 +701,7 @@ bool E2floppy::format_disk(SWord trk, SWord sec, const char *name,
             case TYPE_FLX_CONTAINER:
                 pfloppy = FileContainerIfSectorPtr(
                 FlexFileContainer::Create(
-                    disk_dir.c_str(), name, trk, sec, type));
+                    disk_dir.c_str(), name, trk, sec, fileTimeAccess, type));
                 break;
         }
     }

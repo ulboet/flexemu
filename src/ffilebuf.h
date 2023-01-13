@@ -24,18 +24,21 @@
 #define FFILEBUF_INCLUDED
 
 #include "misc1.h"
-#include "flexemu.h"
+#include "filecntb.h"
 #include "bdate.h"
+#include "btime.h"
 #include <memory>
 #include <functional>
 #include <sstream>
 #include <iomanip>
 #include <array>
+#include <string>
 
 
 typedef char FlexFileName[FLEX_FILENAME_LENGTH];
 const std::array<char,4> flexFileHeaderMagicNumber = {
-    '\xde', '\xad', '\xbe', '\xaf'
+    // '\xde', '\xad', '\xbe', '\xaf' old magic number without hour, minute.
+    '\xde', '\xad', '\xbe', '\xae'
 };
 
 // This is a POD data structure. It can be used to
@@ -52,6 +55,8 @@ struct tFlexFileHeader
     Word  day;
     Word  month;
     Word  year;
+    Word  hour;
+    Word  minute;
     FlexFileName fileName;
 };
 
@@ -86,10 +91,8 @@ public:
         return fileHeader;
     }
     tFlexFileHeader GetHeaderBigEndian() const;
-    void SetDate(const BDate &date);
-    void SetDate(int day, int month, int year);
+    void SetDateTime(const BDate &date, const BTime &time);
     void SetFilename(const char *name);
-    void SetAdjustedFilename(const char *name);
     inline const char *GetFilename() const
     {
         return fileHeader.fileName;
@@ -133,9 +136,11 @@ public:
     {
         return fileHeader.sectorMap;
     }
-    const BDate GetDate() const;
+    BDate GetDate() const;
+    BTime GetTime() const;
 
 private:
+    void SetAdjustedFilename(const std::string &name);
     void copyFrom(const FlexFileBuffer &src);
     void TraverseForTextFileConversion(std::function<void(char c)> fct) const;
     void TraverseForFlexTextFileConversion(std::function<void(char c)> fct)

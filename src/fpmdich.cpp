@@ -30,6 +30,8 @@
 #include "bdir.h"
 #include "bprocess.h"
 #include "warnoff.h"
+#include <QFileInfo>
+#include <QFile>
 #include <QDate>
 #include <QDrag>
 #include <QMouseEvent>
@@ -42,17 +44,22 @@
 #include "warnon.h"
 #include <cassert>
 #include <string>
+#include "fcopyman.h"
 #include "fpdnd.h"
 #include "fpmodel.h"
 #include "fpedit.h"
 #include "fpmdich.h"
+#include "sfpopts.h"
+#include "fpcnvui.h"
 
 const QString FlexplorerMdiChild::mimeTypeFlexDiskImageFile =
                                       "application/x-flexdiskimagefile";
 
-FlexplorerMdiChild::FlexplorerMdiChild(const QString &path) :
+FlexplorerMdiChild::FlexplorerMdiChild(const QString &path,
+                                       struct sFPOptions &p_options) :
     dragStartPosition(0,0),
-    selectedFilesCount(0), selectedFilesByteSize(0)
+    selectedFilesCount(0), selectedFilesByteSize(0),
+    options(p_options)
 {
     SetupModel(path);
     SetupView();
@@ -64,9 +71,9 @@ FlexplorerMdiChild::FlexplorerMdiChild(const QString &path) :
     // Set column for unique Id hidden.
     setColumnHidden(FlexplorerTableModel::COL_ID, true);
 
-    dateDelegate.reset(new FlexDateDelegate(this));
-    setItemDelegateForColumn(FlexplorerTableModel::COL_DATE,
-                             dateDelegate.get());
+    dateDelegate.reset(new FlexDateDelegate(options.ft_access, this));
+    dateTimeDelegate.reset(new FlexDateTimeDelegate(options.ft_access, this));
+    UpdateDateDelegate();
     filenameDelegate.reset(new FlexFilenameDelegate(this));
     setItemDelegateForColumn(FlexplorerTableModel::COL_FILENAME,
                              filenameDelegate.get());
@@ -139,20 +146,11 @@ void FlexplorerMdiChild::DeselectAll()
 
 int FlexplorerMdiChild::FindFiles(const QString &pattern)
 {
-    int count = 0;
-
     assert(model);
-    clearSelection();
-    auto selection = selectionMode();
-    setSelectionMode(QAbstractItemView::MultiSelection);
-    for (auto rowIndex : model->FindFiles(pattern))
-    {
-        selectRow(rowIndex);
-        ++count;
-    }
-    setSelectionMode(selection);
+    auto rowIndices = model->FindFiles(pattern);
+    MultiSelect(rowIndices);
 
-    return count;
+    return rowIndices.count();
 }
 
 int FlexplorerMdiChild::DeleteSelected()
@@ -182,6 +180,200 @@ int FlexplorerMdiChild::DeleteSelected()
             }
 
             continue;
+        }
+    }
+
+    return count;
+}
+
+int FlexplorerMdiChild::InjectFiles(const QStringList &filePaths)
+{
+    QVector<int> rowIndices;
+
+    for (const auto &filePath : filePaths)
+    {
+        FlexFileBuffer buffer;
+
+        if (!buffer.ReadFromFile(filePath.toUtf8().data()))
+        {
+            auto msg = tr("Error reading from\n%1\nInjection aborted.");
+            msg = msg.arg(filePath);
+            QMessageBox::warning(this, tr("FLEXplorer warning"), msg);
+            continue;
+        }
+
+        if (buffer.IsTextFile())
+        {
+            if (options.injectTextFileAskUser)
+            {
+                QDialog dialog(this);
+                FlexplorerConvertUi ui;
+
+                ui.setupUi(dialog);
+                ui.TransferDataToDialog(tr("Inject text file"),
+                                        filePath,
+                                        tr("Convert to FLEX text file"),
+                                        options.injectTextFileConvert,
+                                        options.injectTextFileAskUser);
+                dialog.adjustSize();
+                auto result = dialog.exec();
+
+                if (result == QDialog::Accepted)
+                {
+                    options.injectTextFileConvert = ui.GetConvert();
+                    options.injectTextFileAskUser = ui.GetAskUser();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (options.injectTextFileConvert)
+            {
+                buffer.ConvertToFlexTextFile();
+            }
+        }
+
+        try
+        {
+            auto rowIndicesFound = model->FindFiles(buffer.GetFilename());
+            if (!rowIndicesFound.isEmpty())
+            {
+                auto msg = tr("%1\nalready exists. Overwrite?");
+
+                msg = msg.arg(buffer.GetFilename());
+                auto answer = QMessageBox::question(this, "FLEXplorer", msg,
+                              QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::Yes);
+
+                if (answer == QMessageBox::Yes)
+                {
+                    auto modelIndex = model->index(rowIndicesFound[0], 0);
+                    model->DeleteFile(modelIndex);
+                }
+                else
+                {
+                    continue;
+                }
+            }
+
+            rowIndices.append(model->AddFile(buffer).row());
+        }
+        catch (FlexException &ex)
+        {
+            auto msg = tr("%1\nInjection aborted.\nContinue?");
+
+            msg = msg.arg(ex.what());
+            auto buttons = QMessageBox::Yes | QMessageBox::No;
+            auto answer = QMessageBox::critical(this, tr("FLEXPlorer Error"),
+                                                msg, buttons,
+                                                QMessageBox::Yes);
+
+            if (answer == QMessageBox::No)
+            {
+                break;
+            }
+        }
+    }
+
+    MultiSelect(rowIndices);
+
+    return rowIndices.count();
+}
+
+int FlexplorerMdiChild::ExtractSelected(const QString &targetDirectory)
+{
+    auto selectedRows = selectionModel()->selectedRows();
+    int count = 0;
+
+    for (auto &index : selectedRows)
+    {
+        try
+        {
+            QString filename = model->GetFilename(index);
+            auto buffer = model->CopyFile(index);
+
+            if (buffer.IsFlexTextFile())
+            {
+                if (options.extractTextFileAskUser)
+                {
+                    QDialog dialog(this);
+                    FlexplorerConvertUi ui;
+
+                    ui.setupUi(dialog);
+                    ui.TransferDataToDialog(tr("Extract text file"),
+                                            filename,
+                                            tr("Convert to host text file"),
+                                            options.extractTextFileConvert,
+                                            options.extractTextFileAskUser);
+                    dialog.adjustSize();
+                    auto result = dialog.exec();
+
+                    if (result == QDialog::Accepted)
+                    {
+                        options.extractTextFileConvert = ui.GetConvert();
+                        options.extractTextFileAskUser = ui.GetAskUser();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                if (options.extractTextFileConvert)
+                {
+                    buffer.ConvertToTextFile();
+                }
+            }
+
+            auto targetFilename = filename.toLower();
+            auto targetPath = targetDirectory + PATHSEPARATORSTRING +
+                              targetFilename;
+
+            if (QFile::exists(targetPath))
+            {
+                auto msg = tr("%1\nalready exists. Overwrite it?");
+
+                msg = msg.arg(targetPath);
+                auto answer = QMessageBox::question(this, "FLEXplorer", msg,
+                              QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::Yes);
+                if (answer != QMessageBox::Yes)
+                {
+                    continue;
+                }
+                if (!QFile::remove(targetPath))
+                {
+                    msg = tr("Cannot remove\n%1\nExtraction aborted.");
+                    msg = msg.arg(targetPath);
+                    QMessageBox::warning(this, tr("FLEXplorer warning"), msg);
+                    continue;
+                }
+            }
+
+            if (!buffer.WriteToFile(targetPath.toUtf8().data()))
+            {
+                throw FlexException(FERR_UNABLE_TO_CREATE,
+                                    targetFilename.toUtf8().data());
+            }
+
+            ++count;
+        }
+        catch (FlexException &ex)
+        {
+            auto msg = tr("%1\nExtraction aborted.\nContinue?");
+
+            msg = msg.arg(ex.what());
+            auto buttons = QMessageBox::Yes | QMessageBox::No;
+            auto answer = QMessageBox::critical(this, tr("FLEXPlorer Error"),
+                                                msg, buttons,
+                                                QMessageBox::Yes);
+
+            if (answer == QMessageBox::No)
+            {
+                break;
+            }
         }
     }
 
@@ -387,10 +579,13 @@ void FlexplorerMdiChild::Info()
     auto &date = info.GetDate();
     QDate qdate(date.GetYear(), date.GetMonth(), date.GetDay());
     str += qdate.toString().append("\n");
-    str += tr("Tracks: ");
-    str += QString::number(tracks).append("\n");
-    str += tr("Sectors: ");
-    str += QString::number(sectors).append("\n");
+    if (tracks != 0 && sectors != 0)
+    {
+        str += tr("Tracks: ");
+        str += QString::number(tracks).append("\n");
+        str += tr("Sectors: ");
+        str += QString::number(sectors).append("\n");
+    }
     str += tr("Size: ");
     str += QString::number(info.GetTotalSize() / 1024);
     str += tr(" KByte").append("\n");
@@ -402,13 +597,36 @@ void FlexplorerMdiChild::Info()
     {
         str += tr("Attributes: read-only").append("\n");
     }
+    if (info.GetType() & TYPE_DSK_CONTAINER)
+    {
+        auto header = info.GetJvcFileHeader();
+
+        str += tr("JVC header: ");
+        if (header.empty())
+        {
+            str += tr("none");
+        }
+        else
+        {
+            for (Word index = 0; index < header.size(); ++index)
+            {
+                if (index != 0)
+                {
+                    str += ",";
+                }
+                str += QString::number((Word)header[index]);
+            }
+        }
+    }
 
     QMessageBox::information(this, title, str);
 }
 
 void FlexplorerMdiChild::SetupModel(const QString &path)
 {
-    model.reset(new FlexplorerTableModel(path.toUtf8().data(), this));
+    model.reset(
+        new FlexplorerTableModel(path.toUtf8().data(),
+                                 options.ft_access, this));
     setModel(model.get());
 }
 
@@ -703,5 +921,42 @@ void FlexplorerMdiChild::IsActivated(const QModelIndex &
         /* [[maybe_unused]] const QModelIndex &index */)
 {
     ViewSelected();
+}
+
+void FlexplorerMdiChild::OnFileTimeAccessChanged()
+{
+    UpdateDateDelegate();
+    for (int row = 0; row < model->rowCount(); ++row)
+    {
+        update(model->index(row, FlexplorerTableModel::COL_DATE));
+    }
+    horizontalHeader()->resizeSections(QHeaderView::ResizeToContents);
+}
+
+void FlexplorerMdiChild::UpdateDateDelegate()
+{
+    if (options.ft_access == FileTimeAccess::NONE)
+    {
+        setItemDelegateForColumn(FlexplorerTableModel::COL_DATE,
+                                 dateDelegate.get());
+    }
+    else
+    {
+        setItemDelegateForColumn(FlexplorerTableModel::COL_DATE,
+                                 dateTimeDelegate.get());
+    }
+}
+
+void FlexplorerMdiChild::MultiSelect(const QVector<int> &rowIndices)
+{
+    clearSelection();
+    auto selection = selectionMode();
+    setSelectionMode(QAbstractItemView::MultiSelection);
+
+    for (auto rowIndex : rowIndices)
+    {
+        selectRow(rowIndex);
+    }
+    setSelectionMode(selection);
 }
 

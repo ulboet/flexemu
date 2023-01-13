@@ -18,6 +18,9 @@
     <ClCompile Include="ndircont.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="fpcnvui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="fpdnd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -34,6 +37,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="fpnewui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fpoptman.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="fpoptui.cpp">
@@ -84,6 +90,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="dircont.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="efiletim.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fcinfo.h">
@@ -158,7 +167,13 @@
     <ClInclude Include="warnon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fpcnvui.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="fpdnd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fpoptman.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fpmodel.h">
@@ -168,6 +183,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sfpopts.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -194,6 +212,9 @@
       <Filter>Resource Files</Filter>
     </CustomBuild>
     <CustomBuild Include="fpopt.ui">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="fpcnv.ui">
       <Filter>Resource Files</Filter>
     </CustomBuild>
   </ItemGroup>

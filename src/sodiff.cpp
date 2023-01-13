@@ -140,6 +140,26 @@ FlexemuOptionsDifference::FlexemuOptionsDifference(
     {
         notEquals.push_back(FlexemuOptionId::PixelSize);
     }
+
+    if (opt1.fileTimeAccess != opt2.fileTimeAccess)
+    {
+        notEquals.push_back(FlexemuOptionId::FileTimeAccess);
+    }
+
+    if (opt1.isSmooth != opt2.isSmooth)
+    {
+        notEquals.push_back(FlexemuOptionId::IsDisplaySmooth);
+    }
+
+    if (opt1.isTerminalIgnoreNUL != opt2.isTerminalIgnoreNUL)
+    {
+        notEquals.push_back(FlexemuOptionId::IsTerminalIgnoreNUL);
+    }
+
+    if (opt1.isTerminalIgnoreESC != opt2.isTerminalIgnoreESC)
+    {
+        notEquals.push_back(FlexemuOptionId::IsTerminalIgnoreESC);
+    }
 }
 
 const FlexemuOptionsDifference::Result&
@@ -179,6 +199,10 @@ bool IsRestartNeeded(const FlexemuOptionsDifference &optionsDiff)
             case FlexemuOptionId::CanFormatDrive1:
             case FlexemuOptionId::CanFormatDrive2:
             case FlexemuOptionId::CanFormatDrive3:
+            case FlexemuOptionId::FileTimeAccess:
+            case FlexemuOptionId::IsDisplaySmooth:
+            case FlexemuOptionId::IsTerminalIgnoreESC:
+            case FlexemuOptionId::IsTerminalIgnoreNUL:
                 break;
         }
     }

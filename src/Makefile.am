@@ -123,7 +123,8 @@ flexemu_ui = \
 flexemu_ui_hdr = $(flexemu_ui:.ui=_ui.h)
 flexplorer_ui = \
 	fpnew.ui \
-	fpopt.ui
+	fpopt.ui \
+	fpcnv.ui
 flexplorer_ui_hdr = $(flexplorer_ui:.ui=_ui.h)
 
 # Rule for Qt moc files:
@@ -142,6 +143,7 @@ flexplorer_moc_hdr = \
 	fpmdich.h \
 	fpnewui.h \
 	fpoptui.h \
+	fpcnvui.h \
 	fpwin.h
 flexplorer_moc_src = $(flexplorer_moc_hdr:.h=_moc.cpp)
 
@@ -233,6 +235,7 @@ flexemu_SOURCES = \
 	brcfile.h \
 	bregistr.h \
 	brkptui.h \
+	breltime.h \
 	btime.h \
 	bui.h \
 	bytereg.h \
@@ -251,6 +254,7 @@ flexemu_SOURCES = \
 	e2.h \
 	e2floppy.h \
 	e2screen.h \
+	efiletim.h \
 	efslctle.h \
 	engine.h \
 	fcinfo.h \
@@ -317,12 +321,14 @@ flexemu_SOURCES = \
 	winmain.h
 
 flexplorer_SOURCES = \
+	fpcnvui.cpp \
 	fpdnd.cpp \
 	fpedit.cpp \
 	fpmain.cpp \
 	fpmdich.cpp \
 	fpmodel.cpp \
 	fpnewui.cpp \
+	fpoptman.cpp \
 	fpoptui.cpp \
 	fpwin.cpp \
 	bdate.h \
@@ -334,9 +340,11 @@ flexplorer_SOURCES = \
 	bprocess.h \
 	brcfile.h \
 	bregistr.h \
+	btime.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
+	efiletim.h \
 	fcinfo.h \
 	fcopyman.h \
 	fdirent.h \
@@ -348,11 +356,13 @@ flexplorer_SOURCES = \
 	flexemu.h \
 	flexerr.h \
 	fpattrui.h \
+	fpcnvui.h \
 	fpdnd.h \
 	fpedit.h \
 	fpmdich.h \
 	fpmodel.h \
 	fpnewui.h \
+	fpoptman.h \
 	fpoptui.h \
 	fpwin.h \
 	idircnt.h \
@@ -364,6 +374,7 @@ flexplorer_SOURCES = \
 	memtgt.h \
 	misc1.h \
 	rfilecnt.h \
+	sfpopts.h \
 	sprinter.h \
 	warnoff.h \
 	warnon.h
@@ -401,13 +412,14 @@ flex2hex_SOURCES = \
 
 dsktool_SOURCES = \
 	dsktool.cpp \
-	filfschk.cpp \
 	bdate.h \
 	bdir.h \
 	bfileptr.h \
+	btime.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
+	efiletim.h \
 	fcinfo.h \
 	fcopyman.h \
 	fdirent.h \
@@ -444,6 +456,7 @@ test_SOURCES = \
 	bobserv.h \
 	bobservd.h \
 	bobshelp.h \
+	breltime.h \
 	btime.h \
 	clogfile.h \
 	command.h \
@@ -482,6 +495,7 @@ libflex_a_SOURCES = \
 	bprocess.cpp \
 	brcfile.cpp \
 	bregistr.cpp \
+	breltime.cpp \
 	btime.cpp \
 	cvtwchar.cpp \
 	dircont.cpp \
@@ -514,10 +528,12 @@ libflex_a_SOURCES = \
 	bobshelp.h \
 	brcfile.h \
 	bregistr.h \
+	breltime.h \
 	btime.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
+	efiletim.h \
 	fcinfo.h \
 	fcnffile.h \
 	fcopyman.h \

@@ -53,14 +53,37 @@ void FlexplorerOptionsUi::InitializeWidgets()
 {
 }
 
-void FlexplorerOptionsUi::TransferDataToDialog(const QString &bootSectorFile)
+void FlexplorerOptionsUi::TransferDataToDialog(const struct sFPOptions &options)
 {
     if (dialog == nullptr)
     {
         throw std::logic_error("setupUi(dialog) has to be called before.");
     }
 
-    e_bootSectorFile->setText(bootSectorFile);
+    e_bootSectorFile->setText(options.bootSectorFile.c_str());
+
+    auto index = static_cast<int>(options.ft_access);
+    index = (index == 3) ? 2 : index;
+    cb_fileTimeAccess->setCurrentIndex(index);
+
+    c_injectTextFileConvert->setChecked(options.injectTextFileConvert);
+    c_injectTextFileAskUser->setChecked(options.injectTextFileAskUser);
+    c_extractTextFileConvert->setChecked(options.extractTextFileConvert);
+    c_extractTextFileAskUser->setChecked(options.extractTextFileAskUser);
+}
+
+void FlexplorerOptionsUi::TransferDataFromDialog(struct sFPOptions &options)
+{
+    options.bootSectorFile = e_bootSectorFile->text().toUtf8().data();
+
+    auto index = cb_fileTimeAccess->currentIndex();
+    index = (index == 2) ? 3 : index;
+    options.ft_access = static_cast<FileTimeAccess>(index);
+
+    options.injectTextFileConvert = c_injectTextFileConvert->isChecked();
+    options.injectTextFileAskUser = c_injectTextFileAskUser->isChecked();
+    options.extractTextFileConvert = c_extractTextFileConvert->isChecked();
+    options.extractTextFileAskUser = c_extractTextFileAskUser->isChecked();
 }
 
 void FlexplorerOptionsUi::ConnectSignalsWithSlots()
@@ -72,11 +95,6 @@ void FlexplorerOptionsUi::ConnectSignalsWithSlots()
         this, &FlexplorerOptionsUi::OnAccepted);
     QObject::connect(c_buttonBox, &QDialogButtonBox::rejected,
             this, &FlexplorerOptionsUi::OnRejected);
-}
-
-QString FlexplorerOptionsUi::GetBootSectorFile() const
-{
-    return e_bootSectorFile->text();
 }
 
 void FlexplorerOptionsUi::OnSelectBootSectorFile()

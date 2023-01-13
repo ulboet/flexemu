@@ -108,6 +108,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
+      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -132,6 +133,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
+      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -157,6 +159,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
+      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -184,6 +187,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
+      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -384,6 +388,7 @@
     <ClInclude Include="e2.h" />
     <ClInclude Include="e2floppy.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="efiletim.h" />
     <ClInclude Include="fcinfo.h" />
     <ClInclude Include="fcnffile.h" />
     <ClInclude Include="fcopyman.h" />

@@ -309,9 +309,17 @@ extern "C" struct sRGBDef
 #define FLEXVERSION     "Version"
 #define FLEXSCREENFACTOR "ScreenFactor"
 #define FLEXFREQUENCY    "Frequency"
+#define FLEXFILETIMEACCESS "FileTimeAccess"
+#define FLEXDISPLAYSMOOTH "DisplaySmooth"
+#define FLEXTERMINALIGNOREESC "TerminalIgnoreESC"
+#define FLEXTERMINALIGNORENUL "TerminalIgnoreNUL"
 
 #define FLEXPLORERBOOTSECTORFILE "BootSectorFile"
 #define FLEXPLORERTEXTFLAG  "AutoTextConversion"
+#define FLEXPLORERINJECTCNV  "InjectTextFileConvert"
+#define FLEXPLORERINJECTASK  "InjectTextFileAskUser"
+#define FLEXPLOREREXTRACTCNV  "ExtractTextFileConvert"
+#define FLEXPLOREREXTRACTASK  "ExtractTextFileAskUser"
 
 // This macro defines the name of a file. It contains a list of files
 // which have to be handled as random files. It is used in directory containers
@@ -387,9 +395,7 @@ extern bool multimatches(const char *text, const char *multipattern,
 #ifdef _WIN32
 extern std::string getExecutablePath();
 #endif
-#ifdef UNIX
 extern std::string getHomeDirectory();
-#endif
 extern void dumpSector(FILE *fp, const char *indent,
                        const Byte *buffer, uint32_t size);
 extern std::string getTempPath();

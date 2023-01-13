@@ -60,13 +60,14 @@
 #include "warnon.h"
 
 
-FLEXplorer::FLEXplorer() : mdiArea(new QMdiArea),
+FLEXplorer::FLEXplorer(sFPOptions &p_options) : mdiArea(new QMdiArea),
     windowMenu(nullptr),
     l_selectedFilesCount(nullptr), l_selectedFilesByteSize(nullptr),
     fileToolBar(nullptr), editToolBar(nullptr),
     containerToolBar(nullptr),
     newContainerAction(nullptr), openContainerAction(nullptr),
     openDirectoryAction(nullptr), 
+    injectAction(nullptr), extractAction(nullptr),
     selectAllAction(nullptr), deselectAllAction(nullptr),
     findFilesAction(nullptr),
 #ifndef QT_NO_CLIPBOARD
@@ -84,8 +85,10 @@ FLEXplorer::FLEXplorer() : mdiArea(new QMdiArea),
     aboutQtAction(nullptr),
     newDialogSize{0, 0}, optionsDialogSize{0, 0},
     attributesDialogSize{0, 0},
-    findPattern("*.*")
+    findPattern("*.*"),
+    options(p_options)
 {
+    injectDirectory = getHomeDirectory().c_str();
     mdiArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     mdiArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     QImage image(":resource/background.png");
@@ -100,12 +103,10 @@ FLEXplorer::FLEXplorer() : mdiArea(new QMdiArea),
     CreateStatusBar();
     UpdateMenus();
 
-    ReadDefaultOptions();
-
     setWindowTitle(tr("FLEXplorer"));
     setUnifiedTitleAndToolBarOnMac(true);
 
-    resize(820, 680);
+    resize(860, 720);
 }
 
 void FLEXplorer::NewContainer()
@@ -138,6 +139,7 @@ void FLEXplorer::NewContainer()
                                   directory.c_str(),
                                   filename.c_str(),
                                   ui.GetTracks(), ui.GetSectors(),
+                                  options.ft_access,
                                   ui.GetFormat());
             delete container;
 
@@ -189,14 +191,20 @@ void FLEXplorer::OpenDirectory()
     }
 }
 
-bool FLEXplorer::OpenContainerForPath(const QString &path, bool isLast)
+bool FLEXplorer::OpenContainerForPath(QString path, bool isLast)
 {
+    // If path ends with a path separator character it will be cut off.
+    // This can happen when calling FLEXplorer on the command line with
+    // a path entered with command line completion.
+    if (path.count() > 1 && path.right(1) == QString(PATHSEPARATORSTRING))
+    {
+        path.resize(path.count() - 1);
+    }
+
     try
     {
-        auto *child = CreateMdiChild(path);
+        auto *child = CreateMdiChild(path, options);
 
-        connect(child, &FlexplorerMdiChild::SelectionHasChanged,
-                this, &FLEXplorer::SelectionHasChanged);
         child->show();
 
         SetStatusMessage(tr("Loaded %1").arg(path));
@@ -214,7 +222,7 @@ bool FLEXplorer::OpenContainerForPath(const QString &path, bool isLast)
             message += "\nContinue?";
         }
         auto result = QMessageBox::critical(
-                nullptr, tr("FLEXplorer Error"),
+                this, tr("FLEXplorer Error"),
                 message, buttons);
 
         return isLast || (result == QMessageBox::Yes);
@@ -312,6 +320,49 @@ void FLEXplorer::DeleteSelected()
     });
 }
 
+void FLEXplorer::InjectFiles()
+{
+    ExecuteInChild([&](FlexplorerMdiChild &child)
+    {
+        QFileDialog dialog(this, tr("Select file(s) to inject"),
+                           injectDirectory);
+
+        dialog.setFileMode(QFileDialog::ExistingFiles);
+        dialog.setDirectory(injectDirectory);
+        dialog.setViewMode(QFileDialog::Detail);
+
+        if (dialog.exec())
+        {
+            auto fileNames = dialog.selectedFiles();
+            auto count = child.InjectFiles(fileNames);
+            SetStatusMessage(tr("Injected %1 file(s)").arg(count));
+            injectDirectory = dialog.directory().absolutePath();
+        }
+    });
+}
+
+void FLEXplorer::ExtractSelected()
+{
+    ExecuteInChild([&](FlexplorerMdiChild &child)
+    {
+        auto *subWindow = mdiArea->activeSubWindow();
+        auto targetDirectory = QFileDialog::getExistingDirectory(this,
+                tr("Target Directory to extract file(s)"), extractDirectory,
+                QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+        // As a result of opening a directory browser there maybe is no active
+        // child any more => reactivate it.
+        mdiArea->setActiveSubWindow(subWindow);
+
+        if (!targetDirectory.isEmpty())
+        {
+            auto count = child.ExtractSelected(targetDirectory);
+            SetStatusMessage(tr("Extracted %1 file(s)").arg(count));
+            extractDirectory = targetDirectory;
+        }
+    });
+}
+
 void FLEXplorer::ViewSelected()
 {
     ExecuteInChild([&](FlexplorerMdiChild &child)
@@ -358,15 +409,21 @@ void FLEXplorer::Options()
     QDialog dialog;
     FlexplorerOptionsUi ui;
     ui.setupUi(dialog);
-    ui.TransferDataToDialog(FlexFileContainer::bootSectorFile.c_str());
+    ui.TransferDataToDialog(options);
     dialog.resize(optionsDialogSize);
     auto result = dialog.exec();
     optionsDialogSize = dialog.size();
 
     if (result == QDialog::Accepted)
     {
-        std::string bootSectorFile = ui.GetBootSectorFile().toUtf8().data();
-        FlexFileContainer::bootSectorFile = bootSectorFile;
+        auto oldFileTimeAccess = options.ft_access;
+
+        ui.TransferDataFromDialog(options);
+        FlexFileContainer::bootSectorFile = options.bootSectorFile;
+        if (oldFileTimeAccess != options.ft_access)
+        {
+            emit FileTimeAccessHasChanged();
+        }
     }
 }
 
@@ -408,12 +465,14 @@ void FLEXplorer::UpdateMenus()
     bool isWriteProtected = (hasMdiChild && child->IsWriteProtected());
     bool hasSelection = (hasMdiChild && child->GetSelectedFilesCount() > 0);
 
+    injectAction->setEnabled(hasMdiChild && !isWriteProtected);
+    extractAction->setEnabled(hasMdiChild && hasSelection);
     selectAllAction->setEnabled(hasMdiChild);
     deselectAllAction->setEnabled(hasMdiChild);
     findFilesAction->setEnabled(hasMdiChild);
 #ifndef QT_NO_CLIPBOARD
     copyAction->setEnabled(hasMdiChild && hasSelection);
-    pasteAction->setEnabled(!isWriteProtected);
+    pasteAction->setEnabled(hasMdiChild && !isWriteProtected);
 #endif
     deleteAction->setEnabled(!isWriteProtected && hasSelection);
     viewAction->setEnabled(hasSelection);
@@ -487,9 +546,10 @@ void FLEXplorer::CloseAllSubWindows()
     SetStatusMessage(tr("Closed all windows"));
 }
 
-FlexplorerMdiChild *FLEXplorer::CreateMdiChild(const QString &path)
+FlexplorerMdiChild *FLEXplorer::CreateMdiChild(const QString &path,
+        struct sFPOptions &p_options)
 {
-    auto *child = new FlexplorerMdiChild(path);
+    auto *child = new FlexplorerMdiChild(path, p_options);
 
     auto subWindow = mdiArea->addSubWindow(child);
     QString iconResource =
@@ -502,6 +562,10 @@ FlexplorerMdiChild *FLEXplorer::CreateMdiChild(const QString &path)
     child->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(child, &FlexplorerMdiChild::customContextMenuRequested,
             this, &FLEXplorer::ContextMenuRequested);
+    connect(this, &FLEXplorer::FileTimeAccessHasChanged,
+            child, &FlexplorerMdiChild::OnFileTimeAccessChanged);
+    connect(child, &FlexplorerMdiChild::SelectionHasChanged,
+            this, &FLEXplorer::SelectionHasChanged);
 
     return child;
 }
@@ -612,6 +676,26 @@ void FLEXplorer::CreateEditActions()
     editMenu->addAction(attributesAction);
     editMenu->addSeparator();
     editToolBar->addAction(attributesAction);
+    editToolBar->addSeparator();
+
+    const auto injectIcon = QIcon(":/resource/inject.png");
+    injectAction = new QAction(injectIcon, tr("&Inject..."), this);
+    injectAction->setStatusTip(tr("Inject selected files"));
+    injectAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_I));
+    connect(injectAction, &QAction::triggered, this,
+            &FLEXplorer::InjectFiles);
+    editMenu->addAction(injectAction);
+    editToolBar->addAction(injectAction);
+
+    const auto extractIcon = QIcon(":/resource/extract.png");
+    extractAction = new QAction(extractIcon, tr("E&xtract..."), this);
+    extractAction->setStatusTip(tr("Extract selected files"));
+    extractAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_X));
+    connect(extractAction, &QAction::triggered, this,
+            &FLEXplorer::ExtractSelected);
+    editMenu->addAction(extractAction);
+    editMenu->addSeparator();
+    editToolBar->addAction(extractAction);
     editToolBar->addSeparator();
 
     const auto selectAllIcon = QIcon(":/resource/selectall.png");
@@ -770,6 +854,9 @@ void FLEXplorer::ContextMenuRequested(QPoint pos)
         contextMenu->addAction(deleteAction);
         contextMenu->addAction(attributesAction);
         contextMenu->addSeparator();
+        contextMenu->addAction(injectAction);
+        contextMenu->addAction(extractAction);
+        contextMenu->addSeparator();
         contextMenu->addAction(selectAllAction);
         contextMenu->addAction(deselectAllAction);
         contextMenu->addAction(findFilesAction);
@@ -827,7 +914,6 @@ QMdiSubWindow *FLEXplorer::FindMdiChild(const QString &path) const
 void FLEXplorer::Exit()
 {
     qApp->closeAllWindows();
-    WriteDefaultOptions();
     QCoreApplication::quit();
 }
 
@@ -954,44 +1040,14 @@ void FLEXplorer::dropEvent(QDropEvent *event)
     }
 }
 
-void FLEXplorer::WriteDefaultOptions()
+void FLEXplorer::SetFileTimeAccess(FileTimeAccess fileTimeAccess)
 {
-#ifdef _WIN32
-    BRegistry reg(BRegistry::currentUser, FLEXPLOREREG);
-    reg.SetValue(FLEXPLORERBOOTSECTORFILE, FlexFileContainer::bootSectorFile);
-#endif
-#ifdef UNIX
-    const auto rcFileName =
-        getHomeDirectory() + PATHSEPARATORSTRING FLEXPLORERRC;
-    BRcFile rcFile(rcFileName.c_str());
-    rcFile.Initialize(); // truncate file
-    rcFile.SetValue(FLEXPLORERBOOTSECTORFILE,
-                    FlexFileContainer::bootSectorFile.c_str());
-#endif
-}
+    auto hasChanged = (options.ft_access != fileTimeAccess);
 
-void FLEXplorer::ReadDefaultOptions()
-{
-    std::string string_result;
-#ifdef _WIN32
-    BRegistry reg(BRegistry::localMachine, FLEXPLOREREG);
-
-    if (!reg.GetValue(FLEXPLORERBOOTSECTORFILE, string_result) &&
-        !string_result.empty())
+    options.ft_access = fileTimeAccess;
+    if (hasChanged)
     {
-        FlexFileContainer::bootSectorFile = string_result;
+        emit FileTimeAccessHasChanged();
     }
-#endif
-#ifdef UNIX
-    const auto rcFileName =
-        getHomeDirectory() + PATHSEPARATORSTRING FLEXPLORERRC;
-    BRcFile rcFile(rcFileName.c_str());
-
-    if (!rcFile.GetValue(FLEXPLORERBOOTSECTORFILE, string_result) &&
-        !string_result.empty())
-    {
-        FlexFileContainer::bootSectorFile = string_result;
-    }
-#endif
 }
 

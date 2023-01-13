@@ -115,8 +115,10 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
 
     if (dialog == nullptr)
     {
-        throw std::logic_error("setupUi(dialog) with a valid dialog instance "
-                               "has to be called before.");
+        QMessageBox::critical(nullptr, PROGRAMNAME " Logic Error",
+                              "setupUi(dialog) with a valid dialog instance "
+                              "has to be called before.");
+        return;
     }
 
     readOnlyOptions = AddDependentReadOnlyOptions(options.readOnlyOptionIds);
@@ -247,6 +249,16 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
         r_frequencySet->setChecked(true);
         e_frequency->setText(frequency_string);
     }
+
+    auto setFileTime = (options.fileTimeAccess ==
+           (FileTimeAccess::Get | FileTimeAccess::Set));
+    c_fileTime->setChecked(setFileTime);
+
+    c_isDisplaySmooth->setChecked(options.isSmooth != 0);
+
+    c_terminalIgnoreNUL->setChecked(options.isTerminalIgnoreNUL);
+    c_terminalIgnoreESC->setChecked(options.isTerminalIgnoreESC);
+
     SetOptionsReadOnly(readOnlyOptions);
 }
 
@@ -360,6 +372,22 @@ void FlexemuOptionsUi::SetOptionsReadOnly(const std::vector<FlexemuOptionId>
             case FlexemuOptionId::IsUseRtc:
                 c_useRtc->setEnabled(false);
                 break;
+
+            case FlexemuOptionId::FileTimeAccess:
+                c_fileTime->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::IsDisplaySmooth:
+                c_isDisplaySmooth->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::IsTerminalIgnoreESC:
+                c_terminalIgnoreESC->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::IsTerminalIgnoreNUL:
+                c_terminalIgnoreNUL->setEnabled(false);
+                break;
         }
     }
 }
@@ -434,6 +462,10 @@ std::vector<FlexemuOptionId> FlexemuOptionsUi::AddDependentReadOnlyOptions(
                 case FlexemuOptionId::Frequency:
                 case FlexemuOptionId::IsInverse:
                 case FlexemuOptionId::PixelSize:
+                case FlexemuOptionId::FileTimeAccess:
+                case FlexemuOptionId::IsDisplaySmooth:
+                case FlexemuOptionId::IsTerminalIgnoreESC:
+                case FlexemuOptionId::IsTerminalIgnoreNUL:
                     break;
             }
         }
@@ -463,6 +495,9 @@ void FlexemuOptionsUi::setupUi(QDialog *p_dialog)
     // visible. It is just a rough estimation.
     QFontMetrics metrics(dialog->font());
     e_drive2->setMinimumWidth(metrics.boundingRect('x').width() * 52);
+#ifdef _WIN32
+    c_tabWidget->removeTab(4); // On Windows there is no terminal mode
+#endif
 }
 
 bool FlexemuOptionsUi::Validate()
@@ -659,6 +694,27 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
             options.frequency = (success ? frequency : -1.0f);
         }
     }
+
+    if (!IsReadOnly(FlexemuOptionId::FileTimeAccess))
+    {
+        options.fileTimeAccess = c_fileTime->isChecked() ?
+            FileTimeAccess::Get | FileTimeAccess::Set : FileTimeAccess::NONE;
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::IsDisplaySmooth))
+    {
+        options.isSmooth = c_isDisplaySmooth->isChecked();
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::IsTerminalIgnoreNUL))
+    {
+        options.isTerminalIgnoreNUL = c_terminalIgnoreNUL->isChecked();
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::IsTerminalIgnoreESC))
+    {
+        options.isTerminalIgnoreESC = c_terminalIgnoreESC->isChecked();
+    }
 }
 
 QString FlexemuOptionsUi::GetRelativePath(
@@ -672,12 +728,12 @@ QString FlexemuOptionsUi::GetRelativePath(
         (result.indexOf(directory) == 0) &&
         (result.indexOf(PATHSEPARATOR) >= 0))
     {
-        result = result.midRef(directory.length(),
-                       result.length() - directory.length()).toString();
+        result = result.mid(directory.length(),
+                       result.length() - directory.length());
 
         if (result.indexOf(PATHSEPARATOR) == 0)
         {
-            result = result.midRef(1, result.length() - 1).toString();
+            result = result.mid(1, result.length() - 1);
         }
     }
 
@@ -888,5 +944,31 @@ void FlexemuOptionsUi::OnAccepted()
 void FlexemuOptionsUi::OnRejected()
 {
     dialog->done(QDialog::Rejected);
+}
+
+void FlexemuOptionsUi::SetTabIndex(int index)
+{
+    if (c_tabWidget == nullptr)
+    {
+        QMessageBox::critical(nullptr, PROGRAMNAME " Logic Error",
+                              "setupUi(dialog) with a valid dialog instance "
+                              "has to be called before.");
+        return;
+    }
+
+    c_tabWidget->setCurrentIndex(index);
+}
+
+int FlexemuOptionsUi::GetTabIndex() const
+{
+    if (c_tabWidget == nullptr)
+    {
+        QMessageBox::critical(nullptr, PROGRAMNAME " Logic Error",
+                              "setupUi(dialog) with a valid dialog instance "
+                              "has to be called before.");
+        return 0;
+    }
+
+    return c_tabWidget->currentIndex();
 }
 
