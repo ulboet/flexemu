@@ -180,9 +180,10 @@ am_flexemu_OBJECTS = flexemu-absgui.$(OBJEXT) flexemu-acia1.$(OBJEXT) \
 	flexemu-logfilui.$(OBJEXT) flexemu-main.$(OBJEXT) \
 	flexemu-mc146818.$(OBJEXT) flexemu-mc6809.$(OBJEXT) \
 	flexemu-mc6809in.$(OBJEXT) flexemu-mc6809st.$(OBJEXT) \
-	flexemu-mc6522.$(OBJEXT) flexemu-mc6821.$(OBJEXT) flexemu-mc6850.$(OBJEXT) \
-	flexemu-mmu.$(OBJEXT) flexemu-ndircont.$(OBJEXT) \
-	flexemu-pia1.$(OBJEXT) flexemu-via1.$(OBJEXT) flexemu-pia2.$(OBJEXT) \
+	flexemu-mc6821.$(OBJEXT) flexemu-mc6522.$(OBJEXT) \
+	flexemu-mc6850.$(OBJEXT) flexemu-mmu.$(OBJEXT) \
+	flexemu-ndircont.$(OBJEXT) flexemu-pia1.$(OBJEXT) \
+	flexemu-via1.$(OBJEXT) flexemu-pia2.$(OBJEXT) \
 	flexemu-pia2v5.$(OBJEXT) flexemu-qtgui.$(OBJEXT) \
 	flexemu-schedule.$(OBJEXT) flexemu-sodiff.$(OBJEXT) \
 	flexemu-terminal.$(OBJEXT) flexemu-vico1.$(OBJEXT) \
@@ -280,16 +281,17 @@ am__depfiles_remade = ./$(DEPDIR)/dsktool-dsktool.Po \
 	./$(DEPDIR)/flexemu-logfilui.Po \
 	./$(DEPDIR)/flexemu-logfilui_moc.Po \
 	./$(DEPDIR)/flexemu-main.Po ./$(DEPDIR)/flexemu-mc146818.Po \
-	./$(DEPDIR)/flexemu-mc6809.Po ./$(DEPDIR)/flexemu-mc6809in.Po \
-	./$(DEPDIR)/flexemu-mc6809st.Po ./$(DEPDIR)/flexemu-mc6821.Po ./$(DEPDIR)/flexemu-mc6522.Po\
+	./$(DEPDIR)/flexemu-mc6522.Po ./$(DEPDIR)/flexemu-mc6809.Po \
+	./$(DEPDIR)/flexemu-mc6809in.Po \
+	./$(DEPDIR)/flexemu-mc6809st.Po ./$(DEPDIR)/flexemu-mc6821.Po \
 	./$(DEPDIR)/flexemu-mc6850.Po ./$(DEPDIR)/flexemu-mmu.Po \
-	./$(DEPDIR)/flexemu-ndircont.Po ./$(DEPDIR)/flexemu-via1.Po  \
+	./$(DEPDIR)/flexemu-ndircont.Po ./$(DEPDIR)/flexemu-pia1.Po \
 	./$(DEPDIR)/flexemu-pia2.Po ./$(DEPDIR)/flexemu-pia2v5.Po \
 	./$(DEPDIR)/flexemu-qtgui.Po ./$(DEPDIR)/flexemu-qtgui_moc.Po \
 	./$(DEPDIR)/flexemu-schedule.Po ./$(DEPDIR)/flexemu-sodiff.Po \
-	./$(DEPDIR)/flexemu-terminal.Po ./$(DEPDIR)/flexemu-vico1.Po \
-	./$(DEPDIR)/flexemu-vico2.Po ./$(DEPDIR)/flexemu-wd1793.Po \
-	./$(DEPDIR)/flexemu-winmain.Po \
+	./$(DEPDIR)/flexemu-terminal.Po ./$(DEPDIR)/flexemu-via1.Po \
+	./$(DEPDIR)/flexemu-vico1.Po ./$(DEPDIR)/flexemu-vico2.Po \
+	./$(DEPDIR)/flexemu-wd1793.Po ./$(DEPDIR)/flexemu-winmain.Po \
 	./$(DEPDIR)/flexplorer-fpcnvui.Po \
 	./$(DEPDIR)/flexplorer-fpcnvui_moc.Po \
 	./$(DEPDIR)/flexplorer-fpdnd.Po \
@@ -521,7 +523,6 @@ EGREP = @EGREP@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
-FILECMD = @FILECMD@
 FLEXEMU_LDADD = @FLEXEMU_LDADD@
 FLEXPLORER = @FLEXPLORER@
 FLEX_RC = @FLEX_RC@
@@ -1369,16 +1370,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-logfilui_moc.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-main.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc146818.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6522.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6809.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6809in.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6809st.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6821.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6522.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mc6850.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-mmu.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-ndircont.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia1.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-via1.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia2.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-pia2v5.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-qtgui.Po@am__quote@ # am--include-marker
@@ -1386,6 +1386,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-schedule.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-sodiff.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-terminal.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-via1.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-vico1.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-vico2.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/flexemu-wd1793.Po@am__quote@ # am--include-marker
@@ -3477,16 +3478,15 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-logfilui_moc.Po
 	-rm -f ./$(DEPDIR)/flexemu-main.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc146818.Po
+	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809in.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809st.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6821.Po
-	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6850.Po
 	-rm -f ./$(DEPDIR)/flexemu-mmu.Po
 	-rm -f ./$(DEPDIR)/flexemu-ndircont.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia1.Po
-	-rm -f ./$(DEPDIR)/flexemu-via1.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2v5.Po
 	-rm -f ./$(DEPDIR)/flexemu-qtgui.Po
@@ -3494,6 +3494,7 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-schedule.Po
 	-rm -f ./$(DEPDIR)/flexemu-sodiff.Po
 	-rm -f ./$(DEPDIR)/flexemu-terminal.Po
+	-rm -f ./$(DEPDIR)/flexemu-via1.Po
 	-rm -f ./$(DEPDIR)/flexemu-vico1.Po
 	-rm -f ./$(DEPDIR)/flexemu-vico2.Po
 	-rm -f ./$(DEPDIR)/flexemu-wd1793.Po
@@ -3643,16 +3644,15 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-logfilui_moc.Po
 	-rm -f ./$(DEPDIR)/flexemu-main.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc146818.Po
+	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809in.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6809st.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6821.Po
-	-rm -f ./$(DEPDIR)/flexemu-mc6522.Po
 	-rm -f ./$(DEPDIR)/flexemu-mc6850.Po
 	-rm -f ./$(DEPDIR)/flexemu-mmu.Po
 	-rm -f ./$(DEPDIR)/flexemu-ndircont.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia1.Po
-	-rm -f ./$(DEPDIR)/flexemu-via1.Po	
 	-rm -f ./$(DEPDIR)/flexemu-pia2.Po
 	-rm -f ./$(DEPDIR)/flexemu-pia2v5.Po
 	-rm -f ./$(DEPDIR)/flexemu-qtgui.Po
@@ -3660,6 +3660,7 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/flexemu-schedule.Po
 	-rm -f ./$(DEPDIR)/flexemu-sodiff.Po
 	-rm -f ./$(DEPDIR)/flexemu-terminal.Po
+	-rm -f ./$(DEPDIR)/flexemu-via1.Po
 	-rm -f ./$(DEPDIR)/flexemu-vico1.Po
 	-rm -f ./$(DEPDIR)/flexemu-vico2.Po
 	-rm -f ./$(DEPDIR)/flexemu-wd1793.Po

@@ -90,7 +90,8 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 bin_PROGRAMS = bin2s19$(EXEEXT) fromflex$(EXEEXT) rcvflex$(EXEEXT) \
-	send2flx$(EXEEXT) testdaa$(EXEEXT) toflex$(EXEEXT) s19toflex$(EXEEXT)
+	send2flx$(EXEEXT) testdaa$(EXEEXT) toflex$(EXEEXT) \
+	s19toflex$(EXEEXT)
 subdir = src/tools
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/attributes.m4 \
@@ -120,12 +121,12 @@ bin2s19_LDADD = $(LDADD)
 am_fromflex_OBJECTS = fromflex.$(OBJEXT)
 fromflex_OBJECTS = $(am_fromflex_OBJECTS)
 fromflex_LDADD = $(LDADD)
-am_s19toflex_OBJECTS = s19toflex.$(OBJEXT)
-s19toflex_OBJECTS = $(am_s19toflex_OBJECTS)
-s19toflex_LDADD = $(LDADD)
 am_rcvflex_OBJECTS = rcvflex.$(OBJEXT)
 rcvflex_OBJECTS = $(am_rcvflex_OBJECTS)
 rcvflex_LDADD = $(LDADD)
+am_s19toflex_OBJECTS = s19toflex.$(OBJEXT)
+s19toflex_OBJECTS = $(am_s19toflex_OBJECTS)
+s19toflex_LDADD = $(LDADD)
 am_send2flx_OBJECTS = send2flx.$(OBJEXT)
 send2flx_OBJECTS = $(am_send2flx_OBJECTS)
 send2flx_LDADD = $(LDADD)
@@ -151,8 +152,9 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/src
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/bin2s19.Po ./$(DEPDIR)/fromflex.Po \
-	./$(DEPDIR)/rcvflex.Po ./$(DEPDIR)/send2flx.Po \
-	./$(DEPDIR)/testdaa.Po ./$(DEPDIR)/toflex.Po ./$(DEPDIR)/s19toflex.Po
+	./$(DEPDIR)/rcvflex.Po ./$(DEPDIR)/s19toflex.Po \
+	./$(DEPDIR)/send2flx.Po ./$(DEPDIR)/testdaa.Po \
+	./$(DEPDIR)/toflex.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -177,10 +179,11 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(bin2s19_SOURCES) $(fromflex_SOURCES) $(rcvflex_SOURCES) \
-	$(send2flx_SOURCES) $(testdaa_SOURCES) $(toflex_SOURCES) $(s19toflex_SOURCES)
+	$(s19toflex_SOURCES) $(send2flx_SOURCES) $(testdaa_SOURCES) \
+	$(toflex_SOURCES)
 DIST_SOURCES = $(bin2s19_SOURCES) $(fromflex_SOURCES) \
-	$(rcvflex_SOURCES) $(send2flx_SOURCES) $(testdaa_SOURCES) \
-	$(toflex_SOURCES) $(s19toflex_SOURCES)
+	$(rcvflex_SOURCES) $(s19toflex_SOURCES) $(send2flx_SOURCES) \
+	$(testdaa_SOURCES) $(toflex_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -238,7 +241,6 @@ EGREP = @EGREP@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
-FILECMD = @FILECMD@
 FLEXEMU_LDADD = @FLEXEMU_LDADD@
 FLEXPLORER = @FLEXPLORER@
 FLEX_RC = @FLEX_RC@
@@ -372,18 +374,18 @@ EXTRA_DIST = \
 AM_CFLAGS = @OS_TYPE@
 bin2s19_LINK = $(CCLD) -o $@
 fromflex_LINK = $(CCLD) -o $@
-s19toflex_LINK = $(CCLD) -o $@
 rcvflex_LINK = $(CCLD) -o $@
 toflex_LINK = $(CCLD) -o $@
 send2flx_LINK = $(CCLD) -o $@
 testdaa_LINK = $(CCLD) -o $@
+s19toflex_LINK = $(CCLD) -o $@
 bin2s19_SOURCES = bin2s19.c
-s19toflex_SOURCES = s19toflex.c
 fromflex_SOURCES = fromflex.c
 rcvflex_SOURCES = rcvflex.c
 toflex_SOURCES = toflex.c
 send2flx_SOURCES = send2flx.c
 testdaa_SOURCES = testdaa.c
+s19toflex_SOURCES = s19toflex.c
 all: all-am
 
 .SUFFIXES:
@@ -475,15 +477,13 @@ fromflex$(EXEEXT): $(fromflex_OBJECTS) $(fromflex_DEPENDENCIES) $(EXTRA_fromflex
 	@rm -f fromflex$(EXEEXT)
 	$(AM_V_GEN)$(fromflex_LINK) $(fromflex_OBJECTS) $(fromflex_LDADD) $(LIBS)
 
+rcvflex$(EXEEXT): $(rcvflex_OBJECTS) $(rcvflex_DEPENDENCIES) $(EXTRA_rcvflex_DEPENDENCIES) 
+	@rm -f rcvflex$(EXEEXT)
+	$(AM_V_GEN)$(rcvflex_LINK) $(rcvflex_OBJECTS) $(rcvflex_LDADD) $(LIBS)
 
 s19toflex$(EXEEXT): $(s19toflex_OBJECTS) $(s19toflex_DEPENDENCIES) $(EXTRA_s19toflex_DEPENDENCIES) 
 	@rm -f s19toflex$(EXEEXT)
 	$(AM_V_GEN)$(s19toflex_LINK) $(s19toflex_OBJECTS) $(s19toflex_LDADD) $(LIBS)
-
-
-rcvflex$(EXEEXT): $(rcvflex_OBJECTS) $(rcvflex_DEPENDENCIES) $(EXTRA_rcvflex_DEPENDENCIES) 
-	@rm -f rcvflex$(EXEEXT)
-	$(AM_V_GEN)$(rcvflex_LINK) $(rcvflex_OBJECTS) $(rcvflex_LDADD) $(LIBS)
 
 send2flx$(EXEEXT): $(send2flx_OBJECTS) $(send2flx_DEPENDENCIES) $(EXTRA_send2flx_DEPENDENCIES) 
 	@rm -f send2flx$(EXEEXT)
@@ -506,6 +506,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bin2s19.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fromflex.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rcvflex.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/s19toflex.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/send2flx.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/testdaa.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/toflex.Po@am__quote@ # am--include-marker
@@ -671,8 +672,8 @@ clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/bin2s19.Po
 	-rm -f ./$(DEPDIR)/fromflex.Po
-	-rm -f ./$(DEPDIR)/s19toflex.Po
 	-rm -f ./$(DEPDIR)/rcvflex.Po
+	-rm -f ./$(DEPDIR)/s19toflex.Po
 	-rm -f ./$(DEPDIR)/send2flx.Po
 	-rm -f ./$(DEPDIR)/testdaa.Po
 	-rm -f ./$(DEPDIR)/toflex.Po
@@ -723,8 +724,8 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/bin2s19.Po
 	-rm -f ./$(DEPDIR)/fromflex.Po
-	-rm -f ./$(DEPDIR)/s19toflex.Po	
 	-rm -f ./$(DEPDIR)/rcvflex.Po
+	-rm -f ./$(DEPDIR)/s19toflex.Po
 	-rm -f ./$(DEPDIR)/send2flx.Po
 	-rm -f ./$(DEPDIR)/testdaa.Po
 	-rm -f ./$(DEPDIR)/toflex.Po
