@@ -50,7 +50,7 @@ struct sOptions;
 struct ioDeviceAccess
 {
     Byte deviceIndex{0};
-    Byte addressOffset{0};
+    DWord addressOffset{0}; // IO devices can be mapped into the full address space
 };
 
 class Memory : public MemoryTarget<DWord>, public BObserver

@@ -224,8 +224,12 @@ bool Memory::add_io_device(
         size = sizeOfIo;
     }
 
-    if (base_address < GENIO_BASE ||
-        (static_cast<int>(base_address) + size > 0xffff))
+    if(base_address < GENIO_BASE)
+    {
+        return false;
+    }
+
+    if(static_cast<int>(base_address) + size > 0xffff)
     {
         return false;
     }
@@ -241,12 +245,16 @@ bool Memory::add_io_device(
     // in a vector. The vector index is the address - GENIO_BASE.
     // If device index contains NO_DEVICE there is no memory mapped device
     // at this address location.
+    // Device offset can be 0-ffff
     for (Word offset = 0; offset < static_cast<Word>(size); ++offset)
     {
         auto byteOffset = static_cast<Byte>(offset % sizeOfIo);
         ioDeviceAccess access{ deviceIndex, byteOffset };
 
-        deviceAccess[base_address + offset - GENIO_BASE] = access;
+        if(base_address >= GENIO_BASE)
+        {
+            deviceAccess[base_address + offset - GENIO_BASE] = access;
+        }
     }
 
     return true;
