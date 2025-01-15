@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,8 +24,12 @@
 #define BRCFILE_INCLUDED
 
 #include <string>
+#include <map>
+#include "warnoff.h"
+#include <optional>
+#include "warnon.h"
 
-enum
+enum : uint8_t
 {
     BRC_NO_ERROR = 0,
     BRC_NOT_FOUND = 99,
@@ -35,18 +39,22 @@ enum
 class BRcFile
 {
 public:
-    BRcFile();
-    BRcFile(const char *aFileName);
-    ~BRcFile();
+    BRcFile() = default;
+    explicit BRcFile(std::string p_fileName);
+    ~BRcFile() = default;
 
-    void SetFileName(const char *aFileName);
-    int SetValue(const char *key, const char *value);
+    int SetValue(const char *key, const std::string &value);
     int SetValue(const char *key, int value);
-    int GetValue(const char *key, std::string &value, int *isInteger = nullptr);
+    int GetValue(const char *key, std::string &value);
     int GetValue(const char *key, int &value);
+    int GetValues(const char *keyPrefix,
+            std::map<std::string, std::string> &values);
     int Initialize();
 
 private:
+    int GetValue(const char *key, std::string &value,
+            std::optional<bool> &isInteger);
+
     std::string fileName;
 };
 

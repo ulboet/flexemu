@@ -2,8 +2,8 @@
     bmembuf.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2003-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2003-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,45 +23,44 @@
 #ifndef BMEMBUF_INCLUDED
 #define BMEMBUF_INCLUDED
 
-#include "misc1.h"
+#include "typedefs.h"
 #include "memsrc.h"
 #include "memtgt.h"
 #include <vector>
-#include <utility>
 
 
-class BMemoryBuffer : public MemorySource<size_t>, public MemoryTarget<size_t>
+class BMemoryBuffer : public MemorySource<DWord>, public MemoryTarget<DWord>
 {
 public:
     BMemoryBuffer() = delete;
-    BMemoryBuffer(size_t aSize);
+    explicit BMemoryBuffer(DWord size);
     BMemoryBuffer(const BMemoryBuffer &src);
-    BMemoryBuffer(BMemoryBuffer &&src);
-    ~BMemoryBuffer();
+    BMemoryBuffer(BMemoryBuffer &&src) noexcept;
+    ~BMemoryBuffer() override = default;
 
     BMemoryBuffer &operator=(const BMemoryBuffer &src);
-    BMemoryBuffer &operator=(BMemoryBuffer &&src);
+    BMemoryBuffer &operator=(BMemoryBuffer &&src) noexcept;
 
-    inline size_t GetSize() const
+    inline DWord GetSize() const
     {
-        return buffer.size();
+        return static_cast<DWord>(buffer.size());
     };
 
     // MemorySource interface
-    const MemorySource<size_t>::AddressRanges& GetAddressRanges() const override;
-    void CopyTo(Byte *buffer, size_t address, size_t aSize) const override;
+    const MemorySource<DWord>::AddressRanges& GetAddressRanges() const override;
+    void CopyTo(Byte *target, DWord address, DWord size) const override;
 
     // MemoryTarget interface
-    void CopyFrom(const Byte *buffer, size_t address, size_t aSize) override;
+    void CopyFrom(const Byte *source, DWord address, DWord size) override;
 
 public:
     bool CopyTo(std::vector<Byte> &buffer,
-                const MemorySource<size_t>::AddressRange &addressRange) const;
+                const MemorySource<DWord>::AddressRange &addressRange) const;
     void Reset();
 
 private:
     std::vector<Byte> buffer;
-    MemorySource<size_t>::AddressRanges addressRanges;
+    MemorySource<DWord>::AddressRanges addressRanges;
 };
 
-#endif // BMEMBUF_INCLUDED
+#endif

@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,15 +28,14 @@
 class BEnvironment
 {
 public:
-    BEnvironment();
-    ~BEnvironment();
+    BEnvironment() = delete;
+    ~BEnvironment() = delete;
 
-    bool RemoveKey(const char *key);
-    bool SetValue(const char *key, const char *value);
-    bool SetValue(const char *key, int value);
-    //  bool GetValue(const char *key, char **pValue);
-    bool GetValue(const char *key, std::string &value);
-    bool GetValue(const char *key, int *pValue);
+    static bool RemoveKey(const char *key);
+    static bool SetValue(const char *key, const std::string &value);
+    static bool SetValue(const char *key, int value);
+    static bool GetValue(const char *key, std::string &value);
+    static bool GetValue(const char *key, int &value);
 };
 
 #endif

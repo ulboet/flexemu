@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,38 +21,34 @@
 */
 
 
-#include "misc1.h"
+#include "typedefs.h"
 #include "drisel.h"
 #include "e2floppy.h"
 
 
-DriveSelect::DriveSelect(E2floppy &x_fdc) : fdc(x_fdc)
-{
-}
-
-DriveSelect::~DriveSelect()
+DriveSelect::DriveSelect(E2floppy &p_fdc) : fdc(p_fdc)
 {
 }
 
 Byte DriveSelect::requestReadValue()
 {
-    Byte status = 0xff;  // Unused bits have logical high
-        
+    Byte status = 0xff; // Unused bits have logical high
+
     if (!fdc.getSide())
-    {   
+    {
         status &= ~READ_SIDE_MASK;
     }
-            
+
     if (!fdc.isIrq())
-    {   
+    {
         status &= ~READ_IRQ_MASK;
     }
-               
+
     if (!fdc.isDrq())
-    {   
+    {
         status &= ~READ_DRQ_MASK;
     }
-                    
+
     return status;
 }
 
@@ -60,9 +56,9 @@ void DriveSelect::requestWriteValue(Byte value)
 {
     Byte selected = 4;
 
-    fdc.setSide((value & WRITE_SIDE_MASK) ? 1 : 0);
+    fdc.setSide((value & WRITE_SIDE_MASK) != 0);
 
-    switch (value & 0x0f)
+    switch (value & 0x0FU)
     {
         case SELECT_DRIVE0:
             selected = 0;

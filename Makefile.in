@@ -13,6 +13,7 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -91,17 +92,17 @@ target_triplet = @target@
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/attributes.m4 \
-	$(top_srcdir)/m4/ax_cflags_warn_all.m4 \
-	$(top_srcdir)/m4/ax_compiler_vendor.m4 \
+	$(top_srcdir)/m4/ax_clang_tidy_opts.m4 \
 	$(top_srcdir)/m4/ax_have_qt.m4 \
-	$(top_srcdir)/m4/ax_prepend_flag.m4 \
 	$(top_srcdir)/m4/ax_require_defined.m4 \
+	$(top_srcdir)/m4/ax_with_curses.m4 \
 	$(top_srcdir)/m4/flx_bitfields_lsb_first.m4 \
 	$(top_srcdir)/m4/flx_disable_post_install.m4 \
+	$(top_srcdir)/m4/flx_precompiled_headers.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/acinclude.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
+	$(top_srcdir)/acinclude.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
@@ -111,7 +112,9 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/config.h
 CONFIG_CLEAN_FILES =
-CONFIG_CLEAN_VPATH_FILES =
+CONFIG_CLEAN_VPATH_FILES = test/data/cat.cmd test/data/cat.hex \
+	test/data/cat.s19 test/data/testdisk.dsk \
+	test/data/testdisk.flx test/data/flexlabl.conf
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -139,6 +142,35 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+am__installdirs = "$(DESTDIR)$(pkgdatadir)"
+DATA = $(nobase_pkgdata_DATA) $(noinst_DATA)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -165,14 +197,19 @@ am__define_uniq_tagged_files = \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
 DIST_SUBDIRS = $(SUBDIRS)
-am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/config/compile \
-	$(top_srcdir)/config/config.guess \
+am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/config/ar-lib \
+	$(top_srcdir)/config/compile $(top_srcdir)/config/config.guess \
 	$(top_srcdir)/config/config.sub \
 	$(top_srcdir)/config/install-sh $(top_srcdir)/config/ltmain.sh \
-	$(top_srcdir)/config/missing AUTHORS COPYING ChangeLog INSTALL \
-	NEWS README TODO config/compile config/config.guess \
-	config/config.sub config/install-sh config/ltmain.sh \
-	config/missing
+	$(top_srcdir)/config/missing $(top_srcdir)/test/data/cat.cmd \
+	$(top_srcdir)/test/data/cat.hex \
+	$(top_srcdir)/test/data/cat.s19 \
+	$(top_srcdir)/test/data/flexlabl.conf \
+	$(top_srcdir)/test/data/testdisk.dsk \
+	$(top_srcdir)/test/data/testdisk.flx AUTHORS COPYING ChangeLog \
+	INSTALL NEWS README TODO config/ar-lib config/compile \
+	config/config.guess config/config.sub config/install-sh \
+	config/ltmain.sh config/missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -228,15 +265,19 @@ AWK = @AWK@
 CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
+CLANG_TIDY_OPTS = @CLANG_TIDY_OPTS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
+CURSES_CFLAGS = @CURSES_CFLAGS@
+CURSES_LIBS = @CURSES_LIBS@
 CXX = @CXX@
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
 CXXSPEED = @CXXSPEED@
+CXXWARNINGS = @CXXWARNINGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
@@ -250,12 +291,12 @@ EGREP = @EGREP@
 ETAGS = @ETAGS@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
-FLEXEMU_LDADD = @FLEXEMU_LDADD@
+FILECMD = @FILECMD@
 FLEXPLORER = @FLEXPLORER@
-FLEX_RC = @FLEX_RC@
 GREP = @GREP@
 GTK_UPDATE_ICON_CACHE = @GTK_UPDATE_ICON_CACHE@
 IGNORE = @IGNORE@
+INCLUDE_PCH = @INCLUDE_PCH@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -270,6 +311,7 @@ LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
+MACOSX_VERSION_MIN = @MACOSX_VERSION_MIN@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -289,7 +331,12 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
+PCH_H_GCH = @PCH_H_GCH@
+PKG_CONFIG = @PKG_CONFIG@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PTHREAD_LD = @PTHREAD_LD@
+QMAKE = @QMAKE@
 QT_CXXFLAGS = @QT_CXXFLAGS@
 QT_DIR = @QT_DIR@
 QT_LIBS = @QT_LIBS@
@@ -322,6 +369,7 @@ ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+ac_ct_QMAKE = @ac_ct_QMAKE@
 am__include = @am__include@
 am__leading_dot = @am__leading_dot@
 am__quote = @am__quote@
@@ -373,23 +421,174 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 ACLOCAL_AMFLAGS = -I m4
-EXTRA_DIST = \
-	AUTHORS \
-	ChangeLog \
-	COPYING \
-	flexemu.sln \
-	INSTALL \
-	INSTALL.Win32 \
-	INSTALL.unix \
-	LICENSE \
-	NEWS \
-	README \
-	README.md \
-	TODO
+noinst_DATA = metadata.json
 
-SUBDIRS = src disks doc monitor build
+# Alternative handling of subdirectories.
+# This reduces the entering/leaving of subdirectories.
+# For details see:
+# https://www.gnu.org/software/automake/manual/html_node/Alternative.html
+
+# To support 'make distcheck' the following googletest files have to be added
+# to the distribution.
+
+# Same for googlemock files.
+
+# Same for fmt files.
+
+# Same for jsoncpp files.
+EXTRA_DIST = AUTHORS ChangeLog COPYING flexemu.sln INSTALL \
+	INSTALL.Win32 INSTALL.unix LICENSE NEWS README README.md TODO \
+	.appveyor.yml .cirrus.yml .gdbinit .gdbinit-context .gitignore \
+	.clang-tidy options.txt .github/workflows/build-and-test.yml \
+	.github/workflows/clang-tidy-check.yml \
+	.github/workflows/distcheck.yml \
+	.github/workflows/macos-build-and-test.yml \
+	.github/workflows/windows-build-and-test.yml \
+	build/download_fug_dsk_files.sh build/fug.ico \
+	build/windows/change_version.sh \
+	build/windows/create_fug_dsk_files_installer.sh \
+	build/windows/create_installer.sh \
+	build/windows/download_and_install_envar_plugin.sh \
+	build/windows/download_and_rebuild_libs.sh \
+	build/windows/rebuild_flexemu_all_and_copy_libs.sh \
+	build/windows/setQtProperties.ps1 \
+	build/windows/installer/Flexemu.nsi \
+	build/windows/installer/GetParameters.nsh \
+	build/windows/installer/GetParameterValue.nsh \
+	build/windows/installer/HistoricFLEXFiles.nsi \
+	build/windows/installer/SplitFirstStrPart.nsh \
+	build/windows/installer/StrStr.nsh docker/almalinux/Dockerfile \
+	docker/alpine/Dockerfile docker/altlinux/Dockerfile \
+	docker/amazonlinux/Dockerfile docker/archlinux/Dockerfile \
+	docker/biglinux/Dockerfile docker/cachyos/Dockerfile \
+	docker/centos/Dockerfile docker/debian_be/Dockerfile \
+	docker/debian/Dockerfile docker/debian_i386/Dockerfile \
+	docker/debian_qt6/Dockerfile docker/debian_testing/Dockerfile \
+	docker/debian_testing_qt6/Dockerfile \
+	docker/debian_unstable/Dockerfile \
+	docker/debian_unstable_qt6/Dockerfile \
+	docker/endlessos/Dockerfile docker/fedora/Dockerfile \
+	docker/kalilinux/Dockerfile docker/linuxmint/Dockerfile \
+	docker/mageia/Dockerfile docker/manjaro/Dockerfile \
+	docker/opensuse/Dockerfile docker/oraclelinux/Dockerfile \
+	docker/photon/Dockerfile docker/rockylinux/Dockerfile \
+	docker/slackware/Dockerfile docker/slackware/setup.sh \
+	docker/ubuntu/Dockerfile docker/voidlinux/Dockerfile \
+	docker/dockerRunForwardX11.sh docker/readme.md \
+	docker/statistics.md python/flex.py python/flexemu_common.py \
+	python/s_dir_entry_Printer.py python/s_link_table_Printer.py \
+	python/s_new_file_Printer.py \
+	python/s_sys_info_record_Printer.py \
+	python/s_sys_info_sector_Printer.py python/st_t_Printer.py \
+	test/data/cat.cmd test/data/cat.hex test/data/cat.s19 \
+	test/data/testdisk.dsk test/data/testdisk.flx \
+	imhex/patterns/flex_binary.hexpat \
+	imhex/patterns/flex_dskflx.hexpat \
+	imhex/patterns/flex_random.hexpat \
+	$(top_srcdir)/$(gtest_top)/src/gtest.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-all.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-assertion-result.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-death-test.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-filepath.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-internal-inl.h \
+	$(top_srcdir)/$(gtest_top)/src/gtest_main.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-matchers.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-port.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-printers.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-test-part.cc \
+	$(top_srcdir)/$(gtest_top)/src/gtest-typed-test.cc \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-assertion-result.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-death-test.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-matchers.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-message.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-param-test.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest_pred_impl.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-printers.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest_prod.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-spi.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-test-part.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/gtest-typed-test.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-death-test-internal.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-filepath.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-internal.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-param-util.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-port-arch.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-port.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-string.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/gtest-type-util.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/custom/gtest.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/custom/gtest-port.h \
+	$(top_srcdir)/$(gtest_top)/include/gtest/internal/custom/gtest-printers.h \
+	$(top_srcdir)/$(gmock_top)/src/gmock.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock-all.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock-cardinalities.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock-internal-utils.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock_main.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock-matchers.cc \
+	$(top_srcdir)/$(gmock_top)/src/gmock-spec-builders.cc \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-actions.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-cardinalities.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-function-mocker.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-matchers.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-more-actions.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-more-matchers.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-nice-strict.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/gmock-spec-builders.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/gmock-internal-utils.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/gmock-port.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/gmock-pp.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/custom/gmock-generated-actions.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/custom/gmock-matchers.h \
+	$(top_srcdir)/$(gmock_top)/include/gmock/internal/custom/gmock-port.h \
+	$(top_srcdir)/fmt/src/fmt.cc $(top_srcdir)/fmt/src/format.cc \
+	$(top_srcdir)/fmt/src/os.cc \
+	$(top_srcdir)/fmt/include/fmt/args.h \
+	$(top_srcdir)/fmt/include/fmt/base.h \
+	$(top_srcdir)/fmt/include/fmt/chrono.h \
+	$(top_srcdir)/fmt/include/fmt/color.h \
+	$(top_srcdir)/fmt/include/fmt/compile.h \
+	$(top_srcdir)/fmt/include/fmt/core.h \
+	$(top_srcdir)/fmt/include/fmt/format.h \
+	$(top_srcdir)/fmt/include/fmt/format-inl.h \
+	$(top_srcdir)/fmt/include/fmt/os.h \
+	$(top_srcdir)/fmt/include/fmt/ostream.h \
+	$(top_srcdir)/fmt/include/fmt/printf.h \
+	$(top_srcdir)/fmt/include/fmt/ranges.h \
+	$(top_srcdir)/fmt/include/fmt/std.h \
+	$(top_srcdir)/fmt/include/fmt/xchar.h \
+	$(top_srcdir)/jsoncpp/include/json/allocator.h \
+	$(top_srcdir)/jsoncpp/include/json/assertions.h \
+	$(top_srcdir)/jsoncpp/include/json/config.h \
+	$(top_srcdir)/jsoncpp/include/json/forwards.h \
+	$(top_srcdir)/jsoncpp/include/json/json_features.h \
+	$(top_srcdir)/jsoncpp/include/json/json.h \
+	$(top_srcdir)/jsoncpp/include/json/reader.h \
+	$(top_srcdir)/jsoncpp/include/json/value.h \
+	$(top_srcdir)/jsoncpp/include/json/version.h \
+	$(top_srcdir)/jsoncpp/include/json/writer.h \
+	$(top_srcdir)/jsoncpp/src/lib_json/json_reader.cpp \
+	$(top_srcdir)/jsoncpp/src/lib_json/json_tool.h \
+	$(top_srcdir)/jsoncpp/src/lib_json/json_value.cpp \
+	$(top_srcdir)/jsoncpp/src/lib_json/json_valueiterator.inl \
+	$(top_srcdir)/jsoncpp/src/lib_json/json_writer.cpp
+SUBDIRS = \
+	src \
+	disks \
+	doc \
+	monitor \
+	test
+
+nobase_pkgdata_DATA = \
+	imhex/patterns/flex_binary.hexpat \
+	imhex/patterns/flex_dskflx.hexpat \
+	imhex/patterns/flex_random.hexpat
+
 AUTOMAKE_OPTIONS = dist-bzip2 no-dist-gzip
 AM_DISTCHECK_CONFIGURE_FLAGS = --disable-post-install
+gtest_top = googletest/googletest
+gmock_top = googletest/googlemock
 all: all-recursive
 
 .SUFFIXES:
@@ -435,6 +634,30 @@ clean-libtool:
 
 distclean-libtool:
 	-rm -f libtool config.lt
+install-nobase_pkgdataDATA: $(nobase_pkgdata_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(nobase_pkgdata_DATA)'; test -n "$(pkgdatadir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgdatadir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkgdatadir)" || exit 1; \
+	fi; \
+	$(am__nobase_list) | while read dir files; do \
+	  xfiles=; for file in $$files; do \
+	    if test -f "$$file"; then xfiles="$$xfiles $$file"; \
+	    else xfiles="$$xfiles $(srcdir)/$$file"; fi; done; \
+	  test -z "$$xfiles" || { \
+	    test "x$$dir" = x. || { \
+	      echo " $(MKDIR_P) '$(DESTDIR)$(pkgdatadir)/$$dir'"; \
+	      $(MKDIR_P) "$(DESTDIR)$(pkgdatadir)/$$dir"; }; \
+	    echo " $(INSTALL_DATA) $$xfiles '$(DESTDIR)$(pkgdatadir)/$$dir'"; \
+	    $(INSTALL_DATA) $$xfiles "$(DESTDIR)$(pkgdatadir)/$$dir" || exit $$?; }; \
+	done
+
+uninstall-nobase_pkgdataDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(nobase_pkgdata_DATA)'; test -n "$(pkgdatadir)" || list=; \
+	$(am__nobase_strip_setup); files=`$(am__nobase_strip)`; \
+	dir='$(DESTDIR)$(pkgdatadir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -739,9 +962,12 @@ distcleancheck: distclean
 	       exit 1; } >&2
 check-am: all-am
 check: check-recursive
-all-am: Makefile
+all-am: Makefile $(DATA)
 installdirs: installdirs-recursive
 installdirs-am:
+	for dir in "$(DESTDIR)$(pkgdatadir)"; do \
+	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+	done
 install: install-recursive
 install-exec: install-exec-recursive
 install-data: install-data-recursive
@@ -794,7 +1020,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am:
+install-data-am: install-nobase_pkgdataDATA
 
 install-dvi: install-dvi-recursive
 
@@ -840,7 +1066,7 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am:
+uninstall-am: uninstall-nobase_pkgdataDATA
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
@@ -854,15 +1080,26 @@ uninstall-am:
 	html-am info info-am install install-am install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
 	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am
+	install-info-am install-man install-nobase_pkgdataDATA \
+	install-pdf install-pdf-am install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	installdirs-am maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
+	ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-nobase_pkgdataDATA
 
 .PRECIOUS: Makefile
 
+
+metadata.json: src/updatemd .clang-tidy
+	@set +x; \
+	cd $(srcdir) > /dev/null; \
+	if $(AM_V_P); then set -x; else echo "  GENMD    $@"; fi; \
+	$(abs_builddir)/src/updatemd -c .clang-tidy -f $@; \
+	cd - > /dev/null
+
+clang-tidy-check:
+	cd src; $(MAKE) clang-tidy-check
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

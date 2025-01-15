@@ -2,8 +2,8 @@
     fpmdich.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,15 +30,14 @@
 #include <QPoint>
 #include <QVector>
 #include <QString>
+#include <QStringList>
 #include <QTableView>
 #include "warnon.h"
+#include "filecntb.h"
+#include "fpmodel.h"
+#include "fpedit.h"
 #include <memory>
 
-class FlexDateDelegate;
-class FlexDateTimeDelegate;
-class FlexFilenameDelegate;
-class FlexAttributesDelegate;
-class FlexplorerTableModel;
 class FlexDnDFiles;
 class FlexDirEntry;
 class QItemSelection;
@@ -57,22 +56,22 @@ class FlexplorerMdiChild : public QTableView
 public:
     FlexplorerMdiChild(const QString &path, struct sFPOptions &options);
     FlexplorerMdiChild() = delete;
-    virtual ~FlexplorerMdiChild();
+    ~FlexplorerMdiChild() override = default;
 
     QString GetPath() const;
     QString GetUserFriendlyPath() const;
     bool IsWriteProtected() const;
     int GetSelectedFilesCount() const;
-    int GetSelectedFilesByteSize() const;
-    int GetContainerType() const;
+    unsigned GetSelectedFilesByteSize() const;
+    DiskType GetFlexDiskType() const;
     void SelectAll();
     void DeselectAll();
-    int FindFiles(const QString &pattern);
-    int DeleteSelected();
-    int InjectFiles(const QStringList &filePaths);
-    int ExtractSelected(const QString &targetDirectory);
-    int ViewSelected();
-    QVector<QString> GetSelectedFilenames() const;
+    QVector<int>::size_type FindFiles(const QString &pattern);
+    QVector<int>::size_type DeleteSelected();
+    QVector<int>::size_type InjectFiles(const QStringList &filePaths);
+    QVector<int>::size_type ExtractSelected(const QString &targetDirectory);
+    QVector<int>::size_type ViewSelected();
+    QStringList GetSelectedFilenames() const;
     QString GetSupportedAttributes() const;
     QVector<Byte> GetSelectedAttributes() const;
     int SetSelectedAttributes(Byte setMask, Byte clearMask);
@@ -87,6 +86,7 @@ signals:
 
 public slots:
     void OnFileTimeAccessChanged();
+    void OnFileSizeTypeHasChanged();
 
 private slots:
     void IsActivated(const QModelIndex &index);
@@ -101,6 +101,8 @@ protected:
 private:
     void SetupModel(const QString &path);
     void SetupView();
+    // Intentionally do not override QAbstractItemView::selectionChanged().
+    // NOLINTNEXTLINE(bugprone-virtual-near-miss)
     void SelectionChanged(const QItemSelection &selected,
                           const QItemSelection &deselected);
     void BeginDrag();
@@ -109,6 +111,10 @@ private:
     QMimeData *GetHtmlMimeDataForSelected();
     void UpdateDateDelegate();
     void MultiSelect(const QVector<int> &rowIndices);
+    void ResizeColumn(int column, const QString &text) const;
+    void ResizeColumns() const;
+
+    static const QString &GetMimeTypeFlexDiskImageFile();
 
     std::unique_ptr<FlexplorerTableModel> model;
     std::unique_ptr<FlexDateDelegate> dateDelegate;
@@ -119,8 +125,6 @@ private:
     int selectedFilesCount;
     int selectedFilesByteSize;
     struct sFPOptions &options;
-
-    static const QString mimeTypeFlexDiskImageFile;
 };
 
 #endif

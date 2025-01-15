@@ -2,8 +2,8 @@
     mdcrfs.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2018-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,19 +28,27 @@
 #include <algorithm>
 #include <cctype>
 
-const std::vector<std::string> mdcrErrors
-{
-    "Success",
-    "Invalid input data",
-    "Tape is write protected",
-    "Wrong checksum",
-    "Dublicate name",
-    "Error reading a record",
-    "Error writing a record",
-};
 
-MdcrFileSystem::MdcrFileSystem()
+const std::string &GetMdcrError(int index)
 {
+    static const std::vector<std::string> mdcrErrors
+    {
+        "Success",
+        "Invalid input data",
+        "Tape is write protected",
+        "Wrong checksum",
+        "Dublicate name",
+        "Error reading a record",
+        "Error writing a record",
+        "Unknown error",
+    };
+
+    if (index >= static_cast<int>(mdcrErrors.size()) || index < 0)
+    {
+        return mdcrErrors[mdcrErrors.size() - 1U];
+    }
+
+    return mdcrErrors[index];
 }
 
 // Create a filename which conforms to the MDCR file system:
@@ -67,7 +75,7 @@ std::string MdcrFileSystem::CreateMdcrFilename(const char *name,
 
     if (toUppercase)
     {
-        strupper(result);
+        flx::strupper(result);
     }
 
     return result;
@@ -83,7 +91,7 @@ void MdcrFileSystem::SetFilename(std::vector<Byte>::iterator &iter,
 
     std::copy(mdcrFilename.cbegin(), mdcrFilename.cend(), iter);
 
-    iter += mdcrFilename.size();
+    iter += static_cast<uint32_t>(mdcrFilename.size());
 }
 
 // Copy the MDCR file name from the record (up to 6 characters).
@@ -131,12 +139,9 @@ MdcrStatus MdcrFileSystem::ReadFile(
 
     while (true)
     {
-        // Read the file header 
-        if (!mdcr.ReadRecord(ibuffer))
-        {
-            return MdcrStatus::ReadError;
-        }
-        else if (ibuffer.size() != 13 || ibuffer[0] != 0x55 || ibuffer[12] != 0)
+        // Read the file header
+        if (!mdcr.ReadRecord(ibuffer) ||
+            ibuffer.size() != 13 || ibuffer[0] != 0x55 || ibuffer[12] != 0)
         {
             return MdcrStatus::ReadError;
         }
@@ -146,9 +151,9 @@ MdcrStatus MdcrFileSystem::ReadFile(
         {
             return MdcrStatus::WrongChecksum;
         }
-      
-        startAddress = getValueBigEndian<Word>(&ibuffer[7]);
-        endAddress = getValueBigEndian<Word>(&ibuffer[9]);
+
+        startAddress = flx::getValueBigEndian<Word>(&ibuffer[7]);
+        endAddress = flx::getValueBigEndian<Word>(&ibuffer[9]);
         if (startAddress > endAddress)
         {
             return MdcrStatus::ReadError;
@@ -165,7 +170,7 @@ MdcrStatus MdcrFileSystem::ReadFile(
 
         while (count < size)
         {
-            if (!mdcr.ReadRecord(ibuffer) || 
+            if (!mdcr.ReadRecord(ibuffer) ||
                 ibuffer[0] != 0x55 || ibuffer[ibuffer.size() - 1] != 0)
             {
                 return MdcrStatus::ReadError;
@@ -181,8 +186,9 @@ MdcrStatus MdcrFileSystem::ReadFile(
             if (hasFoundFile)
             {
                 // Copy file contents into memory.
-                memory.CopyFrom(&ibuffer[1], startAddress, ibuffer.size() - 3u);
-                startAddress += static_cast<Word>(ibuffer.size() - 3u);
+                memory.CopyFrom(&ibuffer[1], startAddress,
+                        static_cast<DWord>(ibuffer.size() - 3U));
+                startAddress += static_cast<Word>(ibuffer.size() - 3U);
             }
             count += ibuffer.size() - 3;
         }
@@ -204,10 +210,10 @@ MdcrStatus MdcrFileSystem::WriteFile(
         MdcrWriteMode mode,
         bool toUppercase /* = true */)
 {
-    size_t index;
+    int32_t index = 0;
     std::vector<Byte> ibuffer;
     std::vector<Byte> obuffer;
-    std::string filename = getFileName(filepath);
+    std::string filename = flx::getFileName(filepath);
     std::string mdcrFilename = CreateMdcrFilename(filename.c_str(), toUppercase);
 
     if (mdcr.IsWriteProtected())
@@ -221,7 +227,9 @@ MdcrStatus MdcrFileSystem::WriteFile(
     }
 
     const auto addressRange = memory.GetAddressRanges()[0];
-    if (!memory.CopyTo(ibuffer, addressRange) || ibuffer.empty())
+    if (!memory.CopyTo(ibuffer, addressRange) || ibuffer.empty() ||
+            ibuffer.size() >
+            static_cast<size_t>(std::numeric_limits<int>::max()))
     {
         return MdcrStatus::InvalidData;
     }
@@ -274,21 +282,21 @@ MdcrStatus MdcrFileSystem::WriteFile(
 
     *(iter++) = 0x55;
     SetFilename(iter, mdcrFilename.c_str());
-    *(iter++) = (addressRange.lower() >> 8) & 0xFF;
-    *(iter++) = addressRange.lower() & 0xFF;
-    *(iter++) = (addressRange.upper() >> 8) & 0xFF;
-    *(iter++) = addressRange.upper() & 0xFF;
+    *(iter++) = (addressRange.lower() >> 8U) & 0xFFU;
+    *(iter++) = addressRange.lower() & 0xFFU;
+    *(iter++) = (addressRange.upper() >> 8U) & 0xFFU;
+    *(iter++) = addressRange.upper() & 0xFFU;
     *(iter++) = CalculateChecksum(checksumIter, 10);
     *(iter++) = 0;
-  
-    // Write the file header 
+
+    // Write the file header
     if (!mdcr.WriteRecord(obuffer))
     {
         return MdcrStatus::WriteError;
     }
 
     for (index = 0;
-         index < ibuffer.size();
+         index < static_cast<int>(ibuffer.size());
          index += MaxRecordSize)
     {
         size_t size =
@@ -307,7 +315,7 @@ MdcrStatus MdcrFileSystem::WriteFile(
         // - size: One record has a maximum size of 1024 Bytes.
         //         Each file has one header and one or mutiple data records.
         // - Checksum: Sum of byte 1 ... size.
- 
+
         obuffer[0] = 0x55;
 
         std::copy_n(ibuffer.cbegin() + index, size, obuffer.begin() + 1);
@@ -326,9 +334,11 @@ MdcrStatus MdcrFileSystem::WriteFile(
 }
 
 // Call the iterateFunction for each successfully read file on MDCR tape.
+// Implementation may change in future.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 MdcrStatus MdcrFileSystem::ForEachFile(MiniDcrTape &mdcr,
-                  std::function<MdcrStatus
-                            (const std::string&, BMemoryBuffer &memory)>
+                  const std::function<MdcrStatus
+                            (const std::string&, BMemoryBuffer &memory)>&
                             iterateFunction)
 {
     BMemoryBuffer memory(65536);

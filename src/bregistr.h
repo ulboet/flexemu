@@ -2,7 +2,7 @@
     bregistr.h
 
     Basic class containing a windows registry handle
-    Copyright (C) 1999-2022  W. Schwotzer
+    Copyright (C) 1999-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 
 #include "misc1.h"
 #include <string>
+#include <map>
 
 
 class BRegistry
@@ -33,8 +34,8 @@ class BRegistry
 
 private:
 
-    LONG    lastError;
-    HKEY    hKey;
+    LONG lastError;
+    HKEY hKey;
 
     BRegistry();
 
@@ -42,7 +43,7 @@ public:
     ~BRegistry();
 
     BRegistry(const BRegistry &regKey, const std::string &subKey);
-    BRegistry(HKEY aHKey);
+    BRegistry(HKEY p_hKey);
     bool isOpened() const;
     LONG GetLastError() const;
     LONG Delete();
@@ -51,6 +52,8 @@ public:
     LONG SetValue(const std::string &name, const BYTE *value, int size);
     LONG GetValue(const std::string &name, std::string &value);
     LONG GetValue(const std::string &name, int &value);
+    LONG GetValues(const std::string &keyPrefix,
+            std::map<std::string, std::string> &values);
     LONG DeleteValue(const std::string &name);
     // implicit type conversions !
     operator HKEY() const ;

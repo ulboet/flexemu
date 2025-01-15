@@ -2,8 +2,8 @@
     fddnd.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,10 +24,9 @@
 #define FDDND_INCLUDED
 
 #include <vector>
-#include "flexemu.h"
 #include "ffilebuf.h"
 
-class FileContainerIf;
+class IFlexDiskByFile;
 class FlexDiskListCtrl;
 
 /*------------------------------------------------------
@@ -40,8 +39,8 @@ class FlexDiskListCtrl;
 class FlexDnDFiles
 {
 public:
-    FlexDnDFiles();
-    FlexDnDFiles(const std::string &path, const std::string &dnsHostName);
+    FlexDnDFiles() = default;
+    FlexDnDFiles(std::string p_path, std::string p_dnsHostName);
     virtual ~FlexDnDFiles();
 
     void ReadDataFrom(const Byte *buffer);
@@ -51,7 +50,7 @@ public:
     void SetDnsHostName(const std::string &dnsHostName);
     std::string GetDnsHostName() const;
     void Add(FlexFileBuffer &&fileBuffer);
-    FlexFileBuffer &GetBufferAt(unsigned int);
+    FlexFileBuffer &GetBufferAt(unsigned int index);
     DWord GetFileSize() const;
     unsigned int GetFileCount() const
     {

@@ -1,9 +1,9 @@
 /*
-    drawnwid.h  A QWidget subclass implementing a drawn widget. 
+    drawnwid.h  A QWidget subclass implementing a drawn widget.
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,11 +42,11 @@ class DrawnWidget : public QWidget
 
 public:
     DrawnWidget() = delete;
-    DrawnWidget(QWidget *parent = nullptr);
-    virtual ~DrawnWidget() = default;
+    explicit DrawnWidget(QWidget *parent);
+    ~DrawnWidget() override = default;
 
     void SetPixmap(const QPixmap &p_pixmap);
-    void SetDriveInfo(Word number, const FlexContainerInfo &info);
+    void SetDiskAttributes(const FlexDiskAttributes &p_diskAttributes);
 
     // QWidget Overrides
     QSize minimumSizeHint() const override;
@@ -58,8 +58,7 @@ protected:
 private:
     QPixmap pixmap;
     QSize preferredSize;
-    Word driveNumber;
-    FlexContainerInfo driveInfo;
+    FlexDiskAttributes diskAttributes;
 };
 #endif
 

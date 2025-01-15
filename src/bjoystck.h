@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,37 +25,40 @@
 
 #ifdef LINUX_JOYSTICK_IS_PRESENT
 
-#define JOYSTICK_DEVICE_0   "/dev/js0"
-#define JOYSTICK_DEVICE_1   "/dev/js1"
+#include <cstdint>
+#include <array>
 
-class  BJoystick
+constexpr const char *JOYSTICK_DEVICE_0 = "/dev/js0";
+constexpr const char *JOYSTICK_DEVICE_1 = "/dev/js1";
+
+class BJoystick
 {
 
 public:
-    BJoystick(int which = 0);
+    explicit BJoystick(int which = 0);
+    BJoystick(const BJoystick &src) = delete;
     ~BJoystick();
-    short IsOpened();
-    short Actualize();
-    short XAxis();
-    short YAxis();
-    int Buttons();
-    int IsButtonSet(int which);
+    bool IsOpened() const;
+    bool Actualize();
+    int32_t XAxis();
+    int32_t YAxis();
+    uint32_t Buttons() const;
+    bool IsButtonSet(uint32_t which) const;
 private:
-    BJoystick(const BJoystick &d);  // private, should not be used
-    int js; // input stream from joystick
-    int buttons;
-    short   axis[2];
+    int js{}; // input stream from joystick
+    uint32_t buttons{};
+    std::array<int32_t, 2> axis{};
 };
 
-inline short BJoystick::XAxis()
+inline int32_t BJoystick::XAxis()
 {
     return axis[0];
 }
-inline short BJoystick::YAxis()
+inline int32_t BJoystick::YAxis()
 {
     return axis[1];
 }
-inline int   BJoystick::Buttons()
+inline uint32_t BJoystick::Buttons() const
 {
     return buttons;
 }

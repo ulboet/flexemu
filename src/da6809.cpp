@@ -18,439 +18,191 @@
 
 
 #include "misc1.h"
-#include <stdio.h>
+#include <array>
+#include <map>
+#include <cassert>
+#include <iostream>
 #include "da6809.h"
+#include "flblfile.h"
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
-
-Da6809::Da6809() : use_undocumented(false)
-{
-    memset(code_buf, 0, sizeof(code_buf));
-    memset(mnem_buf, 0, sizeof(mnem_buf));
-}
-
-Da6809::~Da6809()
-{
-}
 
 void Da6809::set_use_undocumented(bool value)
 {
     use_undocumented = value;
 }
 
+void Da6809::SetFlexLabelFile(const std::string &path)
+{
+    flexLabelFile = path;
+}
+
 const char *Da6809::FlexLabel(Word addr)
 {
 #ifdef FLEX_LABEL
-
-    switch (addr)
+    if (label_for_address.empty())
     {
-        // FLEX DOS entries:
-        case 0xCD00:
-            return "COLDS";
-
-        case 0xCD03:
-            return "WARMS";
-
-        case 0xCD06:
-            return "RENTER";
-
-        case 0xCD09:
-            return "INCH";
-
-        case 0xCD0C:
-            return "INCH2";
-
-        case 0xCD0F:
-            return "OUTCH";
-
-        case 0xCD12:
-            return "OUTCH2";
-
-        case 0xCD15:
-            return "GETCHR";
-
-        case 0xCD18:
-            return "PUTCHR";
-
-        case 0xCD1B:
-            return "INBUFF";
-
-        case 0xCD1E:
-            return "PSTRNG";
-
-        case 0xCD21:
-            return "CLASS";
-
-        case 0xCD24:
-            return "PCRLF";
-
-        case 0xCD27:
-            return "NXTCH";
-
-        case 0xCD2A:
-            return "RSTRIO";
-
-        case 0xCD2D:
-            return "GETFIL";
-
-        case 0xCD30:
-            return "LOAD";
-
-        case 0xCD33:
-            return "SETEXT";
-
-        case 0xCD36:
-            return "ADDBX";
-
-        case 0xCD39:
-            return "OUTDEC";
-
-        case 0xCD3C:
-            return "OUTHEX";
-
-        case 0xCD3F:
-            return "RPTERR";
-
-        case 0xCD42:
-            return "GETHEX";
-
-        case 0xCD45:
-            return "OUTADR";
-
-        case 0xCD48:
-            return "INDEC";
-
-        case 0xCD4B:
-            return "DOCMND";
-
-        case 0xCD4E:
-            return "STAT";
-
-        // FLEX FMS entries:
-        case 0xD400:
-            return "FMSINI";   // FMS init
-
-        case 0xD403:
-            return "FMSCLS";   // FMS close
-
-        case 0xD406:
-            return "FMS";
-
-        case 0xC840:
-            return "FCB";  // standard system FCB
-
-        // miscellenious:
-        case 0xD435:
-            return "VFYFLG";   // FMS verify flag
-
-        case 0xC080:
-            return "LINBUF";   // line buffer
-
-        case 0xCC00:
-            return "TTYBS";
-
-        case 0xCC01:
-            return "TTYDEL";
-
-        case 0xCC02:
-            return "TTYEOL";
-
-        case 0xCC03:
-            return "TTYDPT";
-
-        case 0xCC04:
-            return "TTYWDT";
-
-        case 0xCC11:
-            return "TTYTRM";
-
-        case 0xCC12:
-            return "COMTBL"; // user command table
-
-        case 0xCC14:
-            return "LINBFP"; // line buffer pointer
-
-        case 0xCC16:
-            return "ESCRET"; // escape return register
-
-        case 0xCC18:
-            return "LINCHR"; // current char in linebuffer
-
-        case 0xCC19:
-            return "LINPCH"; // previous char in linebuffer
-
-        case 0xCC1A:
-            return "LINENR"; //line nr of current page
-
-        case 0xCC1B:
-            return "LODOFS"; // loader address offset
-
-        case 0xCC1D:
-            return "TFRFLG"; // loader  transfer flag
-
-        case 0xCC1E:
-            return "TFRADR"; // transfer address
-
-        case 0xCC20:
-            return "FMSERR"; // FMS error type
-
-        case 0xCC21:
-            return "IOFLG"; // special I/O flag
-
-        case 0xCC22:
-            return "OUTSWT"; // output switch
-
-        case 0xCC23:
-            return "INSWT"; // input switch
-
-        case 0xCC24:
-            return "OUTADR"; // file output address
-
-        case 0xCC26:
-            return "INADR"; // file input address
-
-        case 0xCC28:
-            return "COMFLG"; // command flag
-
-        case 0xCC29:
-            return "OUTCOL"; // current output column
-
-        case 0xCC2A:
-            return "SCRATC"; // system scratch
-
-        case 0xCC2B:
-            return "MEMEND"; // memory end
-
-        case 0xCC2D:
-            return "ERRVEC"; // error name vector
-
-        case 0xCC2F:
-            return "INECHO"; // file input echo flag
-
-        // printer support
-        case 0xCCC0:
-            return "PRTINI"; // printer initialize
-
-        case 0xCCD8:
-            return "PRTCHK"; // printer check
-
-        case 0xCCE4:
-            return "PRTOUT"; // printer output
-
-        default:
-            return nullptr;
+        const auto path =
+            flexLabelFile.empty() ? flx::getFlexLabelFile() : flexLabelFile;
+        label_for_address = FlexLabelFile::ReadFile(std::cerr, path, "LABELS");
     }
-#else
-    return nullptr;
+
+    const auto iter = label_for_address.find(addr);
+
+    if (iter != label_for_address.end())
+    {
+        return iter->second.c_str();
+    }
 #endif // #ifdef FLEX_LABEL
+
+    return nullptr;
 }
 
-const char *Da6809::IndexedRegister(Byte which)
+const char *Da6809::IndexRegister(Byte which)
 {
-    switch (which & 0x03)
-    {
-        case 0:
-            return "X";
+    static const std::array<const char *, 4> reg_names{ "X", "Y", "U", "S" };
 
-        case 1:
-            return "Y";
-
-        case 2:
-            return "U";
-
-        case 3:
-            return "S";
-    } // switch
-
-    return "?"; // should never happen
+    return reg_names[which & 0x03U];
 }
 
 const char *Da6809::InterRegister(Byte which)
 {
-    switch (which & 0x0f)
-    {
-        case 0x0:
-            return "D";
+    static const std::array<const char *, 16> reg_names{
+        "D", "X", "Y", "U", "S", "PC", "??", "??",
+        "A", "B", "CC", "DP", "??", "??", "??", "??"
+    };
 
-        case 0x1:
-            return "X";
-
-        case 0x2:
-            return "Y";
-
-        case 0x3:
-            return "U";
-
-        case 0x4:
-            return "S";
-
-        case 0x5:
-            return "PC";
-
-        case 0x8:
-            return "A";
-
-        case 0x9:
-            return "B";
-
-        case 0xa:
-            return "CC";
-
-        case 0xb:
-            return "DP";
-
-        default:
-            return "??";
-    } // switch
+    return reg_names[which & 0x0FU];
 }
 
 
 const char *Da6809::StackRegister(Byte which, const char *not_stack)
 {
-    switch (which & 0x07)
+    static const std::array<const char *, 8> reg_names{
+        "CC", "A", "B", "DP", "X", "Y", "??", "PC"
+    };
+
+    if ((which & 0x07U) == 6U)
     {
-        case 0x0:
-            return "CC";
+        return not_stack;
+    }
 
-        case 0x1:
-            return "A";
-
-        case 0x2:
-            return "B";
-
-        case 0x3:
-            return "DP";
-
-        case 0x4:
-            return "X";
-
-        case 0x5:
-            return "Y";
-
-        case 0x6:
-            return not_stack;
-
-        case 0x7:
-            return "PC";
-
-        default:
-            return "??"; // this case should never happen
-    } // switch
+    return reg_names[which & 0x07U];
 }
 
 
-inline Byte Da6809::D_Illegal(const char *mnemo, Word pc, Byte bytes,
-                              const Byte *pMemory)
+inline InstFlg Da6809::D_Illegal(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code;
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
+    p_operands = "?????";
 
-    code = *pMemory;
-    sprintf(code_buf, "%04X: %02X", pc, code);
-    sprintf(mnem_buf, "%s ?????", mnemo);
-    return bytes;
+    return InstFlg::Illegal;
 }
 
 
-inline Byte Da6809::D_Direct(const char *mnemo, Word pc, Byte bytes,
-                             const Byte *pMemory)
+inline void Da6809::D_Direct(const char *mnemo, Byte bytes, std::string &p_code,
+                             std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code, offset;
+    const auto offset = *(memory + bytes - 1);
 
-    code = *pMemory;
-    offset = *(pMemory + 1);
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, offset);
-    sprintf(mnem_buf, "%s $%02X", mnemo, offset);
-    return bytes;
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
+    p_operands = fmt::format("${:02X}", offset);
 }
 
 
-inline Byte Da6809::D_Immediat(const char *mnemo, Word pc, Byte bytes,
-                               const Byte *pMemory)
+inline void Da6809::D_Immediate8(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code, offset;
+    const auto offset = *(memory + bytes - 1);
 
-    code = *pMemory;
-    offset = *(pMemory + 1);
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, offset);
-    sprintf(mnem_buf, "%s #$%02X", mnemo, offset);
-    return bytes;
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
+    p_operands = fmt::format("#${:02X}", offset);
 }
 
 
-inline Byte Da6809::D_ImmediatL(const char *mnemo, Word pc, Byte bytes,
-                                const Byte *pMemory, DWord * /*pAddr*/)
+inline void Da6809::D_Immediate16(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic,
+        std::string &p_operands)
 {
-    Byte code;
-    const char *label;
+    const auto offset = flx::getValueBigEndian<Word>(&memory[bytes - 2]);
 
-    code = *pMemory;
-    auto offset = getValueBigEndian<Word>(&pMemory[1]);
-    sprintf(code_buf, "%04X: %02X %02X %02X", pc, code, *(pMemory + 1),
-            *(pMemory + 2));
-    label = FlexLabel(offset);
+    p_code = PrintCode(bytes);
+    const auto *label = FlexLabel(offset);
 
+    p_mnemonic = mnemo;
     if (label == nullptr)
     {
-        sprintf(mnem_buf, "%s #$%04X", mnemo, offset);
+        p_operands = fmt::format("#${:04X}", offset);
     }
     else
     {
-        sprintf(mnem_buf, "%s #%s ; $%04X", mnemo, label, offset);
+        p_operands = "#";
+        p_operands += label;
+    }
+}
+
+inline std::string Da6809::PrintCode(int bytes)
+{
+    std::string result = fmt::format("{:04X}:", pc);
+
+    for (int i = 0; i < bytes; ++i)
+    {
+        result += fmt::format(" {:02X}", memory[i]);
     }
 
-    return bytes;
+    return result;
+}
+
+inline void Da6809::D_Inherent(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic)
+{
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
 }
 
 
-inline Byte Da6809::D_Inherent(const char *mnemo, Word pc, Byte bytes,
-                               const Byte *pMemory)
+void Da6809::D_Indexed(const char *mnemo, Byte bytes, std::string &p_code,
+        std::string &p_mnemonic, std::string &p_operands)
 {
-    int code;
-
-    code = *pMemory;
-    sprintf(code_buf, "%04X: %02X", pc, code);
-    sprintf(mnem_buf, "%s", mnemo);
-    return bytes;
-}  // D_Inherent
-
-
-Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
-                       const Byte *pMemory)
-{
-    Byte code, postbyte;
-    const char *s, *br1, *br2;
-    Byte extrabytes, disp;
+    Byte disp;
     Word offset;
+    Byte extrabytes = 0U;
+    const auto postbyte = *(memory + bytes - 1);
+    const char *br1 = ""; // opening bracket if indirect addressing
+    const char *br2 = ""; // closing bracket if indirect addressing
+    const char *sign = ""; // minus sign for offset
+    const char *addr_mode = "<"; // addressing mode, "<" for direct, ">" for
+                                 // extended addressing.
 
-    extrabytes = 0;
-    code = *pMemory;
-    postbyte = *(pMemory + 1);
-    br1        = "";        // bracket on for indirect addressing
-    br2        = "";        // bracket off for indirect addressing
-    s          = "";        // minus sign for offset
-
-    if ((postbyte & 0x80) == 0x00)
+    p_mnemonic = mnemo;
+    if ((postbyte & 0x80U) == 0x00U)
     {
         // ,R + 5 Bit Offset
-        disp = postbyte & 0x1f;
+        disp = postbyte & 0x1fU;
 
-        if ((postbyte & 0x10) == 0x10)
+        if ((postbyte & 0x10U) == 0x10U)
         {
-            s = "-";
+            sign = "-";
             disp = 0x20 - disp;
         }
 
-        sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-        sprintf(mnem_buf, "%s %s$%02X,%s", mnemo, s, disp,
-                IndexedRegister(postbyte >> 5));
+        p_code = PrintCode(bytes);
+        p_operands = fmt::format("{}${:02X},{}", sign, disp,
+                 IndexRegister(postbyte >> 5U));
     }
     else
     {
-        switch (postbyte & 0x1f)
+        switch (postbyte & 0x1FU)
         {
             case 0x00 : // ,R+
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s ,%s+", mnemo,
-                        IndexedRegister(postbyte >> 5));
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format(",{}+", IndexRegister(postbyte >> 5U));
                 break;
 
             case 0x11 : // [,R++]
@@ -459,15 +211,14 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x01 : // ,R++
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %s,%s++%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{},{}++{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x02 : // ,-R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s ,-%s", mnemo,
-                        IndexedRegister(postbyte >> 5));
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format(",-{}", IndexRegister(postbyte >> 5U));
                 break;
 
             case 0x13 : // [,R--]
@@ -476,9 +227,9 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x03 : // ,--R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %s,--%s%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{},--{}{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x14 : // [,R--]
@@ -487,9 +238,9 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x04 : // ,R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %s,%s%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{},{}{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x15 : // [B,R]
@@ -498,9 +249,9 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x05 : // B,R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %sB,%s%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{}B,{}{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x16 : // [A,R]
@@ -509,9 +260,9 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x06 : // A,R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %sA,%s%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{}A,{}{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x18 : // [,R + 8 Bit Offset]
@@ -520,23 +271,17 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x08 : // ,R + 8 Bit Offset
-                offset = *(pMemory + 2);
+                offset = *(memory + 2);
 
-                if (offset < 128)
+                if (offset >= 128)
                 {
-                    s = "";
-                }
-                else
-                {
-                    s = "-";
+                    sign = "-";
                     offset = 0x0100 - offset;
                 }
-
-                sprintf(code_buf, "%04X: %02X %02X %02X", pc, code, postbyte,
-                        *(pMemory + 2));
-                sprintf(mnem_buf, "%s %s%s$%02X,%s%s", mnemo, br1, s, offset,
-                        IndexedRegister(postbyte >> 5), br2);
                 extrabytes = 1;
+                p_code = PrintCode(bytes + extrabytes);
+                p_operands = fmt::format("{}{}${:02X},{}{}",
+                         br1, sign, offset, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x19 : // [,R + 16 Bit Offset]
@@ -545,13 +290,16 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x09 : // ,R + 16 Bit Offset
-                offset = getValueBigEndian<Word>(&pMemory[2]);
-                s = "";
-                sprintf(code_buf, "%04X: %02X %02X %02X %02X", pc, code,
-                        postbyte, *(pMemory + 2), *(pMemory + 3));
-                sprintf(mnem_buf, "%s %s%s$%04X,%s%s", mnemo,
-                        br1, s, offset, IndexedRegister(postbyte >> 5), br2);
                 extrabytes = 2;
+                p_code = PrintCode(bytes + extrabytes);
+                offset = flx::getValueBigEndian<Word>(&memory[2]);
+                if (offset >= 32768)
+                {
+                    sign = "-";
+                    offset = 0xFFFF - offset + 1;
+                }
+                p_operands = fmt::format("{}{}${:04X},{}{}",
+                         br1, sign, offset, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x1b : // [D,R]
@@ -560,9 +308,9 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x0b : // D,R
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s %sD,%s%s", mnemo,
-                        br1, IndexedRegister(postbyte >> 5), br2);
+                p_code = PrintCode(bytes);
+                p_operands = fmt::format("{}D,{}{}",
+                        br1, IndexRegister(postbyte >> 5U), br2);
                 break;
 
             case 0x1c : // [,PC + 8 Bit Offset]
@@ -571,13 +319,11 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x0c : // ,PC + 8 Bit Offset
-                offset = (EXTEND8(*(pMemory + 2)) + pc + 3) & 0xFFFF;
-                s = "<";
-                sprintf(code_buf, "%04X: %02X %02X %02X", pc, code, postbyte,
-                        *(pMemory + 2));
-                sprintf(mnem_buf, "%s %s%s$%02X,PCR%s", mnemo, br1, s, offset,
-                        br2);
+                offset = (EXTEND8(*(memory + 2)) + pc + 3U) & 0xFFFFU;
                 extrabytes = 1;
+                p_code = PrintCode(bytes + extrabytes);
+                p_operands = fmt::format("{}{}${:02X},PCR{}",
+                         br1, addr_mode, offset, br2);
                 break;
 
             case 0x1d : // [,PC + 16 Bit Offset]
@@ -586,1357 +332,1721 @@ Byte Da6809::D_Indexed(const char *mnemo, Word pc, Byte bytes,
                 FALLTHROUGH;
 
             case 0x0d :  // ,PC + 16 Bit Offset
-                offset = (getValueBigEndian<Word>(&pMemory[2]) + pc + 4) & 0xFFFF;
-                s = ">";
-                sprintf(code_buf, "%04X: %02X %02X %02X %02X", pc, code,
-                        postbyte, *(pMemory + 2), *(pMemory + 3));
-                sprintf(mnem_buf, "%s %s%s$%04X,PCR%s", mnemo, br1, s, offset,
-                        br2);
+                offset = (flx::getValueBigEndian<Word>(&memory[2]) + pc + 4U)
+                         & 0xFFFFU;
+                addr_mode = ">";
                 extrabytes = 2;
+                p_code = PrintCode(bytes + extrabytes);
+                p_operands = fmt::format("{}{}${:04X},PCR{}",
+                         br1, addr_mode, offset, br2);
                 break;
 
             case 0x1f : // [n]
-                br1 = "[";
-                br2 = "]";
-                offset = getValueBigEndian<Word>(&pMemory[2]);
-                sprintf(code_buf, "%04X: %02X %02X %02X %02X", pc, code,
-                        postbyte, *(pMemory + 2), *(pMemory + 2));
-                sprintf(mnem_buf, "%s %s$%04X%s", mnemo, br1, offset, br2);
-                extrabytes = 2;
-                break;
+                if (postbyte == 0x9f)
+                {
+                    br1 = "[";
+                    br2 = "]";
+                    offset = flx::getValueBigEndian<Word>(&memory[2]);
+                    extrabytes = 2;
+                    p_code = PrintCode(bytes + extrabytes);
+                    p_operands = fmt::format("{}${:04X}{}", br1, offset, br2);
+                    break;
+                }
+                FALLTHROUGH;
 
             default:
-                sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-                sprintf(mnem_buf, "%s ????", mnemo);
+                p_code = PrintCode(bytes);
+                p_operands = "????";
         }
     }
-
-    return bytes + extrabytes;
-} // D_Indexed
+}
 
 
-inline Byte Da6809::D_Extended(const char *mnemo, Word pc, Byte bytes,
-                               const Byte *pMemory, DWord * /*pAddr*/)
+inline void Da6809::D_Extended(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code;
-    const char *label;
+    const auto offset = flx::getValueBigEndian<Word>(&memory[bytes - 2]);
 
-    code = *pMemory;
-    auto offset = getValueBigEndian<Word>(&pMemory[1]);
-    sprintf(code_buf, "%04X: %02X %02X %02X", pc, code,
-            *(pMemory + 1), *(pMemory + 2));
-    label = FlexLabel(offset);
+    p_code = PrintCode(bytes);
+    const auto *label = FlexLabel(offset);
+    p_mnemonic = mnemo;
 
     if (label == nullptr)
     {
-        sprintf(mnem_buf, "%s $%04X", mnemo, offset);
+        p_operands = fmt::format("${:04X}", offset);
     }
     else
     {
-        sprintf(mnem_buf, "%s %s ; $%04X", mnemo, label, offset);
+        p_operands = label;
     }
-
-    return bytes;
 }
 
-inline Byte Da6809::D_Relative(const char *mnemo, Word pc, Byte bytes,
-                               const Byte *pMemory, DWord * /*pAddr*/)
+inline void Da6809::D_Relative8(const char *mnemo, Byte bytes,
+        DWord &p_jumpaddr, std::string &p_code, std::string &p_mnemonic,
+        std::string &p_operands)
 {
-    Byte code;
-    Word offset, disp;
-    const char *label;
+    Word disp{};
+    const auto offset = *(memory + bytes - 1);
 
-    code = *pMemory;
-    offset = *(pMemory + 1);
-
-    if (offset < 127)
+    if (offset <= 127)
     {
-        disp   = pc + 2 + offset;
+        disp = pc + 2 + offset;
     }
     else
     {
-        disp   = pc + 2 - (256 - offset);
+        disp = pc + 2 - (256 - offset);
     }
+    p_jumpaddr = disp;
 
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, offset);
-    label = FlexLabel(disp);
+    p_code = PrintCode(bytes);
+    const auto *label = FlexLabel(disp);
+    p_mnemonic = mnemo;
 
     if (label == nullptr)
     {
-        sprintf(mnem_buf, "%s $%04X", mnemo, disp);
+        p_operands = fmt::format("${:04X}", disp);
     }
     else
     {
-        sprintf(mnem_buf, "%s %s ; $%04X", mnemo, label, disp);
+        p_operands = label;
     }
-
-    return bytes;
 }
 
-inline Byte Da6809::D_RelativeL(
-    const char *mnemo, Word pc, Byte bytes, const Byte *pMemory, DWord *pAddr)
+inline void Da6809::D_Relative16(const char *mnemo, Byte bytes,
+        DWord &p_jumpaddr, std::string &p_code, std::string &p_mnemonic,
+        std::string &p_operands)
 {
-    Byte code;
-    const char *label;
+    const auto offset = flx::getValueBigEndian<Word>(&memory[bytes - 2]);
 
-    code = *pMemory;
-    auto offset = getValueBigEndian<Word>(&pMemory[1]);
-
-    if (offset < 32767)
+    if (offset <= 32767)
     {
-        *pAddr = pc + 3 + offset;
+        p_jumpaddr = pc + bytes + offset;
     }
     else
     {
-        *pAddr = pc + 3 - (65536 - offset);
+        p_jumpaddr = pc + bytes - (65536 - offset);
     }
 
-    sprintf(code_buf, "%04X: %02X %02X %02X", pc, code,
-            *(pMemory + 1), *(pMemory + 2));
-    label = FlexLabel(static_cast<Word>(*pAddr));
+    p_code = PrintCode(bytes);
+    const auto address = static_cast<Word>(p_jumpaddr);
+    const auto *label = FlexLabel(address);
+    p_mnemonic = mnemo;
 
     if (label == nullptr)
     {
-        sprintf(mnem_buf, "%s $%04X", mnemo, (Word)*pAddr);
+        p_operands = fmt::format("${:04X}", address);
     }
     else
     {
-        sprintf(mnem_buf, "%s %s ; $%04X", mnemo, label, (Word)*pAddr);
+        p_operands = label;
     }
-
-    return bytes;
 }
 
-inline Byte Da6809::D_Register0(const char *mnemo, Word pc, Byte bytes,
-                                const Byte *pMemory)
+inline void Da6809::D_RegisterRegister(const char *mnemo, Byte bytes,
+        std::string &p_code, std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code, postbyte;
-    code = *pMemory;
-    postbyte = *(pMemory + 1);
+    const auto postbyte = *(memory + 1);
 
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-    sprintf(mnem_buf, "%s %s,%s", mnemo, InterRegister(postbyte >> 4),
-            InterRegister(postbyte & 0x0f));
-
-    return bytes;
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
+    p_operands = fmt::format("{},{}",
+             InterRegister(postbyte >> 4U),
+             InterRegister(postbyte & 0x0FU));
 }
 
-inline Byte Da6809::D_Register1(const char *mnemo, Word pc, Byte bytes,
-                                const Byte *pMemory)
+inline void Da6809::D_RegisterList(const char *mnemo, const char *ns_reg,
+        Byte bytes, std::string &p_code, std::string &p_mnemonic,
+        std::string &p_operands)
 {
-    Byte code, postbyte;
-    Byte i, comma;
-    size_t index;
+    const auto postbyte = *(memory + 1);
 
-    code      = *pMemory;
-    postbyte  = *(pMemory + 1);
+    p_code = PrintCode(bytes);
+    p_mnemonic = mnemo;
 
-    comma = 0;
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-    sprintf(mnem_buf, "%s ", mnemo);
-    index = strlen(mnemo);
-
-    for (i = 0; i < 8; i++)
+    if (postbyte == 0)
     {
-        if (postbyte & (1 << i))
+        p_operands = "??";
+    }
+    else
+    {
+        bool withComma = false;
+
+        p_operands = "";
+        for (Byte i = 0; i < 8; i++)
         {
-            sprintf(&mnem_buf[index], "%s%s",
-                    comma ? "," : "", StackRegister(i, "U"));
-            index += strlen(StackRegister(i, "U")) + (comma ? 1 : 0);
-            comma = 1;
-        } // if
-    } // for
+            if (postbyte & (1U << i))
+            {
+                p_operands.append(withComma ? "," : "");
+                p_operands.append(StackRegister(i, ns_reg));
+                withComma = true;
+            }
+        }
+    }
+}
 
-    return bytes;
-} // D_Register1
-
-
-inline Byte Da6809::D_Register2(const char *mnemo, Word pc, Byte bytes,
-                                const Byte *pMemory)
+inline InstFlg Da6809::D_Page2(InstFlg p_flags, DWord &p_jumpaddr,
+        std::string &p_code, std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code, postbyte;
-    Byte i, comma;
-    size_t index;
-
-    code      = *pMemory;
-    postbyte  = *(pMemory + 1);
-
-    comma = 0;
-    sprintf(code_buf, "%04X: %02X %02X", pc, code, postbyte);
-    sprintf(mnem_buf, "%s ", mnemo);
-    index = strlen(mnemo);
-
-    for (i = 0; i < 8; i++)
-    {
-        if (postbyte & (1 << i))
-        {
-            sprintf(&mnem_buf[index], "%s%s",
-                    comma ? "," : "", StackRegister(i, "S"));
-            index += strlen(StackRegister(i, "S")) + (comma ? 1 : 0);
-            comma = 1;
-        } // if
-    } // for
-
-    return bytes;
-} // D_Register2
-
-
-inline Byte Da6809::D_Page10(InstFlg *pFlags, Word pc, const Byte *pMemory,
-                             DWord *pAddr)
-{
-    Byte code;
-
-    code = *(pMemory + 1);
+    const auto code = *(memory + 1);
 
     switch (code)
     {
         case 0x21:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBRN ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBRN", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x22:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBHI ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBHI", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x23:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBLS ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBLS", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x24:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBCC ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBCC", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x25:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBCS ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBCS", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x26:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBNE ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBNE", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x27:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBEQ ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBEQ", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x28:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBVC ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBVC", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x29:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBVS ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBVS", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2a:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBPL ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBPL", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2b:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBMI ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBMI", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2c:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBGE ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBGE", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2d:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBLT ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBLT", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2e:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBGT ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBGT", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2f:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_RelativeL("LBLE ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative16("LBLE", 4, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x3f:
-            *pFlags |= InstFlg::Sub;
-            return D_Inherent("SWI2 ", pc, 2, pMemory + 1);
+            p_flags |= InstFlg::Sub;
+            D_Inherent("SWI2", 2, p_code, p_mnemonic);
+            break;
 
         case 0x83:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("CMPD ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("CMPD", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8c:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("CMPY ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("CMPY", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8e:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("LDY  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("LDY", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x93:
-            return D_Direct("CMPD ", pc, 3, pMemory + 1);
+            D_Direct("CMPD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9c:
-            return D_Direct("CMPY ", pc, 3, pMemory + 1);
+            D_Direct("CMPY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9e:
-            return D_Direct("LDY  ", pc, 3, pMemory + 1);
+            D_Direct("LDY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9f:
-            return D_Direct("STY  ", pc, 3, pMemory + 1);
+            D_Direct("STY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa3:
-            return D_Indexed("CMPD ", pc, 3, pMemory + 1);
+            D_Indexed("CMPD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xac:
-            return D_Indexed("CMPY ", pc, 3, pMemory + 1);
+            D_Indexed("CMPY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xae:
-            return D_Indexed("LDY  ", pc, 3, pMemory + 1);
+            D_Indexed("LDY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xaf:
-            return D_Indexed("STY  ", pc, 3, pMemory + 1);
+            D_Indexed("STY", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb3:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CMPD ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CMPD", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbc:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CMPY ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CMPY", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbe:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDY  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDY", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbf:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STY  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STY", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xce:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("LDS  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("LDS", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xde:
-            return D_Direct("LDS  ", pc, 3, pMemory + 1);
+            D_Direct("LDS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xdf:
-            return D_Direct("STS  ", pc, 3, pMemory + 1);
+            D_Direct("STS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xee:
-            return D_Indexed("LDS  ", pc, 3, pMemory + 1);
+            D_Indexed("LDS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xef:
-            return D_Indexed("STS  ", pc, 3, pMemory + 1);
+            D_Indexed("STS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfe:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDS  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDS", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xff:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STS  ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STS", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         default:
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc, 1, pMemory + 1);
-    } // switch
-} // D_Page10
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
+    }
+
+    return p_flags;
+}
 
 
-inline Byte Da6809::D_Page11(InstFlg *pFlags, Word pc, const Byte *pMemory,
-                             DWord *pAddr)
+inline InstFlg Da6809::D_Page3(InstFlg p_flags, std::string &p_code,
+        std::string &p_mnemonic, std::string &p_operands)
 {
-    Byte code;
-
-    code = *(pMemory + 1);
+    const auto code = *(memory + 1);
 
     switch (code)
     {
         case 0x3f:
-            *pFlags |= InstFlg::Sub;
-            return D_Inherent("SWI3 ", pc, 2, pMemory + 1);
+            p_flags |= InstFlg::Sub;
+            D_Inherent("SWI3", 2, p_code, p_mnemonic);
+            break;
 
         case 0x83:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("CMPU ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("CMPU", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8c:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("CMPS ", pc, 4, pMemory + 1, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("CMPS", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x93:
-            return D_Direct("CMPU ", pc, 3, pMemory + 1);
+            D_Direct("CMPU", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9c:
-            return D_Direct("CMPS ", pc, 3, pMemory + 1);
+            D_Direct("CMPS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa3:
-            return D_Indexed("CMPU ", pc, 3, pMemory + 1);
+            D_Indexed("CMPU", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xac:
-            return D_Indexed("CMPS ", pc, 3, pMemory + 1);
+            D_Indexed("CMPS", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb3:
-            return D_Indexed("CMPU ", pc, 4, pMemory + 1);
+            D_Extended("CMPU", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbc:
-            return D_Indexed("CMPS ", pc, 4, pMemory + 1);
+            D_Extended("CMPS", 4, p_code, p_mnemonic, p_operands);
+            break;
 
         default:
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc, 1, pMemory + 1);
-    }  // switch
-} // D_Page11
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
+    }
+    return p_flags;
+}
 
-
-int Da6809::Disassemble(
-        const Byte * const pMemory,
-        DWord pc,
-        InstFlg *pFlags,
-        DWord *pAddr,
-        char **pCode,
-        char **pMnemonic)
+InstFlg Da6809::Disassemble(
+        const Byte *p_memory,
+        DWord p_pc,
+        DWord &p_jumpaddr,
+        std::string &p_code,
+        std::string &p_mnemonic,
+        std::string &p_operands)
 {
-    Byte code;
-    Word pc16 = static_cast<Word>(pc);
+    pc = static_cast<Word>(p_pc);
+    memory = p_memory;
+    auto p_flags = InstFlg::NONE;
+    const auto opcode = *memory;
+    p_operands.clear();
 
-    *pCode = code_buf;
-    *pMnemonic = mnem_buf;
-    *pFlags = InstFlg::NONE;
-    code = *pMemory;
-
-    switch (code)
+    switch (opcode)
     {
         case 0x01:
             if (use_undocumented)
             {
-                return D_Direct("neg", pc16, 2, pMemory);
+                D_Direct("neg", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x00:
-            return D_Direct("NEG  ", pc16, 2, pMemory);
+            D_Direct("NEG", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x02:
             if (use_undocumented)
             {
-                return D_Direct("negcom", pc16, 2, pMemory);
+                D_Direct("negcom", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x03:
-            return D_Direct("COM  ", pc16, 2, pMemory);
+            D_Direct("COM", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x04:
-            return D_Direct("LSR  ", pc16, 2, pMemory);
+            D_Direct("LSR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x05:
             if (use_undocumented)
             {
-                return D_Direct("lsr  ", pc16, 2, pMemory);
+                D_Direct("lsr", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x06:
-            return D_Direct("ROR  ", pc16, 2, pMemory);
+            D_Direct("ROR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x07:
-            return D_Direct("ASR  ", pc16, 2, pMemory);
+            D_Direct("ASR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x08:
-            return D_Direct("LSR  ", pc16, 2, pMemory);
+            D_Direct("LSL", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x09:
-            return D_Direct("ROR  ", pc16, 2, pMemory);
+            D_Direct("ROL", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x0a:
-            return D_Direct("DEC  ", pc16, 2, pMemory);
+            D_Direct("DEC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x0b:
             if (use_undocumented)
             {
-                return D_Direct("dec  ", pc16, 2, pMemory);
+                D_Direct("dec", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x0c:
-            return D_Direct("INC  ", pc16, 2, pMemory);
+            D_Direct("INC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x0d:
-            return D_Direct("TST  ", pc16, 2, pMemory);
+            D_Direct("TST", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x0e:
-            *pFlags |= InstFlg::Jump;
-            return D_Direct("JMP  ", pc16, 2, pMemory);
+            p_flags |= InstFlg::Jump;
+            D_Direct("JMP", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x0f:
-            return D_Direct("CLR  ", pc16, 2, pMemory);
+            D_Direct("CLR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
-        case 0x10:
-            return D_Page10(pFlags, pc16, pMemory, pAddr);
+        case PAGE2:
+            return D_Page2(p_flags, p_jumpaddr, p_code, p_mnemonic, p_operands);
 
-        case 0x11:
-            return D_Page11(pFlags, pc16, pMemory, pAddr);
+        case PAGE3:
+            return D_Page3(p_flags, p_code, p_mnemonic, p_operands);
 
         case 0x12:
-            *pFlags |= InstFlg::Noop;
-            return D_Inherent("NOP  ", pc16, 1, pMemory);
+            p_flags |= InstFlg::Noop;
+            D_Inherent("NOP", 1, p_code, p_mnemonic);
+            break;
 
         case 0x13:
-            *pFlags |= InstFlg::Jump;
-            return D_Inherent("SYNC ", pc16, 1, pMemory);
+            p_flags |= InstFlg::Jump;
+            D_Inherent("SYNC", 1, p_code, p_mnemonic);
+            break;
 
         // 0x14, 0x15 is illegal
         case 0x16:
-            *pFlags |= InstFlg::Jump | InstFlg::JumpAddr;
-            return D_RelativeL("LBRA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::Jump | InstFlg::JumpAddr;
+            D_Relative16("LBRA", 3, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x17:
-            *pFlags |= InstFlg::Sub | InstFlg::LabelAddr;
-            return D_RelativeL("LBSR ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::Sub | InstFlg::LabelAddr;
+            D_Relative16("LBSR", 3, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
-        // 0x18 is illegal
         case 0x19:
-            return D_Inherent("DAA  ", pc16, 1, pMemory);
+            D_Inherent("DAA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x1a:
-            return D_Immediat("ORCC ", pc16, 2, pMemory);
+            D_Immediate8("ORCC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
-        // 0x1b is illegal
         case 0x1c:
-            return D_Immediat("ANDCC", pc16, 2, pMemory);
+            D_Immediate8("ANDCC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x1d:
-            return D_Inherent("SEX  ", pc16, 1, pMemory);
+            D_Inherent("SEX", 1, p_code, p_mnemonic);
+            break;
 
         case 0x1e:
-            return D_Register0("EXG  ", pc16, 2, pMemory);
+            D_RegisterRegister("EXG", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x1f:
-            return D_Register0("TFR  ", pc16, 2, pMemory);
+            D_RegisterRegister("TFR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x20:
-            *pFlags |= InstFlg::Jump | InstFlg::JumpAddr;
-            return D_Relative("BRA  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::Jump | InstFlg::JumpAddr;
+            D_Relative8("BRA", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x21:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BRN  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BRN", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x22:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BHI  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BHI", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x23:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BLS  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BLS", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x24:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BCC  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BCC", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x25:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BCS  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BCS", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x26:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BNE  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BNE", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x27:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BEQ  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BEQ", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x28:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BVC  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BVC", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x29:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BVS  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BVS", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2a:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BPL  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BPL", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2b:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BMI  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BMI", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2c:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BGE  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BGE", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2d:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BLT  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BLT", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2e:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BGT  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BGT", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x2f:
-            *pFlags |= InstFlg::JumpAddr;
-            return D_Relative("BLE  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::JumpAddr;
+            D_Relative8("BLE", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x30:
-            return D_Indexed("LEAX ", pc16, 2, pMemory);
+            D_Indexed("LEAX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x31:
-            return D_Indexed("LEAY ", pc16, 2, pMemory);
+            D_Indexed("LEAY", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x32:
-            return D_Indexed("LEAS ", pc16, 2, pMemory);
+            D_Indexed("LEAS", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x33:
-            return D_Indexed("LEAU ", pc16, 2, pMemory);
+            D_Indexed("LEAU", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x34:
-            return D_Register1("PSHS ", pc16, 2, pMemory);
+            D_RegisterList("PSHS", "U", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x35:
-            return D_Register1("PULS ", pc16, 2, pMemory);
+            D_RegisterList("PULS", "U", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x36:
-            return D_Register2("PSHU ", pc16, 2, pMemory);
+            D_RegisterList("PSHU", "S", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x37:
-            return D_Register2("PULU ", pc16, 2, pMemory);
+            D_RegisterList("PULU", "S", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         // 0x38 is illegal
         case 0x39:
-            *pFlags |= InstFlg::Jump;
-            return D_Inherent("RTS  ", pc16, 1, pMemory);
+            p_flags |= InstFlg::Jump;
+            D_Inherent("RTS", 1, p_code, p_mnemonic);
+            break;
 
         case 0x3a:
-            return D_Inherent("ABX  ", pc16, 1, pMemory);
+            D_Inherent("ABX", 1, p_code, p_mnemonic);
+            break;
 
         case 0x3b:
-            *pFlags |= InstFlg::Jump;
-            return D_Inherent("RTI  ", pc16, 1, pMemory);
+            p_flags |= InstFlg::Jump;
+            D_Inherent("RTI", 1, p_code, p_mnemonic);
+            break;
 
         case 0x3c:
-            *pFlags |= InstFlg::Jump;
-            return D_Immediat("CWAI ", pc16, 2, pMemory);
+            p_flags |= InstFlg::Jump;
+            D_Immediate8("CWAI", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x3d:
-            return D_Inherent("MUL  ", pc16, 1, pMemory);
+            D_Inherent("MUL", 1, p_code, p_mnemonic);
+            break;
 
         case 0x3e:
             if (use_undocumented)
             {
-                return D_Direct("reset", pc16, 1, pMemory);
+                D_Inherent("reset", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x3f:
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("SWI  ", pc16, 1, pMemory);
+            p_flags |= InstFlg::Sub;
+            D_Inherent("SWI", 1, p_code, p_mnemonic);
+            break;
 
         case 0x40:
-            return D_Inherent("NEGA ", pc16, 1, pMemory);
+            D_Inherent("NEGA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x41:
             if (use_undocumented)
             {
-                return D_Direct("nega ", pc16, 1, pMemory);
+                D_Inherent("nega", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
+
+        case 0x42:
+            if (use_undocumented)
+            {
+                D_Inherent("negcoma", 1, p_code, p_mnemonic);
+                break;
+            }
+
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x43:
-            return D_Inherent("COMA ", pc16, 1, pMemory);
+            D_Inherent("COMA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x44:
-            return D_Inherent("LSRA ", pc16, 1, pMemory);
+            D_Inherent("LSRA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x45:
             if (use_undocumented)
             {
-                return D_Direct("lsra ", pc16, 1, pMemory);
+                D_Inherent("lsra", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x46:
-            return D_Inherent("RORA ", pc16, 1, pMemory);
+            D_Inherent("RORA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x47:
-            return D_Inherent("ASRA ", pc16, 1, pMemory);
+            D_Inherent("ASRA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x48:
-            return D_Inherent("LSLA ", pc16, 1, pMemory);
+            D_Inherent("LSLA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x49:
-            return D_Inherent("ROLA ", pc16, 1, pMemory);
+            D_Inherent("ROLA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x4a:
-            return D_Inherent("DECA ", pc16, 1, pMemory);
+            D_Inherent("DECA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x4b:
             if (use_undocumented)
             {
-                return D_Direct("deca ", pc16, 1, pMemory);
+                D_Inherent("deca", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x4c:
-            return D_Inherent("INCA ", pc16, 1, pMemory);
+            D_Inherent("INCA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x4d:
-            return D_Inherent("TSTA ", pc16, 1, pMemory);
+            D_Inherent("TSTA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x4e:
             if (use_undocumented)
             {
-                return D_Direct("clra ", pc16, 1, pMemory);
+                D_Inherent("clra", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x4f:
-            return D_Inherent("CLRA ", pc16, 1, pMemory);
+            D_Inherent("CLRA", 1, p_code, p_mnemonic);
+            break;
 
         case 0x50:
-            return D_Inherent("NEGB ", pc16, 1, pMemory);
+            D_Inherent("NEGB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x51:
             if (use_undocumented)
             {
-                return D_Direct("negb ", pc16, 1, pMemory);
+                D_Inherent("negb", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
+
+        case 0x52:
+            if (use_undocumented)
+            {
+                D_Inherent("negcomb", 1, p_code, p_mnemonic);
+                break;
+            }
+
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x53:
-            return D_Inherent("COMB ", pc16, 1, pMemory);
+            D_Inherent("COMB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x54:
-            return D_Inherent("LSRB ", pc16, 1, pMemory);
+            D_Inherent("LSRB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x55:
             if (use_undocumented)
             {
-                return D_Direct("lsrb ", pc16, 1, pMemory);
+                D_Inherent("lsrb", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x56:
-            return D_Inherent("RORB ", pc16, 1, pMemory);
+            D_Inherent("RORB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x57:
-            return D_Inherent("ASRB ", pc16, 1, pMemory);
+            D_Inherent("ASRB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x58:
-            return D_Inherent("LSLB ", pc16, 1, pMemory);
+            D_Inherent("LSLB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x59:
-            return D_Inherent("ROLB ", pc16, 1, pMemory);
+            D_Inherent("ROLB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x5a:
-            return D_Inherent("DECB ", pc16, 1, pMemory);
+            D_Inherent("DECB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x5b:
             if (use_undocumented)
             {
-                return D_Direct("decb ", pc16, 1, pMemory);
+                D_Inherent("decb", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x5c:
-            return D_Inherent("INCB ", pc16, 1, pMemory);
+            D_Inherent("INCB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x5d:
-            return D_Inherent("TSTB ", pc16, 1, pMemory);
+            D_Inherent("TSTB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x5e:
             if (use_undocumented)
             {
-                return D_Direct("clrb ", pc16, 1, pMemory);
+                D_Inherent("clrb", 1, p_code, p_mnemonic);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
 
         case 0x5f:
-            return D_Inherent("CLRB ", pc16, 1, pMemory);
+            D_Inherent("CLRB", 1, p_code, p_mnemonic);
+            break;
 
         case 0x60:
-            return D_Indexed("NEG  ", pc16, 2, pMemory);
+            D_Indexed("NEG", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x61:
             if (use_undocumented)
             {
-                return D_Indexed("neg  ", pc16, 2, pMemory);
+                D_Indexed("neg", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
+
+        case 0x62:
+            if (use_undocumented)
+            {
+                D_Indexed("negcom", 2, p_code, p_mnemonic, p_operands);
+                break;
+            }
+
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x63:
-            return D_Indexed("COM  ", pc16, 2, pMemory);
+            D_Indexed("COM", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x64:
-            return D_Indexed("LSR  ", pc16, 2, pMemory);
+            D_Indexed("LSR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x65:
             if (use_undocumented)
             {
-                return D_Indexed("lsr  ", pc16, 2, pMemory);
+                D_Indexed("lsr", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x66:
-            return D_Indexed("ROR  ", pc16, 2, pMemory);
+            D_Indexed("ROR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x67:
-            return D_Indexed("ASR  ", pc16, 2, pMemory);
+            D_Indexed("ASR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x68:
-            return D_Indexed("LSL  ", pc16, 2, pMemory);
+            D_Indexed("LSL", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x69:
-            return D_Indexed("ROL  ", pc16, 2, pMemory);
+            D_Indexed("ROL", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x6a:
-            return D_Indexed("DEC  ", pc16, 2, pMemory);
+            D_Indexed("DEC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x6b:
             if (use_undocumented)
             {
-                return D_Indexed("dec  ", pc16, 2, pMemory);
+                D_Indexed("dec", 2, p_code, p_mnemonic, p_operands);
+                break;
             }
 
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 2, p_code, p_mnemonic, p_operands);
 
         case 0x6c:
-            return D_Indexed("INC  ", pc16, 2, pMemory);
+            D_Indexed("INC", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x6d:
-            return D_Indexed("TST  ", pc16, 2, pMemory);
+            D_Indexed("TST", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x6e:
-            *pFlags |= InstFlg::Jump | InstFlg::ComputedGoto;
-            return D_Indexed("JMP  ", pc16, 2, pMemory);
+            p_flags |= InstFlg::Jump | InstFlg::ComputedGoto;
+            D_Indexed("JMP", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x6f:
-            return D_Indexed("CLR  ", pc16, 2, pMemory);
+            D_Indexed("CLR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x70:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("NEG  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("NEG", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x71:
             if (use_undocumented)
             {
-                *pFlags |= InstFlg::LabelAddr;
-                return D_Extended("neg  ", pc16, 3, pMemory, pAddr);
+                p_flags |= InstFlg::LabelAddr;
+                D_Extended("neg", 3, p_code, p_mnemonic, p_operands);
+                break;
             };
 
-            *pFlags |= InstFlg::Illegal;
+            return D_Illegal("", 3, p_code, p_mnemonic, p_operands);
 
-            return D_Illegal("", pc16, 1, pMemory);
+        case 0x72:
+            if (use_undocumented)
+            {
+                p_flags |= InstFlg::LabelAddr;
+                D_Extended("negcom", 3, p_code, p_mnemonic, p_operands);
+                break;
+            };
+
+            return D_Illegal("", 3, p_code, p_mnemonic, p_operands);
 
         case 0x73:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("COM  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("COM", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x74:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LSR  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LSR", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x75:
             if (use_undocumented)
             {
-                *pFlags |= InstFlg::LabelAddr;
-                return D_Extended("lsr  ", pc16, 3, pMemory, pAddr);
+                p_flags |= InstFlg::LabelAddr;
+                D_Extended("lsr", 3, p_code, p_mnemonic, p_operands);
+                break;
             };
 
-            *pFlags |= InstFlg::Illegal;
-
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 3, p_code, p_mnemonic, p_operands);
 
         case 0x76:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ROR  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ROR", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x77:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ASR  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ASR", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x78:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LSL  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LSL", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x79:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ROL  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ROL", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x7a:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("DEC  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("DEC", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x7b:
             if (use_undocumented)
             {
-                *pFlags |= InstFlg::LabelAddr;
-                return D_Extended("dec  ", pc16, 3, pMemory, pAddr);
+                p_flags |= InstFlg::LabelAddr;
+                D_Extended("dec", 3, p_code, p_mnemonic, p_operands);
+                break;
             };
 
-            *pFlags |= InstFlg::Illegal;
-
-            return D_Illegal("", pc16, 1, pMemory);
+            return D_Illegal("", 3, p_code, p_mnemonic, p_operands);
 
         case 0x7c:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("INC  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("INC", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x7d:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("TST  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("TST", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x7e:
-            *pFlags |= InstFlg::Jump;
-            return D_Extended("JMP  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::Jump;
+            D_Extended("JMP", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x7f:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CLR  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CLR", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x80:
-            return D_Immediat("SUBA ", pc16, 2, pMemory);
+            D_Immediate8("SUBA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x81:
-            return D_Immediat("CMPA ", pc16, 2, pMemory);
+            D_Immediate8("CMPA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x82:
-            return D_Immediat("SBCA ", pc16, 2, pMemory);
+            D_Immediate8("SBCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x83:
-            return D_ImmediatL("SUBD ", pc16, 3, pMemory, pAddr);
+            D_Immediate16("SUBD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x84:
-            return D_Immediat("ANDA ", pc16, 2, pMemory);
+            D_Immediate8("ANDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x85:
-            return D_Immediat("BITA ", pc16, 2, pMemory);
+            D_Immediate8("BITA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x86:
-            return D_Immediat("LDA  ", pc16, 2, pMemory);
+            D_Immediate8("LDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         // 0x87 is illegal
         case 0x88:
-            return D_Immediat("EORA ", pc16, 2, pMemory);
+            D_Immediate8("EORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x89:
-            return D_Immediat("ADCA ", pc16, 2, pMemory);
+            D_Immediate8("ADCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8a:
-            return D_Immediat("ORA  ", pc16, 2, pMemory);
+            D_Immediate8("ORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8b:
-            return D_Immediat("ADDA ", pc16, 2, pMemory);
+            D_Immediate8("ADDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8c:
-            return D_ImmediatL("CMPX ", pc16, 3, pMemory, pAddr);
+            D_Immediate16("CMPX", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8d:
-            *pFlags |= InstFlg::Sub;
-            return D_Relative("BSR  ", pc16, 2, pMemory, pAddr);
+            p_flags |= InstFlg::Sub;
+            D_Relative8("BSR", 2, p_jumpaddr, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x8e:
-            return D_ImmediatL("LDX  ", pc16, 2, pMemory, pAddr);
-
-        // 0x8f is illegal
+            D_Immediate16("LDX", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x90:
-            return D_Direct("SUBA ", pc16, 2, pMemory);
+            D_Direct("SUBA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x91:
-            return D_Direct("CMPA ", pc16, 2, pMemory);
+            D_Direct("CMPA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x92:
-            return D_Direct("SBCA ", pc16, 2, pMemory);
+            D_Direct("SBCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x93:
-            return D_Direct("SUBD ", pc16, 2, pMemory);
+            D_Direct("SUBD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x94:
-            return D_Direct("ANDA ", pc16, 2, pMemory);
+            D_Direct("ANDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x95:
-            return D_Direct("BITA ", pc16, 2, pMemory);
+            D_Direct("BITA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x96:
-            return D_Direct("LDA  ", pc16, 2, pMemory);
+            D_Direct("LDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x97:
-            return D_Direct("STA  ", pc16, 2, pMemory);
+            D_Direct("STA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x98:
-            return D_Direct("EORA ", pc16, 2, pMemory);
+            D_Direct("EORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x99:
-            return D_Direct("ADCA ", pc16, 2, pMemory);
+            D_Direct("ADCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9a:
-            return D_Direct("ORA  ", pc16, 2, pMemory);
+            D_Direct("ORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9b:
-            return D_Direct("ADDA ", pc16, 2, pMemory);
+            D_Direct("ADDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9c:
-            return D_Direct("CMPX ", pc16, 2, pMemory);
+            D_Direct("CMPX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9d:
-            *pFlags |= InstFlg::Sub;
-            return D_Direct("JSR  ", pc16, 2, pMemory);
+            p_flags |= InstFlg::Sub;
+            D_Direct("JSR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9e:
-            return D_Direct("LDX  ", pc16, 2, pMemory);
+            D_Direct("LDX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0x9f:
-            return D_Direct("STX  ", pc16, 2, pMemory);
+            D_Direct("STX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa0:
-            return D_Indexed("SUBA ", pc16, 2, pMemory);
+            D_Indexed("SUBA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa1:
-            return D_Indexed("CMPA ", pc16, 2, pMemory);
+            D_Indexed("CMPA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa2:
-            return D_Indexed("SBCA ", pc16, 2, pMemory);
+            D_Indexed("SBCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa3:
-            return D_Indexed("SUBD ", pc16, 2, pMemory);
+            D_Indexed("SUBD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa4:
-            return D_Indexed("ANDA ", pc16, 2, pMemory);
+            D_Indexed("ANDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa5:
-            return D_Indexed("BITA ", pc16, 2, pMemory);
+            D_Indexed("BITA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa6:
-            return D_Indexed("LDA  ", pc16, 2, pMemory);
+            D_Indexed("LDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa7:
-            return D_Indexed("STA  ", pc16, 2, pMemory);
+            D_Indexed("STA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa8:
-            return D_Indexed("EORA ", pc16, 2, pMemory);
+            D_Indexed("EORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xa9:
-            return D_Indexed("ADCA ", pc16, 2, pMemory);
+            D_Indexed("ADCA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xaa:
-            return D_Indexed("ORA  ", pc16, 2, pMemory);
+            D_Indexed("ORA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xab:
-            return D_Indexed("ADDA ", pc16, 2, pMemory);
+            D_Indexed("ADDA", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xac:
-            return D_Indexed("CMPX ", pc16, 2, pMemory);
+            D_Indexed("CMPX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xad:
-            *pFlags |= InstFlg::Sub | InstFlg::ComputedGoto;
-            return D_Indexed("JSR  ", pc16, 2, pMemory);
+            p_flags |= InstFlg::Sub | InstFlg::ComputedGoto;
+            D_Indexed("JSR", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xae:
-            return D_Indexed("LDX  ", pc16, 2, pMemory);
+            D_Indexed("LDX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xaf:
-            return D_Indexed("STX  ", pc16, 2, pMemory);
+            D_Indexed("STX", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb0:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("SUBA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("SUBA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb1:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CMPA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CMPA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb2:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("SBCA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("SBCA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb3:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("SUBD ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("SUBD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb4:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ANDA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ANDA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb5:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("BITA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("BITA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb6:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDA  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb7:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STA  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb8:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("EORA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("EORA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xb9:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ADCA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ADCA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xba:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ORA  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ORA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbb:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ADDA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ADDA", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbc:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CMPX ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CMPX", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbd:
-            *pFlags |= InstFlg::Sub | InstFlg::JumpAddr;
-            return D_Extended("JSR  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::Sub | InstFlg::JumpAddr;
+            D_Extended("JSR", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbe:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDX  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDX", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xbf:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STX  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STX", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc0:
-            return D_Immediat("SUBB ", pc16, 2, pMemory);
+            D_Immediate8("SUBB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc1:
-            return D_Immediat("CMPB ", pc16, 2, pMemory);
+            D_Immediate8("CMPB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc2:
-            return D_Immediat("SBCB ", pc16, 2, pMemory);
+            D_Immediate8("SBCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc3:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("ADDD ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("ADDD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc4:
-            return D_Immediat("ANDB ", pc16, 2, pMemory);
+            D_Immediate8("ANDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc5:
-            return D_Immediat("BITB ", pc16, 2, pMemory);
+            D_Immediate8("BITB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc6:
-            return D_Immediat("LDB  ", pc16, 2, pMemory);
+            D_Immediate8("LDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
-        // 0xc7 is illegal
         case 0xc8:
-            return D_Immediat("EORB ", pc16, 2, pMemory);
+            D_Immediate8("EORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xc9:
-            return D_Immediat("ADCB ", pc16, 2, pMemory);
+            D_Immediate8("ADCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xca:
-            return D_Immediat("ORB  ", pc16, 2, pMemory);
+            D_Immediate8("ORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xcb:
-            return D_Immediat("ADDB ", pc16, 2, pMemory);
+            D_Immediate8("ADDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xcc:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("LDD  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("LDD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
-        // 0xcd is illegal
         case 0xce:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_ImmediatL("LDU  ", pc16, 3, pMemory, pAddr);
-
-        // 0xcf is illegal
+            p_flags |= InstFlg::LabelAddr;
+            D_Immediate16("LDU", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd0:
-            return D_Direct("SUBB ", pc16, 2, pMemory);
+            D_Direct("SUBB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd1:
-            return D_Direct("CMPB ", pc16, 2, pMemory);
+            D_Direct("CMPB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd2:
-            return D_Direct("SBCB ", pc16, 2, pMemory);
+            D_Direct("SBCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd3:
-            return D_Direct("ADDD ", pc16, 2, pMemory);
+            D_Direct("ADDD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd4:
-            return D_Direct("ANDB ", pc16, 2, pMemory);
+            D_Direct("ANDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd5:
-            return D_Direct("BITB ", pc16, 2, pMemory);
+            D_Direct("BITB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd6:
-            return D_Direct("LDB  ", pc16, 2, pMemory);
+            D_Direct("LDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd7:
-            return D_Direct("STB  ", pc16, 2, pMemory);
+            D_Direct("STB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd8:
-            return D_Direct("EORB ", pc16, 2, pMemory);
+            D_Direct("EORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xd9:
-            return D_Direct("ADCB ", pc16, 2, pMemory);
+            D_Direct("ADCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xda:
-            return D_Direct("ORB  ", pc16, 2, pMemory);
+            D_Direct("ORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xdb:
-            return D_Direct("ADDB ", pc16, 2, pMemory);
+            D_Direct("ADDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xdc:
-            return D_Direct("LDD  ", pc16, 2, pMemory);
+            D_Direct("LDD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xdd:
-            return D_Direct("STD  ", pc16, 2, pMemory);
+            D_Direct("STD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xde:
-            return D_Direct("LDU  ", pc16, 2, pMemory);
+            D_Direct("LDU", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xdf:
-            return D_Direct("STU  ", pc16, 2, pMemory);
+            D_Direct("STU", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe0:
-            return D_Indexed("SUBB ", pc16, 2, pMemory);
+            D_Indexed("SUBB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe1:
-            return D_Indexed("CMPB ", pc16, 2, pMemory);
+            D_Indexed("CMPB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe2:
-            return D_Indexed("SBCB ", pc16, 2, pMemory);
+            D_Indexed("SBCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe3:
-            return D_Indexed("ADDD ", pc16, 2, pMemory);
+            D_Indexed("ADDD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe4:
-            return D_Indexed("ANDB ", pc16, 2, pMemory);
+            D_Indexed("ANDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe5:
-            return D_Indexed("BITB ", pc16, 2, pMemory);
+            D_Indexed("BITB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe6:
-            return D_Indexed("LDB  ", pc16, 2, pMemory);
+            D_Indexed("LDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe7:
-            return D_Indexed("STB  ", pc16, 2, pMemory);
+            D_Indexed("STB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe8:
-            return D_Indexed("EORB ", pc16, 2, pMemory);
+            D_Indexed("EORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xe9:
-            return D_Indexed("ADCB ", pc16, 2, pMemory);
+            D_Indexed("ADCB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xea:
-            return D_Indexed("ORB  ", pc16, 2, pMemory);
+            D_Indexed("ORB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xeb:
-            return D_Indexed("ADDB ", pc16, 2, pMemory);
+            D_Indexed("ADDB", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xec:
-            return D_Indexed("LDD  ", pc16, 2, pMemory);
+            D_Indexed("LDD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xed:
-            return D_Indexed("STD  ", pc16, 2, pMemory);
+            D_Indexed("STD", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xee:
-            return D_Indexed("LDU  ", pc16, 2, pMemory);
+            D_Indexed("LDU", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xef:
-            return D_Indexed("STU  ", pc16, 2, pMemory);
+            D_Indexed("STU", 2, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf0:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("SUBB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("SUBB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf1:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("CMPB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("CMPB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf2:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("SBCA ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("SBCB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf3:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ADDD ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ADDD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf4:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ANDB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ANDB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf5:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("BITB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("BITB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf6:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDB  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf7:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STB  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf8:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("EORB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("EORB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xf9:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ADCB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ADCB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfa:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ORB  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ORB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfb:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("ADDB ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("ADDB", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfc:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDD  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfd:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STD  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STD", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xfe:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("LDU  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("LDU", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         case 0xff:
-            *pFlags |= InstFlg::LabelAddr;
-            return D_Extended("STU  ", pc16, 3, pMemory, pAddr);
+            p_flags |= InstFlg::LabelAddr;
+            D_Extended("STU", 3, p_code, p_mnemonic, p_operands);
+            break;
 
         default:
-            *pFlags |= InstFlg::Illegal;
-            return D_Illegal("", pc16, 1, pMemory);
-    }  // switch
-} // disassemble
+            return D_Illegal("", 1, p_code, p_mnemonic, p_operands);
+    }
+
+    return p_flags;
+}
+
+unsigned Da6809::getByteSize(const Byte *p_memory)
+{
+    static const Byte X = 1;
+    static const Byte Y = 2;
+    // Bit 0-3: byte size.
+    // Bit 4: Flag, if set, add additional bytes for index mode.
+    // Bit 5-7: reserved, should be 0.
+    // Table includes byte sizes of undocumented instructions.
+    static const std::array<Byte, 256> byteSizesPage1
+    {//-0 -1 -2 -3 -4 -5 -6 -7 -8 -9 -A -B -C -D -E -F
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 0-
+        X, X, 1, 1, X, X, 3, 3, X, 1, 2, X, 2, 1, 2, 2, // 1-
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 2-
+       18,18,18,18, 2, 2, 2, 2, X, 1, 1, 1, 2, 1, 1, 1, // 3-
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 4-
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 5-
+       18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18, // 6-
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // 7-
+        2, 2, 2, 3, 2, 2, 2, X, 2, 2, 2, 2, 3, 2, 3, X, // 8-
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // 9-
+       18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18, // A-
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // B-
+        2, 2, 2, 3, 2, 2, 2, X, 2, 2, 2, 2, 3, X, 3, X, // C-
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // D-
+       18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18, // E-
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // F-
+    };
+
+    static const std::array<Byte, 256> byteSizesPage2
+    {//-0 -1 -2 -3 -4 -5 -6 -7 -8 -9 -A -B -C -D -E -F
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 0-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 1-
+        Y, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, // 2-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, 2, // 3-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 4-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 5-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 6-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 7-
+        Y, Y, Y, 4, Y, Y, Y, Y, Y, Y, Y, Y, 4, Y, 4, Y, // 8-
+        Y, Y, Y, 3, Y, Y, Y, Y, Y, Y, Y, Y, 3, Y, 3, 3, // 9-
+        Y, Y, Y,19, Y, Y, Y, Y, Y, Y, Y, Y,19, Y,19,19, // A-
+        Y, Y, Y, 4, Y, Y, Y, Y, Y, Y, Y, Y, 4, Y, 4, 4, // B-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, 4, Y, // C-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, 3, 3, // D-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y,19,19, // E-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, 4, 4, // F-
+    };
+
+    static const std::array<Byte, 256> byteSizesPage3
+    {//-0 -1 -2 -3 -4 -5 -6 -7 -8 -9 -A -B -C -D -E -F
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 0-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 1-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 2-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, 2, // 3-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 4-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 5-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 6-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // 7-
+        Y, Y, Y, 4, Y, Y, Y, Y, Y, Y, Y, Y, 4, Y, Y, Y, // 8-
+        Y, Y, Y, 3, Y, Y, Y, Y, Y, Y, Y, Y, 3, Y, Y, Y, // 9-
+        Y, Y, Y,19, Y, Y, Y, Y, Y, Y, Y, Y,19, Y, Y, Y, // A-
+        Y, Y, Y, 4, Y, Y, Y, Y, Y, Y, Y, Y, 4, Y, Y, Y, // B-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // C-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // D-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // E-
+        Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, Y, // F-
+    };
+
+    // Contains the additional bytes using postbyte as index.
+    static const std::array<Byte, 256> additionalIndexedByteSize
+    {//-0 -1 -2 -3 -4 -5 -6 -7 -8 -9 -A -B -C -D -E -F
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 1-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 2-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 3-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 4-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 5-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 6-
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 7-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // 8-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 2, // 9-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 2, // A-
+        2, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // B-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // C-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // D-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // E-
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 1, 2, 0, 0, // F-
+    };
+
+    assert(p_memory != nullptr);
+
+    unsigned byteSize = 0U;
+    Byte opcode = *(p_memory++);
+    switch (opcode)
+    {
+        case PAGE2:
+        opcode = *(p_memory++);
+        byteSize = byteSizesPage2[opcode];
+        break;
+
+        case PAGE3:
+        opcode = *(p_memory++);
+        byteSize = byteSizesPage3[opcode];
+        break;
+
+        default:
+        byteSize = byteSizesPage1[opcode];
+        break;
+    }
+
+    if ((byteSize & 0x10U) != 0U)
+    {
+        return (byteSize & 0x0FU) + additionalIndexedByteSize[*p_memory];
+    }
+
+    return byteSize;
+}
 

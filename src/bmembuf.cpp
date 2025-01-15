@@ -2,8 +2,8 @@
     bmembuf.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2003-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2003-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,14 +20,16 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "misc1.h"
 #include "bmembuf.h"
+#include <utility>
 #include <algorithm>
+#include <stdexcept>
+#include <cstring>
 
 
-BMemoryBuffer::BMemoryBuffer(size_t aSize)
+BMemoryBuffer::BMemoryBuffer(DWord size)
 {
-    buffer.resize(aSize, 0);
+    buffer.resize(size, 0);
 }
 
 BMemoryBuffer::BMemoryBuffer(const BMemoryBuffer &src)
@@ -39,13 +41,9 @@ BMemoryBuffer::BMemoryBuffer(const BMemoryBuffer &src)
               std::back_inserter(addressRanges));
 }
 
-BMemoryBuffer::BMemoryBuffer(BMemoryBuffer &&src)
-{
-    buffer = std::move(src.buffer);
-    addressRanges = std::move(src.addressRanges);
-}
-
-BMemoryBuffer::~BMemoryBuffer()
+BMemoryBuffer::BMemoryBuffer(BMemoryBuffer &&src) noexcept
+    : buffer(std::move(src.buffer))
+    , addressRanges(std::move(src.addressRanges))
 {
 }
 
@@ -63,7 +61,7 @@ BMemoryBuffer &BMemoryBuffer::operator= (const BMemoryBuffer &src)
     return *this;
 }
 
-BMemoryBuffer &BMemoryBuffer::operator= (BMemoryBuffer &&src)
+BMemoryBuffer &BMemoryBuffer::operator= (BMemoryBuffer &&src) noexcept
 {
     buffer = std::move(src.buffer);
     addressRanges = std::move(src.addressRanges);
@@ -71,9 +69,9 @@ BMemoryBuffer &BMemoryBuffer::operator= (BMemoryBuffer &&src)
     return *this;
 }
 
-void BMemoryBuffer::CopyTo(Byte *target, size_t address, size_t aSize) const
+void BMemoryBuffer::CopyTo(Byte *target, DWord address, DWord size) const
 {
-    size_t secureSize = aSize;
+    auto secureSize = size;
 
     if (address >= buffer.size())
     {
@@ -82,20 +80,20 @@ void BMemoryBuffer::CopyTo(Byte *target, size_t address, size_t aSize) const
 
     if (address + secureSize >= buffer.size())
     {
-        secureSize -= address + aSize - buffer.size();
+        secureSize -= static_cast<DWord>(address + size - buffer.size());
     }
 
-    memcpy(target, buffer.data() + address, secureSize);
-    if (secureSize < aSize)
+    std::memcpy(target, buffer.data() + address, secureSize);
+    if (secureSize < size)
     {
         // Fill up buffer not represented in BMemoryBuffer by 0.
-        memset(target + secureSize, 0, aSize - secureSize);
+        std::memset(target + secureSize, 0, size - secureSize);
     }
 }
 
-void BMemoryBuffer::CopyFrom(const Byte *src, size_t address, size_t aSize)
+void BMemoryBuffer::CopyFrom(const Byte *source, DWord address, DWord size)
 {
-    size_t secureSize = aSize;
+    auto secureSize = size;
 
     if (address >= buffer.size())
     {
@@ -104,19 +102,18 @@ void BMemoryBuffer::CopyFrom(const Byte *src, size_t address, size_t aSize)
 
     if (address + secureSize >= buffer.size())
     {
-        secureSize -= address + aSize - buffer.size();
+        secureSize -= static_cast<DWord>(address + size - buffer.size());
     }
 
-    memcpy(buffer.data() + address, src, secureSize);
+    std::memcpy(buffer.data() + address, source, secureSize);
 
-    size_t endAddress = address + secureSize - 1;
-    addressRanges.emplace_back(
-            MemorySource<size_t>::AddressRange(address, endAddress));
+    DWord endAddress = address + secureSize - 1;
+    addressRanges.emplace_back(address, endAddress);
     join(addressRanges);
 }
 
 bool BMemoryBuffer::CopyTo(std::vector<Byte> &targetBuffer,
-           const MemorySource<size_t>::AddressRange &addressRange) const
+           const MemorySource<DWord>::AddressRange &addressRange) const
 {
     auto startIter = buffer.cbegin() + addressRange.lower();
     auto endIter = buffer.cbegin() + addressRange.upper() + 1;
@@ -128,11 +125,11 @@ bool BMemoryBuffer::CopyTo(std::vector<Byte> &targetBuffer,
 
 void BMemoryBuffer::Reset()
 {
-    memset(buffer.data(), 0, buffer.size());
+    std::memset(buffer.data(), 0, buffer.size());
     addressRanges.clear();
 }
 
-const MemorySource<size_t>::AddressRanges& BMemoryBuffer::GetAddressRanges() const
+const MemorySource<DWord>::AddressRanges& BMemoryBuffer::GetAddressRanges() const
 {
     return addressRanges;
 }

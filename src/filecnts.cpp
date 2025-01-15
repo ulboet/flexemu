@@ -2,7 +2,7 @@
     filecnts.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,21 +21,14 @@
 
 #include "filecnts.h"
 #include <ostream>
-#include <iomanip>
-#include <string>
-#include <sstream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
-std::ostream& operator<<(std::ostream& os, const  st_t &st)
+std::ostream& operator<<(std::ostream& os, const st_t &st)
 {
-    auto previous_flags = os.flags();
-    auto previous_fill = os.fill('0');
-
-    os <<
-        std::hex << std::uppercase <<
-        std::setw(2) << (Word)st.trk << "-" <<
-        std::setw(2) << (Word)st.sec;
-    os.fill(previous_fill);
-    os.flags(previous_flags);
+    os << fmt::format("{:02X}-{:02X}", static_cast<Word>(st.trk),
+            static_cast<Word>(st.sec));
 
     return os;
 }
@@ -44,7 +37,7 @@ std::ostream& operator<<(std::ostream& os, const  st_t &st)
 // except for a harddisk.
 Word getTrack0SectorCount(int tracks, int sectors)
 {
-    if (tracks >= 255)
+    if (tracks >= 254)
     {
         // This is a harddisk. Assuming same density for all tracks.
         return static_cast<Word>(sectors);
@@ -56,10 +49,10 @@ Word getTrack0SectorCount(int tracks, int sectors)
         if (sectors <= 26)
         {
             // This is a 8-inch single sided (SS) disk.
-            return 15U;
+            return static_cast<Word>(std::min(sectors, 15));
         }
         // This is a 8-inch double sided (DS) disk.
-        return 30U;
+        return static_cast<Word>(std::min(sectors, 30));
     }
 
     // Assuming 5 1/4-inch or 3 1/2-inch disk. 34, 35, 40 or 80 tracks.
@@ -69,16 +62,16 @@ Word getTrack0SectorCount(int tracks, int sectors)
         // This rule can be applied when creating a DSK container.
         // When reading a DSK container both 10 or 20 sectors
         // has to be supported.
-        return 10U;
+        return static_cast<Word>(std::min(sectors, 10));
     }
     // This is a double sided (DS) disk.
-    return 20U;
+    return static_cast<Word>(std::min(sectors, 20));
 }
 
 // Return the number of sides.
 Word getSides(int tracks, int sectors)
 {
-    if (tracks >= 255)
+    if (tracks >= 254)
     {
         // There are no details available about how many sides a hard disk
         // used by FLEX has => Return the default.
@@ -112,9 +105,9 @@ Word getSides(int tracks, int sectors)
     return !(sectors % 2) ? 2U : 1U;
 }
 
-Word getBytesPerSector(int sizecode)
+Word getBytesPerSector(uint32_t sizecode)
 {
-    return 128U << (sizecode & 0x03);
+    return 128U << (sizecode & 0x03U);
 }
 
 size_t getFileSize(const s_flex_header &header)

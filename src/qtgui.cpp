@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -45,16 +45,24 @@
 #include "sodiff.h"
 #include "foptman.h"
 #include "fsetupui.h"
+#include "qtfree.h"
+#include "colors.h"
+#include "poutwin.h"
+#include "fversion.h"
 #include "warnoff.h"
+#include "about_ui.h"
 #include <QString>
-#include <QVector>
+#include <QStringList>
 #include <QPixmap>
 #include <QPainter>
 #include <QIODevice>
 #include <QTextStream>
+#include <QFrame>
+#include <QLabel>
 #include <QWidget>
 #include <QScreen>
 #include <QToolBar>
+#include <QAbstractButton>
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QUrl>
@@ -78,78 +86,80 @@
 #include <QResizeEvent>
 #include <QCloseEvent>
 #include <QThread>
+#include <QTimer>
 #include <QHash>
 #include <QFont>
 #include <QFontDatabase>
+#include <QTextBrowser>
+#include <QGraphicsScene>
+#include <QGraphicsPixmapItem>
+#include <fmt/format.h>
 #include "warnon.h"
 #include <cmath>
+#include <array>
 
 int QtGui::preferencesTabIndex = 0;
 
 QtGui::QtGui(
-    Mc6809 &x_cpu,
-    Memory &x_memory,
-    Scheduler &x_scheduler,
-    Inout  &x_inout,
-    VideoControl1 &x_vico1,
-    VideoControl2 &x_vico2,
-    JoystickIO &x_joystickIO,
-    KeyboardIO &x_keyboardIO,
-    TerminalIO &x_terminalIO,
-    Pia1 &x_pia1,
-    struct sOptions &x_options)
+    Mc6809 &p_cpu,
+    Memory &p_memory,
+    Scheduler &p_scheduler,
+    Inout &p_inout,
+    VideoControl1 &p_vico1,
+    VideoControl2 &p_vico2,
+    JoystickIO &p_joystickIO,
+    KeyboardIO &p_keyboardIO,
+    TerminalIO &p_terminalIO,
+    Pia1 &p_pia1,
+    struct sOptions &p_options)
         : AbstractGui(
-               x_cpu
-             , x_memory
-             , x_inout
-             , x_terminalIO)
-        , e2screen(nullptr)
-        , preferencesAction(nullptr)
-        , isOriginalFrequency(false)
-        , isStatusBarVisible(true)
+               p_cpu
+             , p_memory
+             , p_inout
+             , p_terminalIO)
+        , mainLayout(new QVBoxLayout(this))
+        , statusBarLayout(new QHBoxLayout)
+        , menuBar(new QMenuBar)
+        , cpuDialog(new QDialog(this))
         , isRunning(true)
         , isConfirmClose(true)
         , isForceScreenUpdate(true)
-        , isRestartNeeded(false)
-        , timerTicks(0)
-        , oldFirstRasterLine(0)
-        , scheduler(x_scheduler)
-        , vico1(x_vico1)
-        , vico2(x_vico2)
-        , joystickIO(x_joystickIO)
-        , keyboardIO(x_keyboardIO)
-        , fdc(nullptr)
-        , options(x_options)
-        , oldOptions(x_options)
+        , scheduler(p_scheduler)
+        , vico1(p_vico1)
+        , vico2(p_vico2)
+        , joystickIO(p_joystickIO)
+        , keyboardIO(p_keyboardIO)
+        , options(p_options)
+        , oldOptions(p_options)
 {
-    logfileSettings.reset();
+    const QSize iconSize(options.iconSize, options.iconSize);
+
+    cpuLoggerConfig.reset();
 
     setObjectName("flexemuMainWindow");
 
     colorTable = CreateColorTable();
 
-    mainLayout = new QVBoxLayout(this);
     mainLayout->setObjectName(QString::fromUtf8("mainLayout"));
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
-
-    menuBar = new QMenuBar;
     mainLayout->addWidget(menuBar);
-    toolBarLayout = new QHBoxLayout();
-    toolBarLayout->setObjectName(QString::fromUtf8("toolBarLayout"));
-    toolBarLayout->setSpacing(0);
-    mainLayout->addLayout(toolBarLayout);
-    e2screen = new E2Screen(x_scheduler, x_joystickIO, x_keyboardIO,
-                            x_pia1, x_options, colorTable.first(), this);
+
+    CreateActions(*mainLayout, iconSize);
+
+    e2screen = new E2Screen(p_scheduler, p_joystickIO, p_keyboardIO,
+                            p_pia1, p_options, colorTable.first(), this);
     mainLayout->addWidget(e2screen, 1); //, Qt::AlignCenter);
-    QSizePolicy sizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    e2screen->setSizePolicy(sizePolicy);
     e2screen->setFocusPolicy(Qt::StrongFocus);
 
     CreateIcons();
-    CreateActions(*toolBarLayout);
-    CreateStatusToolBar(*mainLayout);
-    CreateStatusBar(*mainLayout);
+    CreateStatusToolBar(*mainLayout, iconSize);
+    const auto name = QString::fromUtf8("statusBarLayout");
+    statusBarLayout->setObjectName(name);
+    statusBarLayout->setContentsMargins(0, 0, 0, 0);
+    statusBarLayout->setSpacing(2);
+    mainLayout->addLayout(statusBarLayout);
+    CreateStatusBar(*statusBarLayout);
 
     setWindowState(Qt::WindowActive);
     // Resize needed here to overwrite previous adjustSize()
@@ -166,9 +176,9 @@ QtGui::QtGui(
     setWindowTitle(e2screen->GetTitle());
 
     e2screen->ReleaseMouseCapture();
+    e2screen->Attach(*this);
 
     // Initialize the non-modal CPU Dialog but don't open it.
-    cpuDialog = new QDialog(this);
     cpuUi.setupUi(cpuDialog);
     cpuDialog->setWindowTitle("Mc6809");
     cpuDialog->setModal(false);
@@ -176,6 +186,8 @@ QtGui::QtGui(
     cpuUi.b_run->setCheckable(true);
     cpuUi.b_stop->setCheckable(true);
     ConnectCpuUiSignalsWithSlots();
+
+    printOutputWindow = new PrintOutputWindow(options);
 
     SetCpuDialogMonospaceFont(QApplication::font().pointSize());
     UpdateCpuFrequencyCheck();
@@ -185,7 +197,13 @@ QtGui::QtGui(
         ToggleSmoothDisplay();
     }
 
-    OnIconSize(0);
+    SetIconSizeCheck(iconSize);
+
+    if (!options.isStatusBarVisible)
+    {
+        SetStatusBarVisibility(false);
+    }
+    UpdateStatusBarCheck();
 }
 
 QtGui::~QtGui()
@@ -193,11 +211,11 @@ QtGui::~QtGui()
     delete cpuDialog;
 }
 
-void QtGui::SetFloppy(E2floppy *x_fdc)
+void QtGui::SetFloppy(E2floppy *p_fdc)
 {
-    if (fdc == nullptr && x_fdc != nullptr)
+    if (fdc == nullptr && p_fdc != nullptr)
     {
-        fdc = x_fdc; // Only Eurocom II/V7 has a floppy controller.
+        fdc = p_fdc; // Only Eurocom II/V7 has a floppy controller.
 
         AddDiskStatusButtons();
     }
@@ -208,53 +226,63 @@ bool QtGui::HasFloppy() const
     return fdc != nullptr;
 }
 
-void QtGui::output_to_graphic()
+bool QtGui::output_to_graphic()
 {
-    AbstractGui::output_to_graphic();
+    const auto result = AbstractGui::output_to_graphic();
     if (!isVisible())
     {
         show();
     }
+
+    return result;
 }
 
-QToolBar *QtGui::CreateToolBar(QWidget *parent, const QString &title,
-                               const QString &objectName)
+// Implementation may change in future.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+FlexemuToolBar *QtGui::CreateToolBar(QWidget *parent, const QString &title,
+        const QString &objectName, const QSize &iconSize) const
 {
-    QToolBar *toolBar = new QToolBar(title, parent);
-    toolBar->setObjectName(objectName);
-    toolBar->setFloatable(false);
-    toolBar->setMovable(false);
-    toolBar->setIconSize({16, 16});
-    QSizePolicy sizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    toolBar->setSizePolicy(sizePolicy);
-    toolBarLayout->addWidget(toolBar);
+    auto *newToolBar = new FlexemuToolBar(title, parent);
+    assert(newToolBar != nullptr);
+    newToolBar->setObjectName(objectName);
+    newToolBar->setFloatable(false);
+    newToolBar->setMovable(false);
+    newToolBar->setIconSize(iconSize);
+    newToolBar->SetPixelSize(options.pixelSize);
 
-    return toolBar;
+    return newToolBar;
+}
+
+void QtGui::OnPrinterOutput()
+{
+    printOutputWindow->show();
+    printOutputWindow->raise();
 }
 
 void QtGui::OnExit()
 {
     bool safeFlag = isRestartNeeded;
 
+    e2screen->Detach(*this);
     isRestartNeeded = false;
     close();
     isRestartNeeded = safeFlag;
 }
 
-void QtGui::SetPreferencesStatusText(bool x_isRestartNeeded) const
+void QtGui::SetPreferencesStatusText(bool p_isRestartNeeded) const
 {
     assert(preferencesAction != nullptr);
 
-    const auto statusText = x_isRestartNeeded ?
+    const auto statusText = p_isRestartNeeded ?
         tr("Edit application preferences - Needs restart") :
         tr("Edit application preferences");
 
     preferencesAction->setStatusTip(statusText);
 }
 
-QIcon QtGui::GetPreferencesIcon(bool x_isRestartNeeded) const
+QIcon QtGui::GetPreferencesIcon(bool p_isRestartNeeded)
 {
-    return x_isRestartNeeded ?
+    return p_isRestartNeeded ?
         QIcon(":/resource/preferences-needs-restart.png") :
         QIcon(":/resource/preferences.png");
 }
@@ -292,6 +320,7 @@ void QtGui::OnPreferences()
 
         if (isRestartNeeded)
         {
+            e2screen->Detach(*this);
             if (close())
             {
                 // Force restart flexemu
@@ -348,6 +377,16 @@ void QtGui::OnPreferences()
                 case FlexemuOptionId::FileTimeAccess:
                 case FlexemuOptionId::IsTerminalIgnoreESC:
                 case FlexemuOptionId::IsTerminalIgnoreNUL:
+                case FlexemuOptionId::PrintFont:
+                case FlexemuOptionId::IsPrintPageBreakDetected:
+                case FlexemuOptionId::PrintOrientation:
+                case FlexemuOptionId::PrintPageSize:
+                case FlexemuOptionId::PrintUnit:
+                case FlexemuOptionId::PrintOutputWindowGeometry:
+                case FlexemuOptionId::PrintPreviewDialogGeometry:
+                case FlexemuOptionId::PrintConfigs:
+                case FlexemuOptionId::IsDirectoryDiskActive:
+                case FlexemuOptionId::DirectoryDiskTrkSec:
                     isWriteOptions = true;
                     break;
 
@@ -364,6 +403,10 @@ void QtGui::OnPreferences()
                 case FlexemuOptionId::IsFlexibleMmu:
                 case FlexemuOptionId::IsEurocom2V5:
                 case FlexemuOptionId::IsUseRtc:
+                case FlexemuOptionId::IconSize:
+                case FlexemuOptionId::TerminalType:
+                case FlexemuOptionId::IsStatusBarVisible:
+                case FlexemuOptionId::IsConfirmExit:
                     break;
             }
         }
@@ -458,7 +501,8 @@ void QtGui::OnCpuDialogToggle()
         // Choose the right position for the CPU Dialog
         // either above or below the main window.
         auto position = pos();
-        int x, y;
+        int x;
+        int y;
 
         x = frameGeometry().x() +
             (frameGeometry().width() / 2) -
@@ -474,7 +518,8 @@ void QtGui::OnCpuDialogToggle()
 
             if (!QGuiApplication::screens().isEmpty())
             {
-                screenHeight = QGuiApplication::screens().first()->geometry().height();
+                screenHeight =
+                    QGuiApplication::screens().first()->geometry().height();
             }
 
             y = frameGeometry().y() + frameGeometry().height() + 1;
@@ -501,33 +546,26 @@ void QtGui::OnCpuDialogClose()
 
 void QtGui::ConnectCpuUiSignalsWithSlots()
 {
-    QObject::connect(cpuUi.b_close, &QAbstractButton::clicked,
+    connect(cpuUi.b_close, &QAbstractButton::clicked,
             this, &QtGui::OnCpuDialogClose);
-
-    QObject::connect(cpuUi.b_run, &QAbstractButton::clicked,
+    connect(cpuUi.b_run, &QAbstractButton::clicked,
             this, &QtGui::OnCpuRun);
-    QObject::connect(cpuUi.b_stop, &QAbstractButton::clicked,
-            this, &QtGui::OnCpuStop);
-    QObject::connect(cpuUi.b_step, &QAbstractButton::clicked,
-            this, &QtGui::OnCpuStep);
-    QObject::connect(cpuUi.b_next, &QAbstractButton::clicked,
-            this, &QtGui::OnCpuNext);
-    QObject::connect(cpuUi.b_reset, &QAbstractButton::clicked,
-            this, &QtGui::OnCpuReset);
-    QObject::connect(cpuUi.b_breakpoints, &QAbstractButton::clicked,
+    connect(cpuUi.b_stop, &QAbstractButton::clicked, this, &QtGui::OnCpuStop);
+    connect(cpuUi.b_step, &QAbstractButton::clicked, this, &QtGui::OnCpuStep);
+    connect(cpuUi.b_next, &QAbstractButton::clicked, this, &QtGui::OnCpuNext);
+    connect(cpuUi.b_reset, &QAbstractButton::clicked, this, &QtGui::OnCpuReset);
+    connect(cpuUi.b_breakpoints, &QAbstractButton::clicked,
             this, &QtGui::OnCpuBreakpoints);
-    QObject::connect(cpuUi.b_logfile, &QAbstractButton::clicked,
+    connect(cpuUi.b_logfile, &QAbstractButton::clicked,
             this, &QtGui::OnCpuLogging);
 }
 
 void QtGui::OnCpuBreakpoints()
 {
-    BPArray breakpoints = {};
+    BPArray breakpoints = { cpu.get_bp(0), cpu.get_bp(1) };
     auto *dialog = new QDialog;
     BreakpointSettingsUi ui;
 
-    breakpoints[0] = cpu.get_bp(0);
-    breakpoints[1] = cpu.get_bp(1);
     ui.setupUi(*dialog);
     ui.SetData(breakpoints);
 
@@ -535,17 +573,20 @@ void QtGui::OnCpuBreakpoints()
 
     if (result == QDialog::Accepted)
     {
+        int index = 0;
+
         breakpoints = ui.GetData();
-        for (int index = 0; index < 2; ++index)
+        for (const auto &breakpoint : breakpoints)
         {
-            if (breakpoints[index] <= 0xFFFF)
+            if (breakpoint.has_value())
             {
-                cpu.set_bp(index, static_cast<Word>(breakpoints[index]));
+                cpu.set_bp(index, breakpoint.value());
             }
             else
             {
                 cpu.reset_bp(index);
             }
+            ++index;
         }
     }
 }
@@ -553,15 +594,16 @@ void QtGui::OnCpuBreakpoints()
 void QtGui::OnCpuLogging()
 {
     auto *dialog = new QDialog;
-    LogfileSettingsUi ui;
+    Mc6809LoggerConfigUi ui;
     ui.setupUi(*dialog);
-    ui.SetData(logfileSettings);
+    ui.SetData(cpuLoggerConfig);
 
     auto result = dialog->exec();
     if (result == QDialog::Accepted)
     {
-        logfileSettings = ui.GetData();
-        scheduler.sync_exec(BCommandPtr(new CSetLogFile(cpu, logfileSettings)));
+        cpuLoggerConfig = ui.GetData();
+        scheduler.sync_exec(BCommandPtr(new CmdSetMc6809LoggerConfig(
+                        cpu, cpuLoggerConfig)));
     }
 }
 
@@ -575,7 +617,7 @@ void QtGui::OnCpuUndocumentedInstructions()
     ToggleCpuUndocumented();
 }
 
-void QtGui::OnIntroduction()
+void QtGui::OnIntroduction() const
 {
     QString documentationDir = options.doc_dir.c_str();
     auto url = CreateDocumentationUrl(documentationDir, "flexemu.htm");
@@ -583,14 +625,27 @@ void QtGui::OnIntroduction()
     QDesktopServices::openUrl(url);
 }
 
+// Implementation may change in future.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void QtGui::OnAbout()
 {
-    auto version = QString(VERSION);
+    QDialog dialog;
+    Ui_AboutDialog ui{};
 
-    auto title = QString::asprintf(tr("About %s").toUtf8().data(), PROGRAMNAME);
+    ui.setupUi(&dialog);
+    const auto aboutIcon = QIcon(":/resource/about.png");
+    dialog.setWindowIcon(aboutIcon);
+    dialog.resize({0, 0});
+    dialog.setModal(true);
+    dialog.setSizeGripEnabled(true);
+    auto title = tr("About %1").arg(PROGRAMNAME);
+    dialog.setWindowTitle(title);
+    auto *scene = new QGraphicsScene(ui.w_icon);
+    scene->setSceneRect(0, 0, 32, 32);
+    ui.w_icon->setScene(scene);
+    scene->addPixmap(QPixmap(":/resource/flexemu.png"))->setPos(0, 0);
 
-    QMessageBox::about(this, title,
-        tr("<b>%1 V%2</b><p>"
+    auto aboutText = tr("<b>%1 V%2</b><p>"
            "%1 is an MC6809 emulator running "
            "<a href=\"https://en.wikipedia.org/wiki/FLEX_(operating_system)\">"
            "FLEX operating system</a>.<p>"
@@ -602,12 +657,31 @@ void QtGui::OnAbout()
            "<a href=\"http://flexemu.neocities.org/copying.txt\">"
            "GNU GENERAL PUBLIC LICENCE V2</a>.<p><p>"
            "Have Fun!<p><p>"
-           "Copyright (C) 1997-2022 "
+           "Copyright (C) 1997-2025 "
            "<a href=\"mailto:wolfgang.schwotzer@gmx.net\">"
            "Wolfgang Schwotzer</a><p>"
            "<a href=\"http://flexemu.neocities.org\">"
            "http://flexemu.neocities.org</a>")
-        .arg(PROGRAMNAME).arg(version));
+        .arg(PROGRAMNAME).arg(VERSION);
+    ui.e_about->setOpenExternalLinks(true);
+    ui.e_about->setHtml(aboutText);
+
+    auto versionsText = tr("<b>%1 V%2</b><p>compiled for " OSTYPE ", uses:")
+        .arg(PROGRAMNAME).arg(VERSION);
+    versionsText.append("<table>");
+    for (const auto &version : FlexemuVersions::GetVersions())
+    {
+        std::stringstream stream;
+
+        stream << "<tr><td>&#x2022;</td><td>" << version.first <<
+            "</td><td>" << version.second + "</td></tr>";
+        versionsText.append(stream.str().c_str());
+    }
+    versionsText.append("</table>");
+    ui.e_versions->setOpenExternalLinks(true);
+    ui.e_versions->insertHtml(versionsText);
+
+    dialog.exec();
 }
 
 void QtGui::OnTimer()
@@ -618,6 +692,7 @@ void QtGui::OnTimer()
     // - CPU view update
     // - Disk status update
     // - interrupt info update
+    // - CPU frequency update (if newFrequency has value)
     if (++timerTicks % (100000 / TIME_BASE) == 0)
     {
         timerTicks = 0;
@@ -625,22 +700,26 @@ void QtGui::OnTimer()
         // Check for disk status update every 200 ms
         static tInterruptStatus irqStat;
         tInterruptStatus newIrqStat;
-        static bool isFirstTime = true;
-        static bool lastState[INT_RESET + 1];
+        static std::array<bool, INT_RESET + 1> lastState{};
         bool bState;
 
         if (HasFloppy())
         {
-            static DiskStatus status[4];
-            DiskStatus newStatus[4];
+            static std::array<DiskStatus, MAX_DRIVES> status{};
+            std::array<DiskStatus, MAX_DRIVES> newStatus{};
+
+            if (isTimerFirstTime)
+            {
+                status = {};
+            }
 
             fdc->get_drive_status(newStatus);
 
-            for (t = 0; t < 4; ++t)
+            for (t = 0; t < MAX_DRIVES; ++t)
             {
-                if ((newStatus[t] != status[t]) || isFirstTime)
+                if (newStatus[t] != status[t])
                 {
-                    UpdateDiskStatus(t, newStatus[t]);
+                    UpdateDiskStatus(t, status[t], newStatus[t]);
                     status[t] = newStatus[t];
                 }
             }
@@ -649,26 +728,49 @@ void QtGui::OnTimer()
         scheduler.get_interrupt_status(newIrqStat);
 
         auto target_frequency = scheduler.get_target_frequency();
-        bool newIsOriginalFrequency = (target_frequency > 0.0f) &&
-            std::fabs(target_frequency - ORIGINAL_FREQUENCY) < 0.01f;
+        bool newIsOriginalFrequency = (target_frequency > 0.0F) &&
+            std::fabs(target_frequency - ORIGINAL_FREQUENCY) < 0.01F;
         if (newIsOriginalFrequency != isOriginalFrequency)
         {
             isOriginalFrequency = newIsOriginalFrequency;
             UpdateCpuFrequencyCheck();
         }
+        {
+            std::lock_guard<std::mutex> guard(newFrequencyMutex);
+            if (newFrequency.has_value())
+            {
+                SetCpuFrequency(*newFrequency);
+                newFrequency.reset();
+            }
+        }
 
-        if (isFirstTime)
+        std::vector<Byte> newKeysCopy;
+        {
+            std::lock_guard<std::mutex> guard(newKeysMutex);
+            if (!newKeys.empty())
+            {
+                newKeysCopy = std::move(newKeys);
+            }
+        }
+
+        for (auto key : newKeysCopy)
+        {
+            const auto newKeyString = GetKeyString(key);
+            newKeyLabel->setText(QString::fromStdString(newKeyString));
+        }
+
+        if (isTimerFirstTime)
         {
             for (t = INT_IRQ; t <= INT_RESET; ++t)
             {
                 lastState[t] = false;
                 irqStat.count[t] = 0;
-                UpdateInterruptStatus((tIrqType)t, false);
+                UpdateInterruptStatus(static_cast<tIrqType>(t), false);
             }
 
             UpdateCpuUndocumentedCheck();
 
-            isFirstTime = false;
+            isTimerFirstTime = false;
         }
         else
         {
@@ -678,7 +780,7 @@ void QtGui::OnTimer()
 
                 if (bState != lastState[t])
                 {
-                    UpdateInterruptStatus((tIrqType)t, bState);
+                    UpdateInterruptStatus(static_cast<tIrqType>(t), bState);
                     lastState[t] = bState;
                 }
             }
@@ -695,9 +797,12 @@ void QtGui::OnTimer()
     if ((timerTicks % 2) == 1)
     {
         // check if CPU view has to be updated
-        Mc6809CpuStatus *status = (Mc6809CpuStatus *)scheduler.get_status();
+        const auto *status =
+            dynamic_cast<Mc6809CpuStatus *>(scheduler.get_status());
+
         if (status != nullptr)
         {
+            static CpuState previousState = CpuState::NONE;
             isRunning = (status->state == CpuState::Run ||
                          status->state == CpuState::Next);
 
@@ -705,20 +810,32 @@ void QtGui::OnTimer()
 
             update_cpuview(*status);
 
-            if (status->state == CpuState::Invalid)
+            if (previousState != CpuState::Invalid &&
+                status->state == CpuState::Invalid)
             {
-                auto message = QString::asprintf(tr("\
-    Got invalid instruction\n\
-    pc=%04x instr=%02x %02x %02x %02x\n\
-    Processor stopped. To\n\
-    continue press Reset button").toUtf8().data(),
-                        status->pc,
-                        status->instruction[0],
-                        status->instruction[1],
-                        status->instruction[2],
-                        status->instruction[3]);
-                PopupMessage(message);
+                // CPU got an invalid instruction.
+                auto pc = QString("%1")
+                    .arg(status->pc, 4, 16, QChar('0')).toUpper();
+                QStringList hexBytes;
+                for (Byte byte : status->instruction)
+                {
+                    auto hexString = QString("%1").arg(byte, 2, 16, QChar('0'));
+                    hexBytes.append(hexString.toUpper());
+                }
+                auto message = tr(
+                    "CPU got an invalid instruction.\n"
+                    "PC=%1 opcode=%2\n"
+                    "CPU has stopped.\n"
+                    "Pressing OK will execute a Reset.")
+                        .arg(pc).arg(hexBytes.join(QChar(' ')));
+
+                QTimer::singleShot(0, this, [&, message]()
+                {
+                    QMessageBox::critical(this, "flexemu error", message);
+                    OnCpuResetRun();
+                });
             }
+            previousState = status->state;
         }
 
         auto firstRasterLine = vico2.get_value();
@@ -759,31 +876,23 @@ void QtGui::OnTimer()
     }
 }
 
-QString QtGui::GetScreenSizeStatusTip(int index) const
+QString QtGui::GetScreenSizeStatusTip(int index)
 {
-    switch (index)
+    static const QStringList statusTips{
+        tr("Resize Screen to default size (512 x 256)"),
+        tr("Resize Screen to double size (1024 x 512)"),
+        tr("Resize Screen to triple size (1536 x 768)"),
+        tr("Resize Screen to quadruple size (2048 x 1024)"),
+        tr("Resize Screen to quintuple size (2560 x 1280)"),
+        tr("Enter Fullscreen Mode"),
+    };
+
+    if (index >= 0 && index < statusTips.size())
     {
-        case 0:
-            return tr("Resize Screen to default size (512 x 256)");
-
-        case 1:
-            return tr("Resize Screen to double size (1024 x 512)");
-
-        case 2:
-            return tr("Resize Screen to triple size (1536 x 768)");
-
-        case 3:
-            return tr("Resize Screen to quadruple size (2048 x 1024)");
-
-        case 4:
-            return tr("Resize Screen to quintuple size (2560 x 1280)");
-
-        case 6:
-            return tr("Enter Fullscreen Mode");
-
-        default:
-            return "";
+        return statusTips[index];
     }
+
+    return "";
 }
 
 void QtGui::OnScreenSizeHighlighted(int index) const
@@ -795,9 +904,15 @@ void QtGui::OnScreenSizeHighlighted(int index) const
 
 void QtGui::OnIconSize(int index)
 {
-    int size = 16 + 8 * index;
+    const int size = 16 + 8 * index;
+    const QSize iconSize({size, size});
 
-    SetIconSize({size, size});
+    SetIconSize(iconSize);
+    SetIconSizeCheck(iconSize);
+
+    options.iconSize = size;
+    oldOptions.iconSize = options.iconSize;
+    WriteOneOption(options, FlexemuOptionId::IconSize);
 }
 
 void QtGui::OnScreenSize(int index)
@@ -816,6 +931,10 @@ void QtGui::OnScreenSize(int index)
             SetFullScreenMode(false);
         }
         e2screen->ResizeToFactor(index + 1);
+        toolBar->SetPixelSize(index + 1);
+        toolBar->updateGeometry();
+        statusToolBar->SetPixelSize(index + 1);
+        statusToolBar->updateGeometry();
         AdjustSize();
 
         oldOptions.pixelSize = index + 1;
@@ -844,70 +963,63 @@ void QtGui::UpdateScreenSizeValue(int index) const
     }
 }
 
-void QtGui::CreateActions(QLayout &layout)
+void QtGui::CreateActions(QLayout &layout, const QSize &iconSize)
 {
-    CreateFileActions(layout);
-    CreateEditActions(layout);
-    CreateViewActions(layout);
-    CreateCpuActions(layout);
-    CreateHelpActions(layout);
-    CreateHorizontalSpacer(layout);
+    toolBar = CreateToolBar(this, tr("ToolBar"), QStringLiteral("toolBar"),
+            iconSize);
+    assert(toolBar != nullptr);
+    layout.addWidget(toolBar);
+
+    CreateFileActions(*toolBar);
+    CreateEditActions(*toolBar);
+    CreateViewActions(*toolBar);
+    CreateCpuActions(*toolBar);
+    CreateHelpActions(*toolBar);
 }
 
-void QtGui::CreateFileActions(QLayout& layout)
+void QtGui::CreateFileActions(QToolBar &p_toolBar)
 {
     auto *fileMenu = menuBar->addMenu(tr("&File"));
-    fileToolBar =
-        CreateToolBar(this, tr("File"), QStringLiteral("fileToolBar"));
-    QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    fileToolBar->setSizePolicy(sizePolicy);
-    layout.addWidget(fileToolBar);
+
+    const auto printerIcon = QIcon(":/resource/print-output.png");
+    printOutputAction =
+        fileMenu->addAction(printerIcon, tr("Open &Printer Output Window"));
+    connect(printOutputAction, &QAction::triggered, this,
+            &QtGui::OnPrinterOutput);
+    printOutputAction->setStatusTip(tr("Open the printer output window"));
+    fileMenu->addSeparator();
 
     const auto exitIcon = QIcon(":/resource/exit.png");
     exitAction = fileMenu->addAction(exitIcon, tr("E&xit"));
     connect(exitAction, &QAction::triggered, this, &QtGui::OnExit);
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    exitAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::CTRL | Qt::Key_Q));
-#else
-    exitAction->setShortcut(QKeySequence(Qt::SHIFT + Qt::CTRL + Qt::Key_Q));
-#endif
+    exitAction->setShortcut(QKeySequence(tr("Shift+Ctrl+Q")));
     exitAction->setStatusTip(tr("Exit the application"));
-    fileToolBar->addAction(exitAction);
+    p_toolBar.addAction(exitAction);
+
+    p_toolBar.addAction(printOutputAction);
 }
 
-void QtGui::CreateEditActions(QLayout& layout)
+void QtGui::CreateEditActions(QToolBar &p_toolBar)
 {
     auto *editMenu = menuBar->addMenu(tr("&Edit"));
-    editToolBar =
-        CreateToolBar(this, tr("Edit"), QStringLiteral("editToolBar"));
-    QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    editToolBar->setSizePolicy(sizePolicy);
-    layout.addWidget(editToolBar);
 
+    p_toolBar.addSeparator();
     const auto preferencesIcon = GetPreferencesIcon(isRestartNeeded);
     preferencesAction =
         editMenu->addAction(preferencesIcon, tr("&Preferences"));
     SetPreferencesStatusText(isRestartNeeded);
     connect(preferencesAction, &QAction::triggered,
             this, &QtGui::OnPreferences);
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    const auto keySequence = QKeySequence(Qt::SHIFT | Qt::CTRL | Qt::Key_P);
-#else
-    const auto keySequence = QKeySequence(Qt::SHIFT + Qt::CTRL + Qt::Key_P);
-#endif
+    const auto keySequence = QKeySequence(tr("Shift+Ctrl+P"));
     preferencesAction->setShortcut(keySequence);
-    editToolBar->addAction(preferencesAction);
+    p_toolBar.addAction(preferencesAction);
 }
 
-void QtGui::CreateViewActions(QLayout& layout)
+void QtGui::CreateViewActions(QToolBar &p_toolBar)
 {
     auto *viewMenu = menuBar->addMenu(tr("&View"));
-    viewToolBar =
-        CreateToolBar(this, tr("View"), QStringLiteral("viewToolBar"));
-    QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    viewToolBar->setSizePolicy(sizePolicy);
-    layout.addWidget(viewToolBar);
 
+    p_toolBar.addSeparator();
     auto keySequenceFullScreen = QKeySequence(QKeySequence::FullScreen);
     auto sequences = QKeySequence::keyBindings(QKeySequence::FullScreen);
     if (sequences.isEmpty())
@@ -929,24 +1041,27 @@ void QtGui::CreateViewActions(QLayout& layout)
 
     auto *iconSizeMenu = viewMenu->addMenu(tr("&Icon Size"));
 
-    for (uint index = 0U; index < ICON_SIZES; ++index)
+    for (uint16_t index = 0U; index < ICON_SIZES; ++index)
     {
         iconSizeAction[index] = CreateIconSizeAction(*iconSizeMenu, index);
+        connect(iconSizeAction[index], &QAction::triggered,
+            this, [&,index](){ OnIconSize(index); });
     }
 
     auto *screenSizeMenu = viewMenu->addMenu(tr("&Screen Size"));
     screenSizeComboBox = new QComboBox();
 
-    for (uint index = 0U; index < SCREEN_SIZES; ++index)
+    for (uint16_t index = 0; index < SCREEN_SIZES; ++index)
     {
-        const auto iconPath =
-            QString::asprintf(":/resource/screen%u.png", index + 1);
+        const auto iconPath = QString(":/resource/screen%1.png").arg(index + 1);
         const auto screenSizeIcon = QIcon(iconPath);
 
         screenSizeAction[index] =
             CreateScreenSizeAction(screenSizeIcon, *screenSizeMenu, index);
-        auto text = QString::asprintf("x%u", index + 1);
+        auto text = QString("x%1").arg(index + 1);
         screenSizeComboBox->addItem(screenSizeIcon, text);
+        screenSizeComboBox->setMinimumContentsLength(
+                cast_from_qsizetype(text.size()));
     }
 
     const auto screenFullIcon = QIcon(":/resource/screen-full.png");
@@ -954,7 +1069,7 @@ void QtGui::CreateViewActions(QLayout& layout)
     screenSizeComboBox->insertSeparator(screenSizeComboBox->count() - 1);
     // E2Screen is the only widget which gets the focus.
     screenSizeComboBox->setFocusPolicy(Qt::NoFocus);
-    viewToolBar->addWidget(screenSizeComboBox);
+    p_toolBar.addWidget(screenSizeComboBox);
     ConnectScreenSizeComboBoxSignalSlots();
 
     viewMenu->addMenu(screenSizeMenu);
@@ -963,49 +1078,45 @@ void QtGui::CreateViewActions(QLayout& layout)
     smoothAction = viewMenu->addAction(tr("&Smooth Display"));
     connect(smoothAction, &QAction::triggered, this, &QtGui::OnSmoothDisplay);
     smoothAction->setCheckable(true);
-    smoothAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_F12));
+    smoothAction->setShortcut(QKeySequence(tr("Ctrl+F12")));
     smoothAction->setStatusTip(tr("Enter or exit smooth display mode"));
     viewMenu->addAction(smoothAction);
 }
 
-void QtGui::CreateCpuActions(QLayout& layout)
+void QtGui::CreateCpuActions(QToolBar &p_toolBar)
 {
     auto *cpuMenu = menuBar->addMenu(tr("&CPU"));
-    cpuToolBar =
-        CreateToolBar(this, tr("CPU"), QStringLiteral("cpuToolBar"));
-    QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    cpuToolBar->setSizePolicy(sizePolicy);
-    layout.addWidget(cpuToolBar);
 
+    p_toolBar.addSeparator();
     const auto runIcon = QIcon(":/resource/run.png");
     cpuRunAction = cpuMenu->addAction(runIcon, tr("&Run"));
     connect(cpuRunAction, &QAction::triggered, this, &QtGui::OnCpuRun);
     cpuRunAction->setCheckable(true);
     cpuRunAction->setStatusTip(tr("Continue CPU execution"));
-    cpuToolBar->addAction(cpuRunAction);
+    p_toolBar.addAction(cpuRunAction);
 
     const auto stopIcon = QIcon(":/resource/stop.png");
     cpuStopAction = cpuMenu->addAction(stopIcon, tr("&Stop"));
     connect(cpuStopAction, &QAction::triggered, this, &QtGui::OnCpuStop);
     cpuStopAction->setCheckable(true);
     cpuStopAction->setStatusTip(tr("Stop CPU execution"));
-    cpuToolBar->addAction(cpuStopAction);
+    p_toolBar.addAction(cpuStopAction);
 
     const auto resetIcon = QIcon(":/resource/reset.png");
     cpuResetAction = cpuMenu->addAction(resetIcon, tr("&Reset"));
     connect(cpuResetAction, &QAction::triggered, this, &QtGui::OnCpuResetRun);
     cpuResetAction->setStatusTip(tr("Reset and continue CPU execution"));
-    cpuToolBar->addAction(cpuResetAction);
+    p_toolBar.addAction(cpuResetAction);
 
     cpuMenu->addSeparator();
-    cpuToolBar->addSeparator();
+    p_toolBar.addSeparator();
     const auto viewIcon = QIcon(":/resource/cpu.png");
     cpuViewAction = cpuMenu->addAction(viewIcon, tr("&View..."));
     connect(cpuViewAction, &QAction::triggered,
         this, &QtGui::OnCpuDialogToggle);
     cpuViewAction->setStatusTip(tr("Open CPU status window"));
     cpuViewAction->setCheckable(true);
-    cpuToolBar->addAction(cpuViewAction);
+    p_toolBar.addAction(cpuViewAction);
 
     const auto breakpointsIcon = QIcon(":/resource/breakpoints.png");
     auto text = tr("&Breakpoints...");
@@ -1013,16 +1124,16 @@ void QtGui::CreateCpuActions(QLayout& layout)
     connect(breakpointsAction, &QAction::triggered,
         this, &QtGui::OnCpuBreakpoints);
     breakpointsAction->setStatusTip(tr("Open breakpoint settings"));
-    cpuToolBar->addAction(breakpointsAction);
+    p_toolBar.addAction(breakpointsAction);
 
     const auto loggingIcon = QIcon(":/resource/logging.png");
     loggingAction = cpuMenu->addAction(loggingIcon, tr("&Logging..."));
     connect(loggingAction, &QAction::triggered, this, &QtGui::OnCpuLogging);
     loggingAction->setStatusTip(tr("Open logging settings"));
-    cpuToolBar->addAction(loggingAction);
+    p_toolBar.addAction(loggingAction);
 
     cpuMenu->addSeparator();
-    cpuToolBar->addSeparator();
+    p_toolBar.addSeparator();
     const auto originalFrequencyIcon =
         QIcon(":/resource/original-frequency.png");
     text = tr("&Original Frequency");
@@ -1032,7 +1143,7 @@ void QtGui::CreateCpuActions(QLayout& layout)
     originalFrequencyAction->setCheckable(true);
     text = tr("Set original or maximum possible CPU frequency");
     originalFrequencyAction->setStatusTip(text);
-    cpuToolBar->addAction(originalFrequencyAction);
+    p_toolBar.addAction(originalFrequencyAction);
 
     const auto undocumentedIcon = QIcon(":/resource/cpu-undocumented.png");
     text = tr("&Undocumented Instructions");
@@ -1044,15 +1155,11 @@ void QtGui::CreateCpuActions(QLayout& layout)
             tr("Toggle support of undocumented CPU instructions"));
 }
 
-void QtGui::CreateHelpActions(QLayout& layout)
+void QtGui::CreateHelpActions(QToolBar &p_toolBar)
 {
     auto *helpMenu = menuBar->addMenu(tr("&Help"));
-    helpToolBar =
-        CreateToolBar(this, tr("Help"), QStringLiteral("helpToolBar"));
-    QSizePolicy sizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    helpToolBar->setSizePolicy(sizePolicy);
-    layout.addWidget(helpToolBar);
 
+    p_toolBar.addSeparator();
     const auto introductionIcon = QIcon(":/resource/info.png");
     auto text = tr("&Introduction");
     introductionAction = helpMenu->addAction(introductionIcon, text);
@@ -1060,7 +1167,7 @@ void QtGui::CreateHelpActions(QLayout& layout)
         this, &QtGui::OnIntroduction);
     introductionAction->setStatusTip(
             tr("Open an introduction to this application"));
-    helpToolBar->addAction(introductionAction);
+    p_toolBar.addAction(introductionAction);
 
     const auto aboutIcon = QIcon(":/resource/about.png");
     aboutAction = helpMenu->addAction(aboutIcon, tr("&About"));
@@ -1073,17 +1180,13 @@ void QtGui::CreateHelpActions(QLayout& layout)
     aboutQtAction->setStatusTip(tr("Show the Qt library's about box"));
 }
 
-void QtGui::CreateHorizontalSpacer(QLayout &layout)
-{
-    auto *horizontalSpacer =
-        new QSpacerItem(1, 10, QSizePolicy::Expanding, QSizePolicy::Minimum);
-    layout.addItem(horizontalSpacer);
-}
-
-void QtGui::CreateStatusToolBar(QLayout &layout)
+void QtGui::CreateStatusToolBar(QLayout &layout, const QSize &iconSize)
 {
     statusToolBar =
-        CreateToolBar(this, tr("Status"), QStringLiteral("statusToolBar"));
+        CreateToolBar(this, tr("Status"), QStringLiteral("statusToolBar"),
+                iconSize);
+    assert(statusToolBar != nullptr);
+    statusToolBar->setIconSize(iconSize);
     layout.addWidget(statusToolBar);
 
     auto text = tr("Interrupts");
@@ -1099,10 +1202,10 @@ void QtGui::AddDiskStatusButtons()
     {
         assert(statusToolBar != nullptr);
 
-        for (Word i = 0; i < 4; ++i)
+        for (Word i = 0; i < MAX_DRIVES; ++i)
         {
-            diskStatusAction[i] =
-                statusToolBar->addAction(iconNoFloppy, tr("Disk #%1").arg(i));
+            const auto text = tr("Disk #%1 not ready").arg(i);
+            diskStatusAction[i] = statusToolBar->addAction(iconNoFloppy, text);
             connect(diskStatusAction[i], &QAction::triggered,
                 this, [this, i=i]() { OnDiskStatus(i); });
             auto statusTip = tr("Open disk #%1 status").arg(i);
@@ -1111,35 +1214,10 @@ void QtGui::AddDiskStatusButtons()
     }
 }
 
-QAction *QtGui::CreateIconSizeAction(QMenu &menu, uint index)
-{
-    static const QVector<QString> menuText{
-        tr("&Small"),
-        tr("&Medium"),
-        tr("&Large"),
-    };
-    static const QVector<QString> toolTipText{
-        tr("Show small size Icons"),
-        tr("Show medium size Icons"),
-        tr("Show large size Icons"),
-    };
-
-    assert(menuText.size() == ICON_SIZES);
-    assert(toolTipText.size() == ICON_SIZES);
-
-    auto *action = menu.addAction(menuText[index]);
-    connect(action, &QAction::triggered,
-        this, [&,index](){ OnIconSize(index); });
-    action->setCheckable(true);
-    action->setStatusTip(toolTipText[index]);
-
-    return action;
-}
-
 QAction *QtGui::CreateScreenSizeAction(
-        const QIcon &icon, QMenu &menu, int index)
+        const QIcon &icon, QMenu &menu, uint16_t index)
 {
-    static const QVector<QString> menuText{
+    static const QStringList menuText{
         tr("&Default"),
         tr("D&ouble"),
         tr("Tr&iple"),
@@ -1147,13 +1225,10 @@ QAction *QtGui::CreateScreenSizeAction(
         tr("Qu&intuple")
     };
 
-    assert (index <= 4);
+    assert(menuText.size() == SCREEN_SIZES);
+    assert (index < SCREEN_SIZES);
 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    auto keySequence = QKeySequence(Qt::CTRL | (Qt::Key_1 + index));
-#else
-    auto keySequence = QKeySequence(Qt::CTRL + (Qt::Key_1 + index));
-#endif
+    auto keySequence = QKeySequence(tr("Ctrl+%1").arg(index + 1));
     auto *action = menu.addAction(icon, menuText[index]);
     connect(action, &QAction::triggered,
         this, [&,index](){ OnScreenSize(index); });
@@ -1204,13 +1279,13 @@ void QtGui::OnCpuInterruptStatus()
     model.setItem(row++, 0, new QStandardItem(tr("NMI")));
     model.setItem(row++, 0, new QStandardItem(tr("RESET")));
     row = 0;
-    text = QString::asprintf("%u", status.count[INT_IRQ]);
+    text = QString("%1").arg(status.count[INT_IRQ]);
     model.setItem(row++, 1, new QStandardItem(text));
-    text = QString::asprintf("%u", status.count[INT_FIRQ]);
+    text = QString("%1").arg(status.count[INT_FIRQ]);
     model.setItem(row++, 1, new QStandardItem(text));
-    text = QString::asprintf("%u", status.count[INT_NMI]);
+    text = QString("%1").arg(status.count[INT_NMI]);
     model.setItem(row++, 1, new QStandardItem(text));
-    text = QString::asprintf("%u", status.count[INT_RESET]);
+    text = QString("%1").arg(status.count[INT_RESET]);
     model.setItem(row++, 1, new QStandardItem(text));
 
     dialog->setWindowTitle(tr("CPU Interrupt Status"));
@@ -1228,126 +1303,41 @@ void QtGui::OnDiskStatus(Word driveNumber)
 {
     if (HasFloppy() && driveNumber < 4)
     {
-        QString text;
-        int tracks;
-        int sectors;
-        auto info = fdc->drive_info(driveNumber);
-        QStandardItemModel model;
-        auto *dialog = new QDialog(this);
-        Ui::Properties ui;
-        int row = 0;
 
-        ui.setupUi(dialog);
-        ui.SetDriveInfo(driveNumber, info);
+        const auto diskAttributes = fdc->drive_attributes(driveNumber);
+        const auto title = tr("Floppy Disk Status");
 
-        model.setColumnCount(2);
-        if (info.IsValid())
-        {
-            auto rowCount = info.GetIsFlexFormat() ? 9 : 6;
-            if (info.GetType() & TYPE_DSK_CONTAINER)
-            {
-                ++rowCount;
-            }
-            model.setRowCount(rowCount);
-            info.GetTrackSector(tracks, sectors);
-            model.setItem(row++, 0, new QStandardItem(tr("Drive")));
-            model.setItem(row++, 0, new QStandardItem(tr("Type")));
-            model.setItem(row++, 0, new QStandardItem(tr("Path")));
-            if (info.GetIsFlexFormat())
-            {
-                model.setItem(row++, 0, new QStandardItem(tr("Name")));
-                model.setItem(row++, 0, new QStandardItem(tr("Number")));
-                model.setItem(row++, 0, new QStandardItem(tr("Date")));
-            }
-            model.setItem(row++, 0, new QStandardItem(tr("Tracks")));
-            model.setItem(row++, 0, new QStandardItem(tr("Sectors")));
-            model.setItem(row++, 0, new QStandardItem(tr("Write-protect")));
-            model.setItem(row++, 0, new QStandardItem(tr("FLEX format")));
-            if (info.GetType() & TYPE_DSK_CONTAINER)
-            {
-                model.setItem(row++, 0, new QStandardItem(tr("JVC header")));
-            }
-            row = 0;
-            text = QString::asprintf("#%u", driveNumber);
-            model.setItem(row++, 1, new QStandardItem(text));
-            text = info.GetTypeString().c_str();
-            model.setItem(row++, 1, new QStandardItem(text));
-            model.setItem(row++, 1, new QStandardItem(info.GetPath().c_str()));
-            if (info.GetIsFlexFormat())
-            {
-                text = info.GetName().c_str();
-                model.setItem(row++, 1, new QStandardItem(text));
-                text = QString::number(info.GetNumber());
-                model.setItem(row++, 1, new QStandardItem(text));
-                auto date = info.GetDate();
-                auto qdate = QDate(
-                    date.GetYear(), date.GetMonth(), date.GetDay());
-                text = QLocale::system().toString(qdate, QLocale::ShortFormat);
-                model.setItem(row++, 1, new QStandardItem(text));
-            }
-            model.setItem(row++, 1, new QStandardItem(QString::number(tracks)));
-            model.setItem(row++, 1, new QStandardItem(QString::number(sectors)));
-            text = info.GetIsWriteProtected() ? tr("yes") : tr("no");
-            model.setItem(row++, 1, new QStandardItem(text));
-            text = info.GetIsFlexFormat() ? tr("yes") : tr("no");
-            model.setItem(row++, 1, new QStandardItem(text));
-            if (info.GetType() & TYPE_DSK_CONTAINER)
-            {
-                auto header = info.GetJvcFileHeader();
-
-                if (header.empty())
-                {
-                    text = tr("none");
-                }
-                else
-                {
-                    text = "";
-                    for (Word index = 0; index < header.size(); ++index)
-                    {
-                        if (index != 0)
-                        {
-                            text += ",";
-                        }
-                        text += QString::number((Word)header[index]);
-                    }
-                }
-                model.setItem(row++, 1, new QStandardItem(text));
-            }
-        }
-        else
-        {
-            model.setRowCount(2);
-            model.setItem(row++, 0, new QStandardItem(tr("Drive")));
-            model.setItem(row++, 0, new QStandardItem(tr("Status")));
-            row = 0;
-            text = QString::asprintf("#%u", driveNumber);
-            model.setItem(row++, 1, new QStandardItem(text));
-            model.setItem(row++, 1, new QStandardItem("Not ready"));
-        }
-
-        dialog->setWindowTitle(tr("Floppy Disk Status"));
-        dialog->setModal(true);
-        dialog->setSizeGripEnabled(true);
-        auto floppyPixmap = QPixmap(":/resource/floppy256.png");
-
-        ui.SetPixmap(floppyPixmap);
-        ui.SetModel(model, { "Property", "Value" });
-        ui.SetMinimumSize(dialog);
-
-        dialog->exec();
+        OpenDiskStatusDialog(this, title, diskAttributes, driveNumber);
     }
 }
 
-void QtGui::CreateStatusBar(QLayout &layout)
+void QtGui::CreateStatusBar(QBoxLayout &layout)
 {
     // Use QStackedWidget to be able to set a frame style.
     statusBarFrame = new QStackedWidget();
     statusBar = new QStatusBar();
-    statusBar->setSizeGripEnabled(true);
+    statusBar->setSizeGripEnabled(false);
     statusBarFrame->addWidget(statusBar);
-    layout.addWidget(statusBarFrame);
+    layout.addWidget(statusBarFrame, 1);
     statusBarFrame->setFrameStyle(QFrame::Panel | QFrame::Sunken);
     statusBarAction->setChecked(true);
+    newKeyFrame = new QStackedWidget();
+    newKeyLabel = new QLabel(this);
+    newKeyLabel->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    newKeyLabel->setToolTip(tr("Last key entered"));
+    const auto defaultFont = QApplication::font();
+    const auto pointSize = defaultFont.pointSize();
+    auto font = GetMonospaceFont(pointSize);
+    font.setWeight(QFont::Bold);
+    newKeyLabel->setFont(font);
+    newKeyLabel->setText("00  ");
+    newKeyFrame->addWidget(newKeyLabel);
+    newKeyFrame->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+    layout.addWidget(newKeyFrame);
+    dummyStatusBar = new QStatusBar(this);
+    dummyStatusBar->setMaximumWidth(14);
+    dummyStatusBar->setSizeGripEnabled(true);
+    layout.addWidget(dummyStatusBar);
 
     SetStatusMessage(tr("Ready"));
 }
@@ -1359,7 +1349,7 @@ void QtGui::ConnectScreenSizeComboBoxSignalSlots() const
             static_cast<void (QComboBox::*)(int)>(
                 &QComboBox::currentIndexChanged),
 #else
-            QOverload<int>::of(&QComboBox::currentIndexChanged),       
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
 #endif
             this, &QtGui::OnScreenSize);
     connect(screenSizeComboBox,
@@ -1367,7 +1357,7 @@ void QtGui::ConnectScreenSizeComboBoxSignalSlots() const
             static_cast<void (QComboBox::*)(int)>(
                 &QComboBox::highlighted),
 #else
-            QOverload<int>::of(&QComboBox::highlighted),       
+            QOverload<int>::of(&QComboBox::highlighted),
 #endif
             this, &QtGui::OnScreenSizeHighlighted);
 }
@@ -1380,12 +1370,12 @@ void QtGui::SetStatusMessage(const QString &message) const
 // Optionally confirm to close this window.
 bool QtGui::IsClosingConfirmed()
 {
-    if (isConfirmClose)
+    if ((options.isConfirmExit && isConfirmClose) || isRestartNeeded)
     {
         auto message = isRestartNeeded ?
-            tr("Do you want to restart %s now?") :
-            tr("Do you want to close %s?");
-        message = QString::asprintf(message.toUtf8().data(), PROGRAMNAME);
+            tr("Do you want to restart %1 now?") :
+            tr("Do you want to close %1?");
+        message = message.arg(PROGRAMNAME);
         auto result = QMessageBox::question(this, tr("Flexemu"), message,
                           QMessageBox::Yes | QMessageBox::No);
         return (result == QMessageBox::Yes);
@@ -1394,15 +1384,11 @@ bool QtGui::IsClosingConfirmed()
     return true;
 }
 
-void QtGui::redraw_cpuview_impl(const Mc6809CpuStatus &status)
+void QtGui::redraw_cpuview_impl(const Mc6809CpuStatus &/*status*/)
 {
     assert(cpuDialog != nullptr);
 
-    int i = status.s & 7;
-    text(5 + 3 * i, 10, "[");
-    text(8 + 3 * i, 10, "]");
-
-    cpuUi.e_status->setText(cpustring);
+    cpuUi.e_status->setText(cpustring.c_str());
 }
 
 void QtGui::PopupMessage(const QString &message)
@@ -1433,24 +1419,46 @@ void QtGui::update_block(int blockNumber)
     e2screen->UpdateBlock(vico2.get_value(), blockNumber, dataBuffer);
 }
 
-void QtGui::UpdateDiskStatus(int floppyIndex, DiskStatus status)
+void QtGui::UpdateDiskStatus(Word floppyIndex, DiskStatus oldStatus,
+        DiskStatus newStatus)
 {
+    auto fct_getStatusText = [&](Word idx){
+        const auto diskAttributes = fdc->drive_attributes(idx);
+        return tr("Disk #%1 %2")
+            .arg(idx)
+            .arg(diskAttributes.GetIsFlexFormat() ?
+                diskAttributes.GetName().c_str() :
+                flx::getFileName(diskAttributes.GetPath()).c_str());
+    };
+
     if (HasFloppy())
     {
-        assert(static_cast<size_t>(floppyIndex) <
-                (sizeof(diskStatusAction) / sizeof(diskStatusAction[0])));
+        QString text;
+        assert(static_cast<size_t>(floppyIndex) < diskStatusAction.size());
 
-        switch (status)
+        switch (newStatus)
         {
             case DiskStatus::EMPTY:
+                text = tr("Disk #%1 not ready").arg(floppyIndex);
+                diskStatusAction[floppyIndex]->setText(text);
                 diskStatusAction[floppyIndex]->setIcon(iconNoFloppy);
                 break;
 
             case DiskStatus::INACTIVE:
+                if (oldStatus == DiskStatus::EMPTY)
+                {
+                    text = fct_getStatusText(floppyIndex);
+                    diskStatusAction[floppyIndex]->setText(text);
+                }
                 diskStatusAction[floppyIndex]->setIcon(iconInactiveFloppy);
                 break;
 
             case DiskStatus::ACTIVE:
+                if (oldStatus == DiskStatus::EMPTY)
+                {
+                    text = fct_getStatusText(floppyIndex);
+                    diskStatusAction[floppyIndex]->setText(text);
+                }
                 diskStatusAction[floppyIndex]->setIcon(iconActiveFloppy);
                 break;
         }
@@ -1489,7 +1497,12 @@ void QtGui::UpdateInterruptStatus(tIrqType irqType, bool status)
 void QtGui::ToggleCpuFrequency()
 {
     isOriginalFrequency = !isOriginalFrequency;
-    auto frequency = isOriginalFrequency ? ORIGINAL_FREQUENCY : 0.0f;
+    auto frequency = isOriginalFrequency ? ORIGINAL_FREQUENCY : 0.0F;
+    SetCpuFrequency(frequency);
+}
+
+void QtGui::SetCpuFrequency(float frequency)
+{
     options.frequency = frequency;
     oldOptions.frequency = frequency;
     scheduler.sync_exec(BCommandPtr(new CSetFrequency(scheduler, frequency)));
@@ -1558,15 +1571,21 @@ bool QtGui::IsFullScreenMode() const
 
 void QtGui::ToggleStatusBarVisibility()
 {
-    auto statusBarHeightDiff = statusBarFrame->height();
-    if (statusBarFrame->isVisible())
-    {
-        statusBarHeightDiff = -statusBarHeightDiff;
-    }
-    statusBarFrame->setVisible(!statusBarFrame->isVisible());
-    resize(size() + QSize(0, statusBarHeightDiff));
-
+    SetStatusBarVisibility(!statusBarFrame->isVisible());
     UpdateStatusBarCheck();
+
+    oldOptions.isStatusBarVisible = statusBarFrame->isVisible();
+    options.isStatusBarVisible = statusBarFrame->isVisible();
+    WriteOneOption(options, FlexemuOptionId::IsStatusBarVisible);
+
+    QTimer::singleShot(0, this, &QtGui::OnResize);
+}
+
+void QtGui::SetStatusBarVisibility(bool isVisible)
+{
+    statusBarFrame->setVisible(isVisible);
+    newKeyFrame->setVisible(isVisible);
+    dummyStatusBar->setVisible(isVisible);
 }
 
 void QtGui::UpdateSmoothDisplayCheck() const
@@ -1611,26 +1630,27 @@ void QtGui::UpdateStatusBarCheck() const
 
 void QtGui::SetIconSize(const QSize &iconSize)
 {
-    auto heightDiff = 2 * iconSize.height() - fileToolBar->iconSize().height() -
+    auto heightDiff = 2 * iconSize.height() - toolBar->iconSize().height() -
         statusToolBar->iconSize().height();
 
-    fileToolBar->setIconSize(iconSize);
-    viewToolBar->setIconSize(iconSize);
-    cpuToolBar->setIconSize(iconSize);
-    helpToolBar->setIconSize(iconSize);
+    toolBar->setIconSize(iconSize);
     statusToolBar->setIconSize(iconSize);
+    printOutputWindow->SetIconSize(iconSize);
 
-    int sizeIndex = (iconSize.width() >= 24 || iconSize.height() >= 24) ? 1 : 0;
-    sizeIndex = (iconSize.width() >= 32 || iconSize.height() >= 32) ?
-                2 : sizeIndex;
+    resize(size() + QSize(0, heightDiff));
+}
+
+void QtGui::SetIconSizeCheck(const QSize &iconSize)
+{
+    const int sizeIndex = IconSizeToIndex(iconSize);
 
     for (int index = 0; index < ICON_SIZES; ++index)
     {
         auto *action = iconSizeAction[index];
+        assert(action != nullptr);
         action->setChecked(index == sizeIndex);
     }
 
-    resize(size() + QSize(0, heightDiff));
 }
 
 void QtGui::AdjustSize()
@@ -1695,7 +1715,8 @@ void QtGui::SetCpuDialogMonospaceFont(int pointSize)
     auto monospaceFont = GetMonospaceFont(pointSize);
     cpuUi.e_status->setFont(monospaceFont);
     QFontMetrics monospaceFontMetrics(monospaceFont);
-    int height = std::lround(monospaceFontMetrics.height() * (CPU_LINES + 0.5));
+    auto fHeight = monospaceFontMetrics.height() * (CPU_LINES + 0.5);
+    auto height = static_cast<int>(std::lround(fHeight));
     int width;
 
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
@@ -1713,9 +1734,10 @@ void QtGui::SetCpuDialogMonospaceFont(int pointSize)
 
 ColorTable QtGui::CreateColorTable()
 {
-    using fn = std::function<QRgb(int)>;
+    using fn = std::function<QRgb(Byte)>;
 
-    bool isWithColorScale = !stricmp(options.color.c_str(), "default");
+    const auto optionsColor = flx::tolower(options.color);
+    bool isWithColorScale = !optionsColor.compare("default");
     Word redBase = 255;
     Word greenBase = 255;
     Word blueBase = 255;
@@ -1723,42 +1745,44 @@ ColorTable QtGui::CreateColorTable()
 
     if (!isWithColorScale)
     {
-        getRGBForName(options.color.c_str(), &redBase, &greenBase, &blueBase);
+        flx::getRGBForName(options.color, redBase, greenBase, blueBase);
     }
 
-    fn GetColor = [&](int index) -> QRgb
+    fn GetColor = [&](Byte index) -> QRgb
     {
         // Use same color values as Enhanced Graphics Adapter (EGA)
         // or Tandy Color Computer 3 RGB.
         // For details see:
         // https://en.wikipedia.org/wiki/Enhanced_Graphics_Adapter
         // https://exstructus.com/tags/coco/australia-colour-palette/
-        static constexpr Byte colorValues[4] { 0x00, 0x55, 0xAA, 0xFF };
-        int scale;
+        constexpr static std::array<Byte, 4> colorValues{
+            0x00, 0x55, 0xAA, 0xFF
+        };
+        unsigned scale;
 
         // Create a color scale in the range of 0 - 3 based two color bits
         // <color>_HIGH and <color>_LOW. Convert the color scale into a
         // color value in the range of 0 - 255.
-        scale = index & RED_HIGH ? 2 : 0;
-        scale |= index & RED_LOW ? 1 : 0;
+        scale = index & RED_HIGH ? 2U : 0U;
+        scale |= index & RED_LOW ? 1U : 0U;
         auto red = colorValues[scale];
-        scale = index & GREEN_HIGH ? 2 : 0;
-        scale |= index & GREEN_LOW ? 1 : 0;
+        scale = index & GREEN_HIGH ? 2U : 0U;
+        scale |= index & GREEN_LOW ? 1U : 0U;
         auto green = colorValues[scale];
-        scale = index & BLUE_HIGH ? 2 : 0;
-        scale |= index & BLUE_LOW ? 1 : 0;
+        scale = index & BLUE_HIGH ? 2U : 0U;
+        scale |= index & BLUE_LOW ? 1U : 0U;
         auto blue = colorValues[scale];
 
         return qRgb(red, green, blue);
     };
 
-    fn GetColorShade = [&](int index) -> QRgb
+    fn GetColorShade = [&](Byte index) -> QRgb
     {
-        auto red = static_cast<Byte>(redBase * sqrt((double)index /
+        auto dIndex = static_cast<double>(index);
+        auto red = static_cast<Byte>(redBase * sqrt(dIndex / (MAX_COLORS - 1)));
+        auto green = static_cast<Byte>(greenBase * sqrt(dIndex /
                 (MAX_COLORS - 1)));
-        auto green = static_cast<Byte>(greenBase * sqrt((double)index /
-                (MAX_COLORS - 1)));
-        auto blue = static_cast<Byte>(blueBase * sqrt((double)index /
+        auto blue = static_cast<Byte>(blueBase * sqrt(dIndex /
                 (MAX_COLORS - 1)));
 
         return qRgb(red, green, blue);
@@ -1766,29 +1790,32 @@ ColorTable QtGui::CreateColorTable()
 
     fn GetTheColor = (isWithColorScale ? GetColor : GetColorShade);
 
-    for (int i = 0; i < colorTable.size(); ++i)
+    for (Byte i = 0; i < static_cast<Byte>(colorTable.size()); ++i)
     {
-        int idx = options.isInverse ? colorTable.size() - i - 1 : i;
+        int idx = options.isInverse ?
+                  cast_from_qsizetype(colorTable.size()) - i - 1 : i;
         colorTable[idx] = GetTheColor(i);
     }
 
     return colorTable;
 }
 
-void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
-                           Byte const *videoRam, const ColorTable& colTable)
+void QtGui::CopyToBMPArray(Word height, QByteArray& dest,
+                           Byte const *videoRam,
+                           const ColorTable& p_colorTable)
 {
-    sBITMAPFILEHEADER fileHeader;
-    sBITMAPINFOHEADER infoHeader;
+    sBITMAPFILEHEADER fileHeader{};
+    sBITMAPINFOHEADER infoHeader{};
 
     assert(height >= 1);
-    assert(colTable.size() >= 1);
+    assert(!p_colorTable.empty());
 
     // Size of BMP stream:
     // BITMAPFILEHEADER + BITMAPINFOHEADER + color table size + pixel data
-    DWord dataOffset = sizeof(sBITMAPFILEHEADER) + sizeof(sBITMAPINFOHEADER) +
-                     (colTable.size() * sizeof(sRGBQUAD));
-    DWord destSize = dataOffset + (height * WINDOWWIDTH);
+    DWord dataOffset = sizeof(fileHeader) + sizeof(infoHeader) +
+                     (static_cast<DWord>(p_colorTable.size()) *
+                      sizeof(sRGBQUAD));
+    auto destSize = static_cast<SDWord>(dataOffset + (height * WINDOWWIDTH));
 
     dest.clear();
     dest.resize(destSize);
@@ -1797,32 +1824,35 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
 
     fileHeader.type[0] = 'B';
     fileHeader.type[1] = 'M';
-    fileHeader.fileSize = toLittleEndian<DWord>(destSize);
+    fileHeader.fileSize = flx::toLittleEndian<DWord>(destSize);
     fileHeader.reserved[0] = 0U;
     fileHeader.reserved[1] = 0U;
-    fileHeader.dataOffset = toLittleEndian<DWord>(dataOffset);
+    fileHeader.dataOffset = flx::toLittleEndian<DWord>(dataOffset);
     memcpy(pData, &fileHeader, sizeof(fileHeader));
     pData += sizeof(fileHeader);
 
-    infoHeader.size = toLittleEndian<DWord>(sizeof(infoHeader));
-    infoHeader.width = toLittleEndian<SDWord>(WINDOWWIDTH);
-    infoHeader.height = toLittleEndian<SDWord>(height);
-    infoHeader.planes = toLittleEndian<Word>(1U);
-    infoHeader.bitCount = toLittleEndian<Word>(8U);
-    infoHeader.compression = toLittleEndian<DWord>(BI_RGB);
-    infoHeader.imageSize = toLittleEndian<DWord>(height * WINDOWWIDTH);
+    infoHeader.size = flx::toLittleEndian<DWord>(sizeof(infoHeader));
+    infoHeader.width = flx::toLittleEndian<SDWord>(WINDOWWIDTH);
+    infoHeader.height = flx::toLittleEndian<SDWord>(height);
+    infoHeader.planes = flx::toLittleEndian<Word>(1U);
+    infoHeader.bitCount = flx::toLittleEndian<Word>(8U);
+    infoHeader.compression = flx::toLittleEndian<DWord>(BI_RGB);
+    infoHeader.imageSize = flx::toLittleEndian<DWord>(height * WINDOWWIDTH);
     infoHeader.xPixelsPerMeter = 0;
     infoHeader.yPixelsPerMeter = 0;
-    infoHeader.colorsUsed = toLittleEndian<DWord>(colTable.size());
-    infoHeader.colorsImportant = toLittleEndian<DWord>(colTable.size());
+    infoHeader.colorsUsed =
+        flx::toLittleEndian<DWord>(static_cast<DWord>(p_colorTable.size()));
+    infoHeader.colorsImportant =
+        flx::toLittleEndian<DWord>(static_cast<DWord>(p_colorTable.size()));
     memcpy(pData, &infoHeader, sizeof(infoHeader));
     pData += sizeof(infoHeader);
 
-    assert(colTable.size() <= static_cast<int>(MAX_COLORS));
+    assert(p_colorTable.size() <=
+           static_cast<ColorTable::size_type>(MAX_COLORS));
 
     const auto size = static_cast<int>(sizeof(sRGBQUAD)) *
-                      colTable.size();
-    const auto hash = qHashRange(colTable.begin(), colTable.end());
+                      p_colorTable.size();
+    const auto hash = qHashRange(p_colorTable.begin(), p_colorTable.end());
     if (colorTablesCache.contains(hash))
     {
         memcpy(pData, colorTablesCache.value(hash).data(), size);
@@ -1831,12 +1861,11 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
     else
     {
         QByteArray colorTableCache(size, '\0');
+        sRGBQUAD colorEntry{};
         const auto *pDataOrigin = pData;
 
-        for (const auto rgbColor : colTable)
+        for (const auto rgbColor : p_colorTable)
         {
-            sRGBQUAD colorEntry;
-
             colorEntry.red = static_cast<Byte>(qRed(rgbColor));
             colorEntry.green = static_cast<Byte>(qGreen(rgbColor));
             colorEntry.blue = static_cast<Byte>(qBlue(rgbColor));
@@ -1849,8 +1878,7 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
     }
     assert(pData == dest.data() + dataOffset);
 
-    DWord count;    /* Byte counter into video RAM          */
-    Byte pixels[6]; /* One byte of video RAM for each plane */
+    std::array<Byte, 6> pixels{}; /* One byte of video RAM for each plane */
     // Default color index: If no video source is available use highest
     // available color
     Byte colorIndex = options.isInverse ? 0x00U : 0x3FU;
@@ -1860,11 +1888,9 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
         colorIndexOffset = static_cast<Byte>((64U / options.nColors) - 1U);
     }
 
-    memset(pixels, '\0', sizeof(pixels));
-
     // The raster lines have to be filled from bottom to top.
     pData += WINDOWWIDTH * (height - 1);
-    for (count = 0; count < (RASTERLINE_SIZE * height); ++count)
+    for (auto count = 0; count < (RASTERLINE_SIZE * height); ++count)
     {
         Byte pixelBitMask;
 
@@ -1888,62 +1914,62 @@ void QtGui::CopyToBMPArray(DWord height, QByteArray& dest,
             videoRam++;
 
             /* Loop from MSBit to LSBit */
-            for (pixelBitMask = 0x80U; pixelBitMask; pixelBitMask >>= 1)
+            for (pixelBitMask = 0x80U; pixelBitMask; pixelBitMask >>= 1U)
             {
                 colorIndex = colorIndexOffset; /* calculated color index */
 
                 if (pixels[0] & pixelBitMask)
                 {
-                    colorIndex += GREEN_HIGH;    // 0x0C, green high
+                    colorIndex += GREEN_HIGH; // 0x0C, green high
                 }
 
                 if (options.nColors > 8)
                 {
                     if (pixels[2] & pixelBitMask)
                     {
-                        colorIndex += RED_HIGH;    // 0x0D, red high
+                        colorIndex += RED_HIGH; // 0x0D, red high
                     }
 
                     if (pixels[4] & pixelBitMask)
                     {
-                        colorIndex += BLUE_HIGH;    // 0x0E, blue high
+                        colorIndex += BLUE_HIGH; // 0x0E, blue high
                     }
 
                     if (pixels[1] & pixelBitMask)
                     {
-                        colorIndex += GREEN_LOW;    // 0x04, green low
+                        colorIndex += GREEN_LOW; // 0x04, green low
                     }
 
                     if (pixels[3] & pixelBitMask)
                     {
-                        colorIndex += RED_LOW;    // 0x05, red low
+                        colorIndex += RED_LOW; // 0x05, red low
                     }
 
                     if (pixels[5] & pixelBitMask)
                     {
-                        colorIndex += BLUE_LOW;    // 0x06, blue low
+                        colorIndex += BLUE_LOW; // 0x06, blue low
                     }
                 }
                 else
                 {
                     if (pixels[2] & pixelBitMask)
                     {
-                        colorIndex += RED_HIGH;    // 0x0D, red high
+                        colorIndex += RED_HIGH; // 0x0D, red high
                     }
 
                     if (pixels[4] & pixelBitMask)
                     {
-                        colorIndex += BLUE_HIGH;    // 0x0E, blue high
+                        colorIndex += BLUE_HIGH; // 0x0E, blue high
                     }
                 }
-                *(pData)++ = colorIndex;
+                *(pData)++ = static_cast<char>(colorIndex);
             }
         }
         else
         {
-            for (pixelBitMask = 0x80U; pixelBitMask; pixelBitMask >>= 1)
+            for (pixelBitMask = 0x80U; pixelBitMask; pixelBitMask >>= 1U)
             {
-                *(pData)++ = colorIndex;
+                *(pData)++ = static_cast<char>(colorIndex);
             }
         }
         if (count % RASTERLINE_SIZE == (RASTERLINE_SIZE - 1))
@@ -1959,7 +1985,7 @@ bool QtGui::event(QEvent *event)
 {
     if (event->type() == QEvent::StatusTip)
     {
-        auto *statusTipEvent = (QStatusTipEvent *)event;
+        auto *statusTipEvent = dynamic_cast<QStatusTipEvent *>(event);
         SetStatusMessage(statusTipEvent->tip());
         statusTipEvent->accept();
 
@@ -1974,8 +2000,8 @@ void QtGui::changeEvent(QEvent *event)
     if (event->type() == QEvent::ApplicationFontChange
         || event->type() == QEvent::FontChange)
     {
-        auto font = QApplication::font();
-        auto newPointSize = font.pointSize();
+        auto defaultFont = QApplication::font();
+        auto newPointSize = defaultFont.pointSize();
 
         QFontInfo fontInfo(cpuUi.e_status->font());
 
@@ -1996,7 +2022,7 @@ void QtGui::changeEvent(QEvent *event)
     }
 }
 
-void QtGui::showEvent(QShowEvent *)
+void QtGui::showEvent(QShowEvent * /*event*/)
 {
     int index = (e2screen->GetScaledSize().width() / WINDOWWIDTH) - 1;
 
@@ -2116,6 +2142,7 @@ void QtGui::closeEvent(QCloseEvent *event)
     if (IsClosingConfirmed())
     {
         e2screen->ReleaseMouseCapture();
+        e2screen->Detach(*this);
         scheduler.request_new_state(CpuState::Exit);
         while (!scheduler.is_finished())
         {
@@ -2123,6 +2150,11 @@ void QtGui::closeEvent(QCloseEvent *event)
             QThread::msleep(10);
         }
         timer.stop();
+        if (printOutputWindow != nullptr)
+        {
+            printOutputWindow->close();
+            printOutputWindow = nullptr;
+        }
         FlexemuOptionsDifference optionsDiff(options, oldOptions);
 
         if (!optionsDiff.GetNotEquals().empty())
@@ -2130,6 +2162,7 @@ void QtGui::closeEvent(QCloseEvent *event)
             FlexemuOptions::WriteOptions(options, false, true);
         }
         event->accept();
+        emit CloseApplication();
     }
     else
     {
@@ -2137,14 +2170,86 @@ void QtGui::closeEvent(QCloseEvent *event)
     }
 }
 
+// Implementation may change in future.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void QtGui::WriteOneOption(sOptions p_options, FlexemuOptionId optionId) const
 {
-    p_options.readOnlyOptionIds = allFlexemuOptionIds;
+    p_options.readOnlyOptionIds = GetAllFlexemuOptionIds();
     p_options.readOnlyOptionIds.erase(
         std::remove(p_options.readOnlyOptionIds.begin(),
                     p_options.readOnlyOptionIds.end(),
                     optionId),
         p_options.readOnlyOptionIds.end());
     FlexemuOptions::WriteOptions(p_options, false, true);
+}
+
+void QtGui::write_char_serial(Byte value)
+{
+    printOutputWindow->write_char_serial(value);
+}
+
+// Implementation may change in future.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+std::string QtGui::GetKeyString(Byte key)
+{
+    const std::array<const char *, 32> code{
+        "NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL", "BS",
+        "HT", "LF", "VT", "FF", "CR", "SO", "SI", "DLE", "DC1", "DC2",
+        "DC3", "DC4", "NAK", "SYN", "ETB", "CAN", "EM", "SUB", "ESC",
+        "FS", "GS", "RS", "US",
+    };
+
+    auto cKey = static_cast<char>(key);
+    auto ctrlCh = "CTRL-" + std::string(1U, static_cast<char>(cKey + '@'));
+    auto ch = (key < ' ') ? ctrlCh : "";
+    ch = (ch.empty() && key <= '~') ? std::string(1U, cKey) : ch;
+    ch = ch.empty() ? std::string(1U, ' ') : ch;
+    std::string sCode = (key < ' ') ? code[key] :
+        ((key == '\x7F') ? "DEL" : "");
+
+    return (!sCode.empty()) ?
+        fmt::format("{:02X} {:6} {:3}", key, ch, sCode) :
+        fmt::format("{:02X} {}", key, ch);
+}
+
+void QtGui::UpdateFrom(NotifyId id, void *param)
+{
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-enum"
+#endif
+    if (param != nullptr)
+    {
+        switch (id)
+        {
+            case NotifyId::SetFrequency:
+                {
+                    std::lock_guard<std::mutex> guard(newFrequencyMutex);
+                    newFrequency = *static_cast<float *>(param);
+                }
+                break;
+
+            case NotifyId::KeyPressed:
+                {
+                    const auto bKey = *static_cast<Byte *>(param);
+                    const auto text = GetKeyString(bKey);
+                    newKeyLabel->setText(QString::fromStdString(text));
+                }
+                break;
+
+            case NotifyId::KeyPressedOnCPU:
+                {
+                    std::lock_guard<std::mutex> guard(newKeysMutex);
+                    newKeys.push_back(*static_cast<Byte *>(param));
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 }
 

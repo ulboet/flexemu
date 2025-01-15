@@ -2,8 +2,8 @@
     fpcnvui.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 
-#include "misc1.h"
 #include "fpcnvui.h"
 #include "qstyle.h"
 #include "warnoff.h"
@@ -29,11 +28,7 @@
 #include "warnon.h"
 
 FlexplorerConvertUi::FlexplorerConvertUi() :
-    Ui_FlexplorerConvert(), dialog(nullptr)
-{
-}
-
-FlexplorerConvertUi::~FlexplorerConvertUi()
+    Ui_FlexplorerConvert()
 {
 }
 

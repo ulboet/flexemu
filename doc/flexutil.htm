@@ -20,6 +20,8 @@ umount
 <br>
 sync
 <br>
+check
+<br>
 exit
 <br>
 timeset
@@ -38,7 +40,7 @@ ofiles
 <br>
 <p>
 
-<h3>Utilities on Linux and Windows:</h3>
+<h3>Utilities on Unix like OS and Windows:</h3>
 <p>
 fromflex
 <br>
@@ -46,7 +48,7 @@ toflex
 <br>
 <p>
 
-<h3>Utilities on Linux:</h3>
+<h3>Utilities on Unix like OS:</h3>
 <p>
 rcvflex
 <br>
@@ -66,8 +68,7 @@ command, there should already be set an interrupt vector before!
 </dd>
 <dt id="mount">emu mount &lt;path&gt; &lt;drive_nr&gt;</dt>
 <dd>
-mounts a disk image (DSK- or FLX-Format) or a NAtive File System
-(nafs)-directory.
+mounts a disk image (DSK- or FLX-Format) or a virtual disk (directory disk).
 <b>&lt;path&gt;
 </b>as a floppy with
 drive number
@@ -84,7 +85,7 @@ prints some information on drive with number <b>&lt;drive_nr&gt;</b> or, if no
 </dd>
 <dt id="sync">emu sync [&lt;drive_nr&gt;]</dt>
 <dd>
-Synchronizes the contents of a native file system drive with number
+Synchronizes the contents of a drive mounted with a directory disk with number
 <b>&lt;drive_nr&gt;</b> or, if no <b>&lt;drive_nr&gt;</b> is specified on all
 drives.
 <b>&lt;drive_nr&gt;
@@ -93,9 +94,16 @@ The execution is aborted and an error message is printed if any file
 is currently opened on the specified drive. Drives mounted with a disk image
 are silently ignored.
 </dd>
+<dt id="check">emu check &lt;drive_nr&gt;</dt>
+<dd>
+Executes a filesystem check on the drive with number <b>&lt;drive_nr&gt;</b>.
+<b>&lt;drive_nr&gt;
+</b>can be 0 - 3.
+This is equivalent to the command line execution of: <b>dsktool -c &lt;dsk-file&gt; -v</b>
+</dd>
 <dt id="umount">emu umount &lt;drive_nr&gt;</dt>
 <dd>
-unmounts a previously mounted disk image or nafs-directory.
+unmounts a previously mounted disk image or a virtual disk (directory disk).
 <b>&lt;drive_nr&gt;
 </b>can be 0 - 3.
 The execution is aborted and an error message is printed if any file
@@ -105,12 +113,15 @@ is currently opened on the specified drive.
 <dd>
 formats a disk with name <b>&lt;disk_name&gt;</b>, a <b>&lt;track_count&gt;</b>
 and <b>&lt;sector_count&gt;</b>.
-The disk will be formated in DSK-Format. The newly formated disk will
-<b>not</b> be mounted automatically!
+The disk format is estimated by the file extension of <b>&lt;disk_name&gt;</b>.
+Supported file extensions are *.dsk and *.wta for DSK-Format, and *.flx for
+FLX-Format. If <b>&lt;disk_name&gt;</b> has no file extension a directory
+disk will be formatted. The newly formatted disk will <b>not</b> be mounted
+automatically!
 </dd>
 <dt id="terminal_graphic">emu terminal | graphic</dt>
 <dd>
-At the time only available on Linux (sorry). If started flexemu in full
+At the time only available on Unix like OS. If started flexemu in full
 graphics mode (without option
 <b>-t
 </b>) this command can be used to switch between performing I/O on the graphic
@@ -149,15 +160,15 @@ WRITE or UPDATE.
 In this case it has to be confirmed to really exit the emulator, because files
 could get corrupted.
 </dd>
-<dt id="mount">mount &lt;path&gt; &lt;drive_nr&gt;</dt>
+<dt>mount &lt;path&gt; &lt;drive_nr&gt;</dt>
 <dd>
 Shortcut to <b>emu mount</b> command.
 </dd>
-<dt id="umount">umount &lt;drive_nr&gt;</dt>
+<dt>umount &lt;drive_nr&gt;</dt>
 <dd>
 Shortcut to <b>emu umount</b> command.
 </dd>
-<dt id="sync">sync [&lt;drive_nr&gt;]</dt>
+<dt>sync [&lt;drive_nr&gt;]</dt>
 <dd>
 Shortcut to <b>emu sync</b> command.
 </dd>
@@ -239,8 +250,8 @@ convert a UNIX/MS-DOS ASCII format to FLEX ASCII format. The conversion will
 be done from stdin to stdout.
 <dt id="rcvflex">rcvflex [-h | &lt;serial_device&gt;]</dt>
 <dd>
-At the time only available on Linux (sorry). This utility transmits a FLEX
-disk from a real FLEX system to a Linux box. The counterpart on the
+At the time only available on Linux. This utility transmits a FLEX
+disk from a real FLEX system to a Linux PC. The counterpart on the
 FLEX system is the command
 <b>tounix.cmd.
 </b>The default for
@@ -261,6 +272,8 @@ FLEX system is the command
  <li><a href="flexfcb.htm"> FLEX File Control Block (FCB)</a>
  <li><a href="flexmem.htm"> FLEX Memory Map</a>
  <li><a href="neumon54.htm"> Monitor program neumon54.hex</a>
+ <li><a href="mon53_54.htm"> Monitor program mon53.s19 and mon54.s19</a>
+ <li><a href="monu54.htm"> Monitor program monu54-6.s19</a>
  <li><a href="mon24.htm"> Monitor program mon24.s19</a>
  <li><a href="e2hwdesc.htm"> Eurocom II hardware description</a>
  <li><a href="mc6809.htm"> Motorola MC6809</a>
@@ -284,6 +297,14 @@ FLEX system is the command
  <li><a href="basprec.pdf" target="_blank">BASIC Precompiler User's Manual</a>
  <li><a href="f77.pdf" target="_blank">Fortan 77</a>
  <li><a href="util_man.pdf" target="_blank">Windrush FLEX Utilities Package</a>
+</ul>
+<h2 id="OtherLinks">Other Documents</h2>
+
+<ul>
+ <li><a href=cedric.pdf target=_blank>Cedric screen editor</a>
+ <li><a href="dynastar.pdf" target="_blank">Dynastar screen editor and text processor</a>
+ <li><a href="just.pdf" target="_blank">Just text processor</a>
+ <li><a href="TSC_Text_Processor.pdf" target="_blank">TSC Text Processor</a>
 </ul>
 <h2>Related Links</h2>
 <ul>

@@ -2,7 +2,7 @@
     iffilcnt.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,33 +26,35 @@
 #include "filecont.h"
 #include "filecnts.h"
 
-class FlexFileContainer;
+class FlexDisk;
 
-class FlexFileContainerIteratorImp : public FileContainerIteratorImp
+// Implementation of IFlexDiskIteratorImp interface for FlexDisk.
+// Rename: FlexFlexDiskIteratorImp => FlexDiskIteratorImp.
+class FlexDiskIteratorImp : public IFlexDiskIteratorImp
 {
 public:
-    FlexFileContainerIteratorImp(FlexFileContainer *);
-    virtual ~FlexFileContainerIteratorImp();
-    bool operator==(const FileContainerIf *aBase) const;
-    void AtEnd();
-    FlexDirEntry &GetDirEntry()
+    explicit FlexDiskIteratorImp(FlexDisk *p_base);
+    FlexDiskIteratorImp() = delete;
+    FlexDiskIteratorImp(const FlexDiskIteratorImp &src) =
+        delete;
+    ~FlexDiskIteratorImp() override = default;
+    bool operator==(const IFlexDiskByFile *rhs) const override;
+    void AtEnd() override;
+    FlexDirEntry &GetDirEntry() override
     {
         return dirEntry;
     };
-    bool NextDirEntry(const char *filePattern);
+    bool NextDirEntry(const std::string &wildcard) override;
 private:
-    bool DeleteCurrent();
-    bool RenameCurrent(const char *);
-    bool SetDateCurrent(const BDate &date);
-    bool SetAttributesCurrent(Byte attributes);
+    bool DeleteCurrent() override;
+    bool RenameCurrent(const std::string &newName) override;
+    bool SetDateCurrent(const BDate &date) override;
+    bool SetAttributesCurrent(Byte attributes) override;
 
-    FlexFileContainerIteratorImp();
-    FlexFileContainerIteratorImp(const FlexFileContainerIteratorImp &);
-
-    FlexFileContainer *base;
+    FlexDisk *base;
     int dirIndex;
     st_t dirTrackSector;
-    struct s_dir_sector dirSector;
+    s_dir_sector dirSector{};
     FlexDirEntry dirEntry;
 };
 

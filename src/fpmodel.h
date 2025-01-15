@@ -2,8 +2,8 @@
     fpmodel.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,6 +27,9 @@
 #include "fcinfo.h"
 #include "efiletim.h"
 #include "ffilebuf.h"
+#include "sfpopts.h"
+#include "filecntb.h"
+#include "filecont.h"
 #include "warnoff.h"
 #include <QPair>
 #include <QString>
@@ -34,40 +37,50 @@
 #include <QVariant>
 #include <QModelIndex>
 #include <QAbstractTableModel>
+#include <QStringList>
 #include "warnon.h"
 #include <memory>
-#include <vector>
 #include <array>
 #include <string>
 
+
 class FlexDirEntry;
 class FlexFileBuffer;
-class FileContainerIf;
 class FlexDirEntry;
 
+static const int COLUMNS{7};
+
+using HeaderNames_t = std::array<QString, COLUMNS>;
 
 class FlexplorerTableModel : public QAbstractTableModel
 {
-    struct sFileTypes
+    struct sFileType
     {
         QString fileExt;
         QString fileType;
     };
 
+    using FileTypes_t = QVector<sFileType>;
+
 public:
     FlexplorerTableModel() = delete;
-    FlexplorerTableModel(const char *path, const FileTimeAccess &fileTimeAccess,
+    FlexplorerTableModel(const char *path, struct sFPOptions &options,
                          QObject *parent = Q_NULLPTR);
-    virtual ~FlexplorerTableModel();
+    ~FlexplorerTableModel() override = default;
 
+    // To correctly initialize the model Initialize() has to be called
+    // right after object construction.
+    // It has been separated to avoid virtual member function calls
+    // in the object constructor.
+    void Initialize();
     QString GetPath() const;
     QString GetUserFriendlyPath() const;
     bool IsWriteProtected() const;
-    int GetContainerType() const;
-    const FlexContainerInfo GetContainerInfo() const;
+    DiskType GetFlexDiskType() const;
+    FlexDiskAttributes GetFlexDiskAttributes() const;
 
-    QVector<QString> GetFilenames(const QModelIndexList &indexList) const;
-    QVector<QString> GetFilenames() const;
+    QStringList GetFilenames(const QModelIndexList &indexList) const;
+    QStringList GetFilenames() const;
     QVector<Byte> GetAttributes(const QModelIndexList &indexList) const;
     bool GetAttributes(const QModelIndex &index, Byte &attributes) const;
     bool GetAttributesString(const QModelIndex &index,
@@ -85,6 +98,7 @@ public:
     void RenameFile(const QModelIndex &index, const QString &newFilename);
     FlexFileBuffer CopyFile(const QModelIndex &index) const;
     std::string GetSupportedAttributes() const;
+    QStringList GetColumnMaxStrings();
 
     // QAbstractTableModel overrides
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -95,12 +109,15 @@ public:
                  int role = Qt::EditRole) override;
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
+    bool setHeaderData(int section, Qt::Orientation orientation,
+                       const QVariant &value, int role = Qt::EditRole) override;
     Qt::ItemFlags flags(const QModelIndex &index) const override;
     bool insertRows(int row, int count,
                     const QModelIndex &parent = QModelIndex()) override;
     bool removeRows(int row, int count,
                     const QModelIndex &parent = QModelIndex()) override;
     void sort(int column, Qt::SortOrder order) override;
+    static const QString &GetHeaderNameForFileSize(FileSizeType type);
 
     static const int COL_ID{0};
     static const int COL_FILENAME{1};
@@ -110,27 +127,30 @@ public:
     static const int COL_DATE{5};
     static const int COL_ATTRIBUTES{6};
 
+public slots:
+    void UpdateFileSizeHeaderName();
+    void UpdateFileSizeColumn();
+
 private:
-    static const int COLUMNS{7};
-
     using RowType = std::array<QVariant, COLUMNS>;
-    using IdsType = QVector<QString>;
+    using IdsType = QVector<int>;
 
-    void OpenContainer(const char *path, const FileTimeAccess &fileTimeAccess);
-    void Initialize();
-    QModelIndex AddRow(const FlexDirEntry &dirEntry, int role = Qt::EditRole);
+    void OpenFlexDisk(const char *path, const FileTimeAccess &fileTimeAccess);
+    QModelIndex SetRow(const FlexDirEntry &dirEntry, int row, int role);
     IdsType GetIds() const;
     void CalculateAndChangePersistentIndexList(const IdsType &oldIds);
     QString AsHtml(const QModelIndexList &indexList) const;
-    static QString GetFileType(const FlexDirEntry &dirEntry);
+    QString VariantToString(const QVariant &variant) const;
 
-    std::unique_ptr<FileContainerIf> container;
+    static QString GetFileType(const FlexDirEntry &dirEntry);
+    static const FileTypes_t &GetFileTypes();
+    static HeaderNames_t &GetHeaderNames();
+
+    std::unique_ptr<IFlexDiskByFile> container;
     QVector<RowType> rows;
     QString path;
-
-    static std::array<const char *, COLUMNS> headerNames;
-    static QVector<QPair<char, Byte> > attributeCharToFlag;
-    static const QVector<sFileTypes> fileTypes;
+    struct sFPOptions &options;
+    QStringList maxStrings;
 };
 
 #endif

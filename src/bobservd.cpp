@@ -3,7 +3,7 @@
 
 
     Basic abstract class used to implement an observer pattern
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,25 +24,25 @@
 #include "bobserv.h"
 #include <algorithm>
 
-void BObserved::Attach(BObserver &x_observer)
+void BObserved::Attach(BObserver &p_observer)
 {
-    if (std::find_if(observers.cbegin(), observers.cend(), 
-        [&x_observer](std::reference_wrapper<BObserver> observerRef)
+    if (std::find_if(observers.cbegin(), observers.cend(),
+        [&p_observer](std::reference_wrapper<BObserver> observerRef)
         {
-            return &observerRef.get() == &x_observer;
+            return &observerRef.get() == &p_observer;
         }) == observers.cend())
     {
-        observers.push_back(std::ref(x_observer));
+        observers.push_back(std::ref(p_observer));
     }
 }
 
-void BObserved::Detach(BObserver &x_observer)
+void BObserved::Detach(BObserver &p_observer)
 {
     const auto iter =
-        std::find_if(observers.cbegin(), observers.cend(), 
-            [&x_observer](std::reference_wrapper<BObserver> observerRef)
+        std::find_if(observers.cbegin(), observers.cend(),
+            [&p_observer](std::reference_wrapper<BObserver> observerRef)
             {
-                return &observerRef.get() == &x_observer;
+                return &observerRef.get() == &p_observer;
             });
 
     if (iter != observers.cend())

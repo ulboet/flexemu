@@ -14,6 +14,9 @@
     <ClCompile Include="flex2hex.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="fversion.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fileread.h">
@@ -26,9 +29,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bintervl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="bfileptr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bmembuf.h">
@@ -47,6 +47,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="flexerr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fversion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

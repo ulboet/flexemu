@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,8 +25,6 @@
 #define DRISEL_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "bytereg.h"
 
 class E2floppy;
@@ -57,9 +55,9 @@ private:
     static const Byte WRITE_SIDE_MASK{0x10};
 
     // Bits when writing register
-    static const Byte READ_SIDE_MASK{0x02};
-    static const Byte READ_IRQ_MASK{0x40};
-    static const Byte READ_DRQ_MASK{0x80};
+    static const unsigned READ_SIDE_MASK{0x02};
+    static const unsigned READ_IRQ_MASK{0x40};
+    static const unsigned READ_DRQ_MASK{0x80};
 
     E2floppy &fdc;
 
@@ -69,8 +67,12 @@ private:
 public:
 
     DriveSelect() = delete;
-    DriveSelect(E2floppy &fdc);
-    virtual ~DriveSelect();
+    explicit DriveSelect(E2floppy &fdc);
+    ~DriveSelect() override = default;
+    DriveSelect(const DriveSelect &src) = delete;
+    DriveSelect(DriveSelect &&src) = delete;
+    DriveSelect &operator=(const DriveSelect &src) = delete;
+    DriveSelect &operator=(DriveSelect &&src) = delete;
 
     void resetIo() override;
     const char *getName() override

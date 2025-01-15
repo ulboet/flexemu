@@ -2,7 +2,7 @@
     ifilcnti.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,28 +26,29 @@
 #include <memory>
 
 
-class FileContainerIterator;
-class FileContainerIf;
+class FlexDiskIterator;
+class IFlexDiskByFile;
 class FlexDirEntry;
 
-
-class FileContainerIteratorImp
+// This interface defines a FLEX disk iterator implementation.
+// Rename: FlexDiskIteratorImp => IFlexDiskIteratorImp
+class IFlexDiskIteratorImp
 {
-    friend class FileContainerIterator;
+    friend class FlexDiskIterator;
 public:
-    virtual ~FileContainerIteratorImp() { };
-    virtual bool operator==(const FileContainerIf *aBase) const = 0;
-    virtual bool NextDirEntry(const char *filePattern) = 0;
+    virtual ~IFlexDiskIteratorImp() = default;
+    virtual bool operator==(const IFlexDiskByFile *base) const = 0;
+    virtual bool NextDirEntry(const std::string &wildcard) = 0;
     virtual void AtEnd() = 0;
     virtual FlexDirEntry &GetDirEntry() = 0;
 private:
     virtual bool DeleteCurrent() = 0;
-    virtual bool RenameCurrent(const char *) = 0;
+    virtual bool RenameCurrent(const std::string &newName) = 0;
     virtual bool SetDateCurrent(const BDate &date) = 0;
     virtual bool SetAttributesCurrent(Byte attributes) = 0;
 };
 
-using FileContainerIteratorImpPtr = std::unique_ptr<FileContainerIteratorImp>;
+using IFlexDiskIteratorImpPtr = std::unique_ptr<IFlexDiskIteratorImp>;
 
 #endif // IFILCNTI_INCLUDED
 

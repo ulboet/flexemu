@@ -3,7 +3,7 @@
 
 
     Basic abstract class used to implement an observer pattern
-    Copyright (C) 1999-2022  W. Schwotzer
+    Copyright (C) 1999-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifndef _BOBSERV_INCLUDED_
-#define _BOBSERV_INCLUDED_
+#ifndef BOBSERVER_INCLUDED
+#define BOBSERVER_INCLUDED
 
 #include "bobshelp.h"
 
@@ -35,8 +35,8 @@ class BObserver
 {
 public:
     virtual void UpdateFrom(NotifyId id, void *param = nullptr) = 0;
-    virtual ~BObserver() { };
+    virtual ~BObserver() = default;
 };
 
-#endif // #ifndef _BOBSERV_INCLUDED_
+#endif // #ifndef BOBSERVER_INCLUDED
 

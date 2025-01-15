@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,6 +39,9 @@
  * Hint for static_assert inspired by Dan Saks
  */
 
+/* The following structs follow the Windows Bitmap file format */
+/* specification and can not be replaced by std::array(). */
+/* NOLINTBEGIN(modernize-avoid-c-arrays) */
 #pragma pack(push, 1)
 struct sBITMAPFILEHEADER
 {
@@ -74,8 +77,11 @@ struct sRGBQUAD
 };
 static_assert(sizeof(sRGBQUAD) == 4, "sRGBQUAD is padded");
 #pragma pack(pop)
+/* NOLINTEND(modernize-avoid-c-arrays) */
 
 /* supported compression values */
+/* The following macros have to be compatible to Windows. */
+/* NOLINTBEGIN(cppcoreguidelines-macro-usage) */
 #ifndef BI_RGB
 #define BI_RGB 0U
 #endif
@@ -87,6 +93,7 @@ static_assert(sizeof(sRGBQUAD) == 4, "sRGBQUAD is padded");
 #ifndef BI_RLE4
 #define BI_RLE4 2U
 #endif
+/* NOLINTEND(cppcoreguidelines-macro-usage) */
 
 
 #endif

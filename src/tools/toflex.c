@@ -31,19 +31,19 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include "../typedefs.h"
 
 int main(int argc, char **argv)
 {
-	SWord c, spaces = 0;
+	int c = 0;
+	int spaces = 0;
 
 	if (argc > 1) {
+		fprintf(stderr, "*** Error: Superfluous parameter: %s\n", argv[1]);
 		fprintf(stderr, "syntax: toflex\n");
 		fprintf(stderr, " read from stdin\n");
 		fprintf(stderr, " write to stdout\n");
 		exit(1);
 	}
-        (void)argv; /* satisfy compiler */
 	while ((c = getchar()) != EOF) {
 		if (c != ' ' && c != '\t' && spaces) {
 			if (spaces > 1) {

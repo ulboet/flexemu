@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2022  W. Schwotzer
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,53 +22,153 @@
 
 #include "misc1.h"
 #include <string>
+#include <sstream>
 #include "sfpopts.h"
 #include "filecntb.h"
 #include "fpoptman.h"
 #include "bregistr.h"
 #include "brcfile.h"
+#include <sys/stat.h>
+#include <filesystem>
 
+
+namespace fs = std::filesystem;
+
+static const char * const OLDFLEXPLORERRC = ".flexplorerrc";
+static const char * const FLEXPLORERRC = "flexplorerrc";
+
+static const char * const FLEXPLORERBOOTSECTORFILE = "BootSectorFile";
+static const char * const FLEXPLOREREXTRACTCNV = "ExtractTextFileConvert";
+static const char * const FLEXPLOREREXTRACTASK = "ExtractTextFileAskUser";
+static const char * const FLEXPLORERFILESIZETYPE = "FileSizeType";
+static const char * const FLEXPLORERFILETIMEACCESS = "FileTimeAccess";
+static const char * const FLEXPLORERICONSIZE = "IconSize";
+static const char * const FLEXPLORERINJECTASK = "InjectTextFileAskUser";
+static const char * const FLEXPLORERINJECTCNV = "InjectTextFileConvert";
+static const char * const FLEXPLOREROPENDIRECTORYPATH = "OpenDirectoryPath";
+static const char * const FLEXPLOREROPENDISKPATH = "OpenDiskPath";
+static const char * const FLEXPLOREROPENINJECTFILEPATH = "OpenInjectFilePath";
+static const char * const FLEXPLORERRECENTDIRECTORY = "RecentDirectoryPath";
+static const char * const FLEXPLORERRECENTDISKPATH = "RecentDiskPath";
+static const char * const FLEXPLORERTRACK0ONLYDIRSEC = "OnTrack0OnlyDirSectors";
+static const char * const FLEXPLORERVERSION = "Version";
 
 void FlexplorerOptions::InitOptions(struct sFPOptions &options)
 {
+    options.version = VERSION;
     options.ft_access = FileTimeAccess::NONE;
+    options.iconSize = 32;
 #ifdef UNIX
-    options.bootSectorFile = F_DATADIR PATHSEPARATORSTRING BOOT_FILE;
+    options.bootSectorFile = std::string(F_DATADIR) + PATHSEPARATORSTRING +
+        BOOT_FILE;
 #endif
 #ifdef _WIN32
-    options.bootSectorFile = BOOT_FILE;
+    options.bootSectorFile =
+        flx::getExecutablePath() + PATHSEPARATORSTRING + BOOT_FILE;
 #endif
     options.injectTextFileConvert = true;
     options.injectTextFileAskUser = true;
     options.extractTextFileConvert = true;
     options.extractTextFileAskUser = true;
+    options.onTrack0OnlyDirSectors = true;
+    options.fileSizeType = FileSizeType::FileSize;
+    options.openInjectFilePath = flx::getHomeDirectory();
+#ifdef UNIX
+    options.openDiskPath = F_DATADIR;
+#endif
+#ifdef _WIN32
+    options.openDiskPath = flx::getExecutablePath() + PATHSEPARATORSTRING +
+                           "Data";
+#endif
+    options.openDirectoryPath = flx::getHomeDirectory();
 }
 
 void FlexplorerOptions::WriteOptions(const struct sFPOptions &options)
 {
 #ifdef _WIN32
     BRegistry reg(BRegistry::currentUser, FLEXPLOREREG);
+    reg.SetValue(FLEXPLORERVERSION, VERSION);
     reg.SetValue(FLEXPLORERBOOTSECTORFILE, options.bootSectorFile);
-    reg.SetValue(FLEXFILETIMEACCESS, static_cast<int>(options.ft_access));
+    reg.SetValue(FLEXPLORERFILETIMEACCESS,
+                 static_cast<int>(options.ft_access));
+    reg.SetValue(FLEXPLORERICONSIZE, options.iconSize);
     reg.SetValue(FLEXPLORERINJECTCNV, options.injectTextFileConvert ? 1 : 0);
     reg.SetValue(FLEXPLORERINJECTASK, options.injectTextFileAskUser ? 1 : 0);
     reg.SetValue(FLEXPLOREREXTRACTCNV, options.extractTextFileConvert ? 1 : 0);
     reg.SetValue(FLEXPLOREREXTRACTASK, options.extractTextFileAskUser ? 1 : 0);
+    reg.SetValue(FLEXPLORERTRACK0ONLYDIRSEC,
+                 options.onTrack0OnlyDirSectors ? 1 : 0);
+    reg.SetValue(FLEXPLOREROPENDISKPATH, options.openDiskPath);
+    reg.SetValue(FLEXPLOREROPENDIRECTORYPATH, options.openDirectoryPath);
+    reg.SetValue(FLEXPLORERFILESIZETYPE,
+                 static_cast<int>(options.fileSizeType));
+    reg.SetValue(FLEXPLOREROPENINJECTFILEPATH, options.openInjectFilePath);
+    for (auto i = 0U; i < options.recentDiskPaths.size(); ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDISKPATH << i;
+        reg.SetValue(key.str(), options.recentDiskPaths[i]);
+    }
+    for (auto i = 0U; i < options.recentDirectoryPaths.size(); ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDIRECTORY << i;
+        reg.SetValue(key.str(), options.recentDirectoryPaths[i]);
+    }
 #endif
 #ifdef UNIX
-    const auto rcFileName = getHomeDirectory() +
-                            PATHSEPARATORSTRING FLEXPLORERRC;
+    struct stat sbuf{};
+    auto rcFilePath =
+        (flx::getFlexemuUserConfigPath() += PATHSEPARATORSTRING) +=
+        FLEXPLORERRC;
+    fs::create_directories(flx::getFlexemuUserConfigPath());
 
-    BRcFile rcFile(rcFileName.c_str());
+    BRcFile rcFile(rcFilePath);
     rcFile.Initialize(); // truncate file
-    rcFile.SetValue(FLEXPLORERBOOTSECTORFILE, options.bootSectorFile.c_str());
-    rcFile.SetValue(FLEXFILETIMEACCESS, static_cast<int>(options.ft_access));
+    rcFile.SetValue(FLEXPLORERVERSION, VERSION);
+    rcFile.SetValue(FLEXPLORERBOOTSECTORFILE, options.bootSectorFile);
+    rcFile.SetValue(FLEXPLORERFILETIMEACCESS,
+                    static_cast<int>(options.ft_access));
+    rcFile.SetValue(FLEXPLORERICONSIZE, options.iconSize);
     rcFile.SetValue(FLEXPLORERINJECTCNV, options.injectTextFileConvert ? 1 : 0);
     rcFile.SetValue(FLEXPLORERINJECTASK, options.injectTextFileAskUser ? 1 : 0);
     rcFile.SetValue(FLEXPLOREREXTRACTCNV,
                     options.extractTextFileConvert ? 1 : 0);
     rcFile.SetValue(FLEXPLOREREXTRACTASK,
                     options.extractTextFileAskUser ? 1 : 0);
+    rcFile.SetValue(FLEXPLORERTRACK0ONLYDIRSEC,
+                    options.onTrack0OnlyDirSectors ? 1 : 0);
+    rcFile.SetValue(FLEXPLOREROPENDISKPATH, options.openDiskPath);
+    rcFile.SetValue(FLEXPLOREROPENDIRECTORYPATH,
+                    options.openDirectoryPath);
+    rcFile.SetValue(FLEXPLORERFILESIZETYPE,
+                    static_cast<int>(options.fileSizeType));
+    rcFile.SetValue(FLEXPLOREROPENINJECTFILEPATH,
+                    options.openInjectFilePath);
+
+    for (auto i = 0U; i < options.recentDiskPaths.size(); ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDISKPATH << i;
+        rcFile.SetValue(key.str().c_str(), options.recentDiskPaths[i]);
+    }
+    for (auto i = 0U; i < options.recentDirectoryPaths.size(); ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDIRECTORY << i;
+        rcFile.SetValue(key.str().c_str(), options.recentDirectoryPaths[i]);
+    }
+
+    const auto oldRcFilePath =
+        (flx::getHomeDirectory() += PATHSEPARATORSTRING) += OLDFLEXPLORERRC;
+    if (stat(oldRcFilePath.c_str(), &sbuf) == 0)
+    {
+        fs::remove(oldRcFilePath);
+    }
 #endif
 }
 
@@ -80,23 +180,27 @@ void FlexplorerOptions::ReadOptions(struct sFPOptions &options)
 #ifdef _WIN32
     BRegistry reg(BRegistry::currentUser, FLEXPLOREREG);
 
+    reg.GetValue(FLEXPLORERVERSION, options.version);
+
     if (!reg.GetValue(FLEXPLORERBOOTSECTORFILE, string_result) &&
         !string_result.empty())
     {
         options.bootSectorFile = string_result;
     }
 
-    if (!reg.GetValue(FLEXFILETIMEACCESS, int_result))
+    if (!reg.GetValue(FLEXPLORERFILETIMEACCESS, int_result))
     {
-        if (int_result < 0)
-        {
-            int_result = 0;
-        }
-        else if (int_result == 2 || int_result > 3)
+        int_result = std::max(int_result, 0);
+        if (int_result == 2 || int_result > 3)
         {
             int_result = 3;
         }
         options.ft_access = static_cast<FileTimeAccess>(int_result);
+    }
+    if (!reg.GetValue(FLEXPLORERICONSIZE, int_result))
+    {
+        options.iconSize = (int_result >= 24) ? 24 : 16;
+        options.iconSize = (int_result >= 32) ? 32 : options.iconSize;
     }
     if (!reg.GetValue(FLEXPLORERINJECTCNV, int_result))
     {
@@ -114,11 +218,52 @@ void FlexplorerOptions::ReadOptions(struct sFPOptions &options)
     {
         options.extractTextFileAskUser = (int_result != 0);
     }
+    if (!reg.GetValue(FLEXPLORERTRACK0ONLYDIRSEC, int_result))
+    {
+        options.onTrack0OnlyDirSectors = (int_result != 0);
+    }
+    reg.GetValue(FLEXPLOREROPENDISKPATH, options.openDiskPath);
+    reg.GetValue(FLEXPLOREROPENDIRECTORYPATH, options.openDirectoryPath);
+    reg.GetValue(FLEXPLORERFILESIZETYPE, int_result);
+    int_result = std::max(int_result, 1);
+    int_result = std::min(int_result, 2);
+    options.fileSizeType = static_cast<FileSizeType>(int_result);
+    reg.GetValue(FLEXPLOREROPENINJECTFILEPATH, options.openInjectFilePath);
+
+    for (auto i = 0; i < options.maxRecentFiles; ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDISKPATH << i;
+        if (!reg.GetValue(key.str(), string_result))
+        {
+            options.recentDiskPaths.push_back(string_result);
+        }
+    }
+    for (auto i = 0; i < options.maxRecentDirectories; ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDIRECTORY << i;
+        if (!reg.GetValue(key.str(), string_result))
+        {
+            options.recentDirectoryPaths.push_back(string_result);
+        }
+    }
 #endif
 #ifdef UNIX
-    const auto rcFileName =
-        getHomeDirectory() + PATHSEPARATORSTRING FLEXPLORERRC;
-    BRcFile rcFile(rcFileName.c_str());
+    struct stat sbuf{};
+    auto rcFilePath =
+        (flx::getFlexemuUserConfigPath() += PATHSEPARATORSTRING) +=
+        FLEXPLORERRC;
+    if (stat(rcFilePath.c_str(), &sbuf) != 0)
+    {
+        rcFilePath = (flx::getHomeDirectory() += PATHSEPARATORSTRING) +=
+            OLDFLEXPLORERRC;
+    }
+    BRcFile rcFile(rcFilePath);
+
+    rcFile.GetValue(FLEXPLORERVERSION, options.version);
 
     if (!rcFile.GetValue(FLEXPLORERBOOTSECTORFILE, string_result) &&
         !string_result.empty())
@@ -126,17 +271,19 @@ void FlexplorerOptions::ReadOptions(struct sFPOptions &options)
         options.bootSectorFile = string_result;
     }
 
-    if (!rcFile.GetValue(FLEXFILETIMEACCESS, int_result))
+    if (!rcFile.GetValue(FLEXPLORERFILETIMEACCESS, int_result))
     {
-        if (int_result < 0)
-        {
-            int_result = 0;
-        }
-        else if (int_result == 2 || int_result > 3)
+        int_result = std::max(int_result, 0);
+         if (int_result == 2 || int_result > 3)
         {
             int_result = 3;
         }
         options.ft_access = static_cast<FileTimeAccess>(int_result);
+    }
+    if (!rcFile.GetValue(FLEXPLORERICONSIZE, int_result))
+    {
+        options.iconSize = (int_result >= 24) ? 24 : 16;
+        options.iconSize = (int_result >= 32) ? 32 : options.iconSize;
     }
     if (!rcFile.GetValue(FLEXPLORERINJECTCNV, int_result))
     {
@@ -153,6 +300,38 @@ void FlexplorerOptions::ReadOptions(struct sFPOptions &options)
     if (!rcFile.GetValue(FLEXPLOREREXTRACTASK, int_result))
     {
         options.extractTextFileAskUser = (int_result != 0);
+    }
+    if (!rcFile.GetValue(FLEXPLORERTRACK0ONLYDIRSEC, int_result))
+    {
+        options.onTrack0OnlyDirSectors = (int_result != 0);
+    }
+    rcFile.GetValue(FLEXPLOREROPENDISKPATH, options.openDiskPath);
+    rcFile.GetValue(FLEXPLOREROPENDIRECTORYPATH, options.openDirectoryPath);
+    rcFile.GetValue(FLEXPLORERFILESIZETYPE, int_result);
+    int_result = std::max(int_result, 1);
+    int_result = std::min(int_result, 2);
+    options.fileSizeType = static_cast<FileSizeType>(int_result);
+    rcFile.GetValue(FLEXPLOREROPENINJECTFILEPATH, options.openInjectFilePath);
+
+    for (auto i = 0; i < sFPOptions::maxRecentFiles; ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDISKPATH << i;
+        if (!rcFile.GetValue(key.str().c_str(), string_result))
+        {
+            options.recentDiskPaths.push_back(string_result);
+        }
+    }
+    for (auto i = 0; i < sFPOptions::maxRecentDirectories; ++i)
+    {
+        std::stringstream key;
+
+        key << FLEXPLORERRECENTDIRECTORY << i;
+        if (!rcFile.GetValue(key.str().c_str(), string_result))
+        {
+            options.recentDirectoryPaths.push_back(string_result);
+        }
     }
 #endif
 }

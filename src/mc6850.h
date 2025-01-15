@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,8 +26,6 @@
 #define MC6850_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "iodevice.h"
 
 class Mc6850 : public IoDevice
@@ -35,13 +33,16 @@ class Mc6850 : public IoDevice
 
     // Internal registers:
     //
-    // cr       control register (write only)
-    // sr       status register  (read only)
+    // cr control register (write only)
+    // sr status register  (read only)
     // rdr, tdr receive/transmit data register (read only/write only)
 
 protected:
 
-    Byte                 cr, sr, rdr, tdr;
+    Byte cr{};
+    Byte sr{};
+    Byte rdr{};
+    Byte tdr{};
 
 public:
 
@@ -58,25 +59,24 @@ public:
     }
 
     // actions to be done when a character is ready to be received
-    virtual void            activeTransition();
+    virtual void activeTransition();
 
 protected:
     // read data from serial line
-    virtual Byte            readInput();
+    virtual Byte readInput();
     // write data to serial line
-    virtual void            writeOutput(Byte val);
+    virtual void writeOutput(Byte val);
     // set an interrupt
-    virtual void            set_irq();
+    virtual void set_irq();
     // request if character is ready to be read, update status register
-    virtual void            requestInput();
+    virtual void requestInput();
 
     // Public constructor and destructor
 
 public:
 
-    Mc6850();
-    virtual             ~Mc6850();
-
+    Mc6850() = default;
+    ~Mc6850() override = default;
 };
 
 #endif // MC6850_INCLUDED

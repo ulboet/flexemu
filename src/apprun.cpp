@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "misc1.h"
 #include <new>
 #include <sstream>
+#include <iostream>
 #ifdef _MSC_VER
     #include <new.h>
 #endif
@@ -43,30 +44,30 @@
 #include "iodevdbg.h"
 #include "soptions.h"
 #include "qtgui.h"
+#include "scpulog.h"
 #include "cvtwchar.h"
+#include "termimpi.h"
 
 
-ApplicationRunner::ApplicationRunner(struct sOptions &x_options) :
-    options(x_options),
+ApplicationRunner::ApplicationRunner(struct sOptions &p_options,
+        ITerminalImplPtr &&termImpl) :
+    options(p_options),
     memory(options),
     cpu(memory),
-    rtc(),
     fdc(options),
-    inout(x_options, memory),
+    inout(p_options, memory),
     scheduler(cpu, inout),
-    terminalIO(scheduler, x_options),
+    terminalIO(scheduler, std::move(termImpl)),
     mmu(memory),
-    acia1(terminalIO),
-    pia1(scheduler, keyboardIO, x_options),
+    acia1(terminalIO, inout),
+    pia1(scheduler, keyboardIO, p_options),
     pia2(cpu, keyboardIO, joystickIO),
     via1(scheduler),
     pia2v5(cpu),
     drisel(fdc),
-    command(inout, scheduler, fdc),
-    vico1(),
-    vico2(),
+    command(inout, scheduler, fdc, options),
     gui(cpu, memory, scheduler, inout, vico1, vico2,
-        joystickIO, keyboardIO, terminalIO, pia1, x_options)
+        joystickIO, keyboardIO, terminalIO, pia1, p_options)
 {
     if (options.startup_command.size() > MAX_COMMAND)
     {
@@ -79,7 +80,7 @@ ApplicationRunner::ApplicationRunner(struct sOptions &x_options) :
     // neumnt54.hex is obsolete now.
     // neumon54.hex can be used for both terminal and GUI mode.
     // SERPAR flag is switched dynamically during emulation.
-    if (getFileName(options.hex_file) == std::string("neumnt54.hex"))
+    if (flx::getFileName(options.hex_file) == std::string("neumnt54.hex"))
     {
         std::stringstream message;
 
@@ -105,6 +106,28 @@ ApplicationRunner::ApplicationRunner(struct sOptions &x_options) :
         options.nColors = 2;
         // Switch of High memory option.
         options.isHiMem = false;
+    }
+
+    if (!options.cpuLogPath.empty())
+    {
+        Mc6809LoggerConfig loggerConfig;
+
+        loggerConfig.logFileName = options.cpuLogPath;
+        loggerConfig.isEnabled = true;
+        loggerConfig.logCycleCount = true;
+        const auto extension = flx::tolower(
+                flx::getFileExtension(options.cpuLogPath));
+        if (extension == ".csv")
+        {
+            loggerConfig.format = Mc6809LoggerConfig::Format::Csv;
+            loggerConfig.csvSeparator = ';';
+        }
+        else
+        {
+            loggerConfig.format = Mc6809LoggerConfig::Format::Text;
+        }
+
+        cpu.setLoggerConfig(loggerConfig);
     }
 
     ioDevices.insert({ acia1.getName(), acia1 });
@@ -133,22 +156,11 @@ ApplicationRunner::ApplicationRunner(struct sOptions &x_options) :
 
     scheduler.set_frequency(options.frequency);
 
-    FlexemuConfigFile configFile(getFlexemuSystemConfigFile().c_str());
-    if (terminalIO.is_terminal_supported())
-    {
-        auto address = configFile.GetSerparAddress(options.hex_file.c_str());
-        if (address < 0)
-        {
-            // The specified hex_file does not support switching between
-            // serial/parallel input/output or it is unknown how to switch.
-            // Terminal mode has to be switched off.
-            options.term_mode = false;
-        }
-        inout.serpar_address(address);
-    }
-
     if (options.isEurocom2V5)
     {
+        const auto path(flx::getFlexemuConfigFile());
+        FlexemuConfigFile configFile(path);
+
         auto logMdcr = configFile.GetDebugSupportOption("logMdcr");
         auto logFilePath = configFile.GetDebugSupportOption("logMdcrFilePath");
         pia2v5.set_debug(logMdcr, logFilePath);
@@ -160,7 +172,9 @@ ApplicationRunner::ApplicationRunner(struct sOptions &x_options) :
     via1.Attach(cpu);
     acia1.Attach(cpu);
     terminalIO.Attach(cpu);
+    terminalIO.Attach(gui);
     command.Attach(cpu);
+    command.Attach(gui);
     vico1.Attach(memory);
     vico2.Attach(memory);
     if (options.useRtc)
@@ -176,7 +190,8 @@ ApplicationRunner::~ApplicationRunner()
 
 void ApplicationRunner::AddIoDevicesToMemory()
 {
-    FlexemuConfigFile configFile(getFlexemuSystemConfigFile().c_str());
+    const auto path(flx::getFlexemuConfigFile());
+    FlexemuConfigFile configFile(path);
     const auto deviceParams = configFile.ReadIoDevices();
     const auto pairOfParams = configFile.GetIoDeviceLogging();
     const auto logFilePath = std::get<0>(pairOfParams);
@@ -186,7 +201,7 @@ void ApplicationRunner::AddIoDevicesToMemory()
     debugLogDevices.reserve(deviceParams.size());
 
     // Add all memory mapped I/O devices to memory.
-    for (auto deviceParam : deviceParams)
+    for (const auto &deviceParam : deviceParams)
     {
         std::string name = deviceParam.name;
 
@@ -212,25 +227,27 @@ void ApplicationRunner::AddIoDevicesToMemory()
 
 bool ApplicationRunner::LoadMonitorFileIntoRom()
 {
-    size_t startAddress = 0;
+    std::string hexFilePath = options.hex_file;
+    DWord startAddress = 0;
 
-    int error = load_hexfile(options.hex_file.c_str(), memory, startAddress);
+    int error = load_hexfile(options.hex_file, memory, startAddress);
     if (error < 0)
     {
-        std::string hexFilePath;
+        if (!flx::isAbsolutePath(hexFilePath))
+        {
+            hexFilePath = options.disk_dir + PATHSEPARATORSTRING +
+                          options.hex_file;
 
-        hexFilePath = options.disk_dir + PATHSEPARATORSTRING +
-                      options.hex_file;
+            error = load_hexfile(hexFilePath, memory, startAddress);
+        }
 
-        error = load_hexfile(hexFilePath.c_str(), memory, startAddress);
         if (error < 0)
         {
             std::stringstream pmsg;
 
-            pmsg << "*** Error in \"" << hexFilePath
-                 << "\":" << std::endl << "    ";
+            pmsg << "*** Error in \"" << hexFilePath << "\":\n    ";
             print_hexfile_error(pmsg, error);
-            pmsg << std::endl;
+            pmsg << '\n';
 #ifdef _WIN32
             MessageBox(
                 nullptr,
@@ -239,7 +256,7 @@ bool ApplicationRunner::LoadMonitorFileIntoRom()
                 MB_OK | MB_ICONERROR);
 #endif
 #ifdef UNIX
-            fprintf(stderr, "%s", pmsg.str().c_str());
+            std::cerr << pmsg.str();
 #endif
             return false;
         }
@@ -247,7 +264,7 @@ bool ApplicationRunner::LoadMonitorFileIntoRom()
     return true;
 }
 
-int ApplicationRunner::startup()
+int ApplicationRunner::startup(QApplication &app)
 {
     cpu.set_disassembler(&disassembler);
     cpu.set_use_undocumented(options.use_undocumented);
@@ -259,11 +276,28 @@ int ApplicationRunner::startup()
     }
     else
     {
-        fdc.disk_directory(options.disk_dir.c_str());
-        fdc.mount_all_drives(options.drive);
+        fdc.disk_directory(options.disk_dir);
+        fdc.mount_all_drives(options.drives);
     }
 
-    terminalIO.init(options.reset_key);
+    if (!terminalIO.init(options.reset_key))
+    {
+        return 1;
+    }
+
+    const auto path(flx::getFlexemuConfigFile());
+    FlexemuConfigFile configFile(path);
+    auto address = configFile.GetSerparAddress(options.hex_file);
+    if (address < 0 || !terminalIO.is_terminal_supported())
+    {
+        // The specified hex_file does not support switching between
+        // serial/parallel input/output or it is unknown how to switch.
+        // Or terminal mode is not support in general.
+        // In any of these cases terminal mode has to be switched off.
+        options.term_mode = false;
+    }
+    inout.serpar_address(address);
+
     inout.set_gui(&gui);
 
     if (!(options.term_mode && terminalIO.is_terminal_supported()))
@@ -281,17 +315,22 @@ int ApplicationRunner::startup()
     memory.reset_io();
     cpu.reset();
 
+    auto boot_char = configFile.GetBootCharacter(options.hex_file);
     if (options.term_mode && terminalIO.is_terminal_supported())
     {
-        terminalIO.set_startup_command(options.startup_command.c_str());
+        terminalIO.set_startup_command(options.startup_command);
     }
     else
     {
-        keyboardIO.set_startup_command(options.startup_command.c_str());
+        keyboardIO.set_startup_command(options.startup_command);
     }
+    keyboardIO.set_boot_char(boot_char);
 
     // start CPU thread
     cpuThread = std::make_unique<std::thread>(&Scheduler::run, &scheduler);
+
+    QObject::connect(&gui, &QtGui::CloseApplication, &app,
+                     &QCoreApplication::quit, Qt::QueuedConnection);
 
     return 0;
 }
@@ -303,7 +342,7 @@ void ApplicationRunner::cleanup()
         // Make sure that the CPU thread leaves the suspended state
         // otherwise join will end up in an endless state.
         scheduler.request_new_state(CpuState::Exit);
-        cpuThread->join();  // wait for termination of CPU thread
+        cpuThread->join(); // wait for termination of CPU thread
         cpuThread.reset();
     }
 }

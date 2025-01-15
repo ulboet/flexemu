@@ -2,8 +2,8 @@
     mdcrtape.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2018-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ class MiniDcrTape;
 
 using MiniDcrTapePtr = std::unique_ptr<MiniDcrTape>;
 
-enum class RecordType : Byte
+enum class RecordType : uint8_t
 {
     NONE,      // There is no (more) record
     Header,    // Record containing a file header
@@ -46,7 +46,7 @@ enum class RecordType : Byte
 
 class MiniDcrTape
 {
-    enum class Mode : Byte
+    enum class Mode : uint8_t
     {
         Create, // Create a new file
         Open,   // Open an existing file
@@ -67,14 +67,14 @@ public:
     MiniDcrTape() = delete;
     MiniDcrTape(const MiniDcrTape &) = delete;
     MiniDcrTape(MiniDcrTape &&) = delete;
-    MiniDcrTape(const char *path, Mode mode);
+    MiniDcrTape(const std::string &path, Mode mode);
     virtual ~MiniDcrTape();
 
     MiniDcrTape &operator= (const MiniDcrTape &) = delete;
     MiniDcrTape &operator= (MiniDcrTape &&) = delete;
 
-    static MiniDcrTapePtr Create(const char *path);
-    static MiniDcrTapePtr Open(const char *path);
+    static MiniDcrTapePtr Create(const std::string &path);
+    static MiniDcrTapePtr Open(const std::string &path);
     bool Close();
     bool IsOpen() const;
     bool HasRecord() const;
@@ -90,6 +90,6 @@ public:
 private:
     bool VerifyTape();
 
-};  // class MiniDcrTape
+}; // class MiniDcrTape
 
 #endif // MDCRTAPE_INCLUDED

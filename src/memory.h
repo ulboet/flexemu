@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,63 +26,66 @@
 #define MEMORY_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
 #include "warnoff.h"
-#include <tsl/robin_map.h>
 #include "warnon.h"
 #include <functional>
 #include <memory>
+#include <vector>
 #include "iodevice.h"
-#include "ioaccess.h"
 #include "memtgt.h"
 #include "e2.h"
 #include "bobserv.h"
+#include <array>
+#include <iostream>
 
 // Maximum number of video RAM pointers supported.
 // Each video RAM page has as size of 16KByte.
 
-#define MAX_VRAM        (4 * 16)
+enum : uint8_t {
+MAX_VRAM = (4 * 16),
+};
 
 struct sOptions;
 
-class Memory : public MemoryTarget<size_t>, public BObserver
+struct ioDeviceAccess
+{
+    Byte deviceIndex{0};
+    Byte addressOffset{0};
+};
+
+class Memory : public MemoryTarget<DWord>, public BObserver
 {
 public:
-    Memory(const struct sOptions &options);
-    virtual ~Memory();
+    explicit Memory(const struct sOptions &options);
+    ~Memory() override;
 
 private:
-    Byte *ppage[16];
-    bool isRamExtension;
-    bool isHiMem;
-    bool isFlexibleMmu;
-    bool isEurocom2V5; // Emulate an Eurocom II/V5 (instead of Eurocom II/V7)
-    DWord memory_size;
-    DWord video_ram_size;
-    Byte ramBank;
-    std::unique_ptr<Byte[]> memory;
-    std::unique_ptr<Byte[]> video_ram;
+    std::array<Byte *, 16> ppage{};
+    bool isRamExtension{false};
+    bool isHiMem{false};
+    bool isFlexibleMmu{false};
+    bool isEurocom2V5{false}; // Emulate an Eurocom II/V5
+                              // (instead of Eurocom II/V7)
+    DWord memory_size{0x10000};
+    DWord video_ram_size{0};
+    Byte ramBank{0};
+    std::vector<Byte> memory;
+    std::vector<Byte> video_ram;
 
     // I/O device access
     std::vector<std::reference_wrapper<IoDevice> > ioDevices;
-    tsl::robin_map<
-        Word,
-        IoAccess,
-        std::hash<Word>,
-        std::equal_to<Word>,
-        std::allocator<std::pair<Word, IoAccess>>,
-        false,
-        tsl::rh::power_of_two_growth_policy<16>> ioAccessForAddressMap;
+    std::vector<ioDeviceAccess> deviceAccess;
+    static const Byte NO_DEVICE = 0xFF;
 
     // interface to video display
-    Byte *vram_ptrs[MAX_VRAM];
-    Word video_ram_active_bits; // 16-bit, one for each video memory page
-    bool changed[YBLOCKS];
+    std::array<Byte *, MAX_VRAM> vram_ptrs{};
+    Word video_ram_active_bits{0}; // 16-bit, one for each video memory page
+    std::array<bool, YBLOCKS> changed{};
+    static std::array<Byte, 8> initial_content;
 
 private:
     void init_memory();
-    void init_vram_ptr(Byte vram_ptr_index, Byte *ram_address);
-    static Byte initial_content[8];
+    void init_vram_ptr(Byte vram_ptr_index, Byte *ram_ptr);
 
     // Initialisation functions
 
@@ -102,32 +105,36 @@ public:
 
     // memory target interface
 public:
-    void CopyFrom(const Byte *buffer, size_t address, size_t aSize) override;
+    void CopyFrom(const Byte *source, DWord address, DWord size) override;
 
 public:
     void write_ram_rom(Word address, Byte value);
     Byte read_ram_rom(Word address);
-    void dump_ram_rom(Word min = 0, Word max = 0xffff);
+    void dump_ram_rom(std::ostream &os, Word min, Word max);
 
     // The following memory Byte/Word access methods are
     // inlined for optimized performance.
-   inline void write_byte(Word address, Byte value)
+    inline void write_byte(Word address, Byte value)
     {
-        if (((address & GENIO_BASE) == GENIO_BASE) || ((address & GENIO_BASE2) == GENIO_BASE2))
+        if (address >= GENIO_BASE)
         {
-            auto iterator = ioAccessForAddressMap.find(address);
+            auto access = deviceAccess[address - GENIO_BASE];
 
-            if (iterator != ioAccessForAddressMap.end())
+            if (access.deviceIndex != NO_DEVICE)
             {
-                iterator.value().write(value);
+                auto offset = access.addressOffset;
+
+                // Write one Byte to memory mapped I/O device.
+                ioDevices[access.deviceIndex].get().writeIo(offset, value);
                 return;
             }
         }
 
-        if (video_ram_active_bits & (1 << (address >> 12)))
+        if (video_ram_active_bits &
+                (1U << (static_cast<unsigned>(address) >> 12U)))
         {
-            changed[(address & 0x3fff) / YBLOCK_SIZE] = true;
-            *(ppage[address >> 12] + (address & 0x3fff)) = value;
+            changed[(address & 0x3FFFU) / YBLOCK_SIZE] = true;
+            *(ppage[address >> 12U] + (address & 0x3FFFU)) = value;
         }
         else
         {
@@ -135,11 +142,11 @@ public:
             {
                 // Use paged memory access to be able to mirror
                 // RAM banks (e.g. for Eurocom V5).
-                *(ppage[address >> 12] + (address & 0x3fff)) = value;
-                if (!isRamExtension && ((ramBank & 0x03) != 3) &&
-                    (address >> 14 == (ramBank & 0x03)))
+                *(ppage[address >> 12U] + (address & 0x3FFFU)) = value;
+                if (!isRamExtension && ((ramBank & 0x03U) != 3U) &&
+                    ((address / 16384U) == (ramBank & 0x03U)))
                 {
-                    changed[(address & 0x3fff) / YBLOCK_SIZE] = true;
+                    changed[(address & 0x3FFFU) / YBLOCK_SIZE] = true;
                 }
             }
         }
@@ -147,23 +154,25 @@ public:
 
     inline Byte read_byte(Word address)
     {
-        if (((address & GENIO_BASE) == GENIO_BASE) || ((address & GENIO_BASE2) == GENIO_BASE2))
+        if (address >= GENIO_BASE)
         {
-            auto iterator = ioAccessForAddressMap.find(address);
+            auto access = deviceAccess[address - GENIO_BASE];
 
-            if (iterator != ioAccessForAddressMap.end())
+            if (access.deviceIndex != NO_DEVICE)
             {
-                // read one Byte from memory mapped I/O device
-                return iterator.value().read();
+                auto offset = access.addressOffset;
+
+                // Read one Byte from memory mapped I/O device.
+                return ioDevices[access.deviceIndex].get().readIo(offset);
             }
         }
 
-        return *(ppage[address >> 12] + (address & 0x3fff));
-    } // read_byte
+        return *(ppage[address >> 12U] + (address & 0x3FFFU));
+    }
 
     inline void write_word(Word address, Word value)
     {
-        write_byte(address, static_cast<Byte>(value >> 8));
+        write_byte(address, static_cast<Byte>(value >> 8U));
         write_byte(address + 1, static_cast<Byte>(value));
     }
 
@@ -171,7 +180,7 @@ public:
     {
         Word value;
 
-        value = static_cast<Word>(read_byte(address)) << 8;
+        value = static_cast<Word>(read_byte(address)) << 8U;
         value |= static_cast<Word>(read_byte(address + 1));
 
         return value;
@@ -189,37 +198,31 @@ public:
 
     // Get read-only access to video RAM.
     // This can be used by the GUI to update the video display.
-    inline Byte const *get_video_ram(int bank, int block_number) const
+    inline Byte const *get_video_ram(Byte bank, int block_number) const
     {
         if (isRamExtension)
         {
-            if ((bank & 0x01) == 1)
+            if ((bank & 0x01U) == 1U)
             {
                 return vram_ptrs[0x08] + block_number * YBLOCK_SIZE;
             }
-            else
-            {
-                return vram_ptrs[0x0C] + block_number * YBLOCK_SIZE;
-            }
-        }
-        else
-        {
-            int offset = (bank & 0x03) * VIDEORAM_SIZE;
 
-            return &memory[offset] + block_number * YBLOCK_SIZE;
+            return vram_ptrs[0x0C] + block_number * YBLOCK_SIZE;
         }
+
+        auto offset = (bank & 0x03U) * VIDEORAM_SIZE;
+
+        return &memory[offset] + block_number * YBLOCK_SIZE;
     }
 
-    inline bool is_video_bank_valid(int bank) const
+    inline bool is_video_bank_valid(Byte bank) const
     {
         if (isRamExtension)
         {
-            return (bank & 0x2) == 0;
+            return (bank & 0x02U) == 0U;
         }
-        else
-        {
-            return (bank & 0x3) != 3;
-        }
+
+        return (bank & 0x3U) != 3U;
     }
 };
 #endif // MEMORY_INCLUDED

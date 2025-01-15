@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -55,15 +55,15 @@ class VideoControl1 : public ByteRegister, public BObserved
 {
 private:
 
-    Byte value;
-    bool isFirstWrite;
+    Byte value{0};
+    bool isFirstWrite{true};
 
     void requestWriteValue(Byte value) override;
 
 public:
 
-    VideoControl1();
-    virtual ~VideoControl1();
+    VideoControl1() = default;
+    ~VideoControl1() override = default;
 
     const char *getName() override
     {

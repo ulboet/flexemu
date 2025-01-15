@@ -3,7 +3,7 @@
 
 
     Basic class for platform independent high resolution time support
-    Copyright (C) 2001-2022  W. Schwotzer
+    Copyright (C) 2001-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 #ifndef BRELTIME_INCLUDED
 #define BRELTIME_INCLUDED
 
-#include "misc1.h"
+#include "typedefs.h"
 
 // Get relative time values with us resolution with unknown reference.
 // Interface can be used to calculate precise time differences between
@@ -32,9 +32,9 @@
 class BRelativeTime
 {
 public:
-    BRelativeTime();
-    ~BRelativeTime();
-    QWord GetTimeUsll();
+    BRelativeTime() = delete;
+    ~BRelativeTime() = delete;
+    static QWord GetTimeUsll();
 };
 
 #endif

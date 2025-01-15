@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2004-2022  W. Schwotzer
+    Copyright (C) 2004-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #define BPROCESS_INCLUDED
 
 #include "misc1.h"
+#include <vector>
 #include <string>
 
 // This class describes a platform independant Process interface
@@ -31,17 +32,24 @@
 class BProcess
 {
 public:
-    BProcess(const std::string &executable,
-             const std::string &directory = "",
-             const std::string &argument  = "");
+    explicit BProcess(
+             std::string p_executable,
+             std::string p_directory = "",
+             std::vector<std::string> p_arguments = {});
+#ifdef _WIN32
     ~BProcess();
+#endif
+#ifdef UNIX
+    ~BProcess() = default;
+#endif
     void AddArgument(const std::string &argument);
-    void SetDirectory(const std::string &directory);
-    bool Start();     // Start the Process if not started yet
-    bool IsRunning(); // Check if Process is running
-    const char *GetArguments()  const
+    void SetDirectory(const std::string &p_directory);
+    bool Start(); // Start the Process if not started yet
+    bool IsRunning() const; // Check if Process is running
+    int Wait(); // Wait until process exited and return exit status
+    std::vector<std::string> GetArguments()  const
     {
-        return arguments.c_str();
+        return arguments;
     };
     const char *GetDirectory()  const
     {
@@ -54,14 +62,14 @@ public:
 
 protected:
     std::string executable;
-    std::string arguments;
     std::string directory;
+    std::vector<std::string> arguments;
 
 #ifdef _WIN32
-    HANDLE hProcess;
+    HANDLE hProcess{INVALID_HANDLE_VALUE};
 #endif
 #ifdef UNIX
-    pid_t   pid;
+    pid_t pid{-1};
 #endif
 };
 

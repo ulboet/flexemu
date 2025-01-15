@@ -2,8 +2,8 @@
     btime.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2022 W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,8 +21,10 @@
 */
 
 #include "btime.h"
-#include <iostream>
-#include <iomanip>
+#include <sstream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
 BTime::BTime(int h, int m, int s)
@@ -32,42 +34,26 @@ BTime::BTime(int h, int m, int s)
 {
 }
 
-BTime::BTime(const BTime &src)
-    : hour(src.hour)
-    , minute(src.minute)
-    , second(src.second)
-{
-}
-
-BTime::~BTime()
-{
-}
-
 BTime BTime::Now()
 {
-    auto time_now = time((time_t *)nullptr);
-    auto *lt = localtime(&time_now);
+    const auto time_now = time(nullptr);
+    const auto *lt = localtime(&time_now);
 
-    return BTime(lt->tm_hour, lt->tm_min, lt->tm_sec);
+    return {lt->tm_hour, lt->tm_min, lt->tm_sec};
 }
 
-const std::string BTime::AsString(Format format) const
+std::string BTime::AsString(Format format) const
 {
     std::stringstream stream;
 
     switch (format)
     {
         case Format::HHMMSS:
-            stream << std::setfill('0') <<
-                std::setw(2) << hour << ':' <<
-                std::setw(2) << minute << ':' <<
-                std::setw(2) << second;
+            stream << fmt::format("{:02}:{:02}:{:02}", hour, minute, second);
             break;
 
         case Format::HHMM:
-            stream << std::setfill('0') <<
-                std::setw(2) << hour << ':' <<
-                std::setw(2) << minute;
+            stream << fmt::format("{:02}:{:02}", hour, minute);
             break;
     }
 
@@ -115,17 +101,14 @@ size_t BTime::ToSeconds() const
     return static_cast<size_t>(hour) * 3600U + minute * 60U + second;
 }
 
-BTime &BTime::operator = (const BTime &src)
-{
-    hour = src.hour;
-    minute = src.minute;
-    second = src.second;
-    return *this;
-}
-
 bool operator == (const BTime &rhs, const BTime &lhs)
 {
     return rhs.ToSeconds() == lhs.ToSeconds();
+}
+
+bool operator != (const BTime &rhs, const BTime &lhs)
+{
+    return rhs.ToSeconds() != lhs.ToSeconds();
 }
 
 bool operator < (const BTime &rhs, const BTime &lhs)

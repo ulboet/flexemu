@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,18 +21,15 @@
 */
 
 
-#include "misc1.h"
-
+#include "typedefs.h"
 #include "acia1.h"
 #include "terminal.h"
+#include "inout.h"
 #include "mc6809.h"
 
-Acia1::Acia1(TerminalIO &x_terminalIO) :
-             terminalIO(x_terminalIO)
-{
-}
-
-Acia1::~Acia1()
+Acia1::Acia1(TerminalIO &p_terminalIO, Inout &p_inout) :
+             terminalIO(p_terminalIO)
+             , inout(p_inout)
 {
 }
 
@@ -44,7 +41,7 @@ void Acia1::resetIo()
 
 void Acia1::requestInput()
 {
-    if (terminalIO.has_key_serial())
+    if (terminalIO.has_char_serial())
     {
         activeTransition();
     }
@@ -56,7 +53,7 @@ Byte Acia1::readInput()
 
     temp = 0;
 
-    if (terminalIO.has_key_serial())
+    if (terminalIO.has_char_serial())
     {
         temp = terminalIO.read_char_serial();
     }
@@ -66,7 +63,15 @@ Byte Acia1::readInput()
 
 void Acia1::writeOutput(Byte val)
 {
-    terminalIO.write_char_serial(val);
+    if (inout.read_serpar() == 0x00)
+    {
+        // Redirect serial output to gui.
+        inout.write_char_serial(val);
+    }
+    else
+    {
+        terminalIO.write_char_serial(val);
+    }
 }
 
 

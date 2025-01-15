@@ -75,22 +75,22 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\Qt$(QTVERSION)\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>temp\flexemu\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\Qt$(QTVERSION)\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>temp\flexemu\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\Qt$(QTVERSION)\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>temp\flexemu\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\Qt$(QTVERSION)\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>temp\flexemu\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -98,23 +98,25 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;QT_CORE_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <DisableLanguageExtensions>false</DisableLanguageExtensions>
       <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
-      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(SolutionDir)\fmt\include;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets;$(QTDIR)\$(Platform)\include\QtPrintSupport;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
-      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /permissive- /utf-8</AdditionalOptions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(QTDIR)\$(Platform)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>flexd.lib;kernel32.lib;user32.lib;advapi32.lib;Qt5Cored.lib;Qt5Guid.lib;Qt5Widgetsd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>flexd.lib;fmtd.lib;kernel32.lib;user32.lib;advapi32.lib;Qt$(QTMAJOR)Cored.lib;Qt$(QTMAJOR)Guid.lib;Qt$(QTMAJOR)Widgetsd.lib;Qt$(QTMAJOR)PrintSupportd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
     </ResourceCompile>
@@ -124,22 +126,24 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;QT_CORE_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
-      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(SolutionDir)\fmt\include;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets;$(QTDIR)\$(Platform)\include\QtPrintSupport;</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
-      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /permissive- /utf-8</AdditionalOptions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(QTDIR)\$(Platform)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>flexd.lib;kernel32.lib;user32.lib;advapi32.lib;Qt5Cored.lib;Qt5Guid.lib;Qt5Widgetsd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>flexd.lib;fmtd.lib;kernel32.lib;user32.lib;advapi32.lib;Qt$(QTMAJOR)Cored.lib;Qt$(QTMAJOR)Guid.lib;Qt$(QTMAJOR)Widgetsd.lib;Qt$(QTMAJOR)PrintSupportd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
     </ResourceCompile>
@@ -151,15 +155,17 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;QT_CORE_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(SolutionDir)\fmt\include;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets;$(QTDIR)\$(Platform)\include\QtPrintSupport;</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
-      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /permissive- /utf-8</AdditionalOptions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -167,7 +173,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(QTDIR)\$(Platform)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>flex.lib;kernel32.lib;user32.lib;advapi32.lib;Qt5Core.lib;Qt5Gui.lib;Qt5Widgets.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>flex.lib;fmt.lib;kernel32.lib;user32.lib;advapi32.lib;Qt$(QTMAJOR)Core.lib;Qt$(QTMAJOR)Gui.lib;Qt$(QTMAJOR)Widgets.lib;Qt$(QTMAJOR)PrintSupport.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ResourceCompile>
     </ResourceCompile>
@@ -179,15 +185,17 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;QT_CORE_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <DisableSpecificWarnings>4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\src;$(SolutionDir)\fmt\include;$(IntDir);$(QTDIR)\$(Platform)\include;$(QTDIR)\$(Platform)\include\QtCore;$(QTDIR)\$(Platform)\include\QtGui;$(QTDIR)\$(Platform)\include\QtWidgets;$(QTDIR)\$(Platform)\include\QtPrintSupport;</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>pch.h</ForcedIncludeFiles>
       <PrecompiledHeaderOutputFile>$(IntDir)\pch.pch</PrecompiledHeaderOutputFile>
-      <AdditionalOptions>/Zc:__cplusplus /permissive-</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /permissive- /utf-8</AdditionalOptions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -195,7 +203,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(QTDIR)\$(Platform)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>flex.lib;kernel32.lib;user32.lib;advapi32.lib;Qt5Core.lib;Qt5Gui.lib;Qt5Widgets.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>flex.lib;fmt.lib;kernel32.lib;user32.lib;advapi32.lib;Qt$(QTMAJOR)Core.lib;Qt$(QTMAJOR)Gui.lib;Qt$(QTMAJOR)Widgets.lib;Qt$(QTMAJOR)PrintSupport.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -217,8 +225,11 @@
     <ClCompile Include="e2floppy.cpp" />
     <ClCompile Include="e2screen.cpp" />
     <ClCompile Include="efslctle.cpp" />
+    <ClCompile Include="fdoptman.cpp" />
+    <ClCompile Include="flblfile.cpp" />
     <ClCompile Include="foptman.cpp" />
     <ClCompile Include="fsetupui.cpp" />
+    <ClCompile Include="fversion.cpp" />
     <ClCompile Include="inout.cpp" />
     <ClCompile Include="iodevdbg.cpp" />
     <ClCompile Include="joystick.cpp" />
@@ -228,11 +239,14 @@
     <ClCompile Include="mc146818.cpp" />
     <ClCompile Include="mc6809.cpp" />
     <ClCompile Include="mc6809in.cpp" />
+    <ClCompile Include="mc6809lg.cpp" />
     <ClCompile Include="mc6809st.cpp" />
     <ClCompile Include="mc6821.cpp" />
     <ClCompile Include="mc6850.cpp" />
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="ndircont.cpp" />
+    <ClCompile Include="pagedet.cpp" />
+    <ClCompile Include="pagedetd.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
@@ -242,9 +256,17 @@
     <ClCompile Include="pia1.cpp" />
     <ClCompile Include="pia2.cpp" />
     <ClCompile Include="pia2v5.cpp" />
+    <ClCompile Include="poutwin.cpp" />
+    <ClCompile Include="poverhlp.cpp" />
+    <ClCompile Include="qtfree.cpp" />
     <ClCompile Include="qtgui.cpp" />
     <ClCompile Include="schedule.cpp" />
     <ClCompile Include="sodiff.cpp" />
+    <ClCompile Include="soptions.cpp" />
+    <ClCompile Include="termimpc.cpp" />
+    <ClCompile Include="termimpd.cpp" />
+    <ClCompile Include="termimpf.cpp" />
+    <ClCompile Include="termimps.cpp" />
     <ClCompile Include="terminal.cpp" />
     <ClCompile Include="vico1.cpp" />
     <ClCompile Include="vico2.cpp" />
@@ -255,11 +277,19 @@
     <Image Include="bitmaps\flexemu.ico" />
     <ResourceCompile Include="flexemu.rc" />
     <CustomBuild Include="flexemu.qrc">
-      <Command>"$(QTDIR)\$(Platform)\bin\rcc.exe" "%(FullPath)" -name %(Filename)_qrc.cpp -o "$(IntDir)\%(Filename)_qrc.cpp"</Command>
+      <Command>"$(QTDIR)\$(Platform)\bin\rcc.exe" "%(FullPath)" -name %(Filename) -o "$(IntDir)\%(Filename)_qrc.cpp"</Command>
       <Message>Resource compile %(Filename).qrc</Message>
       <Outputs>$(IntDir)\%(Filename)_qrc.cpp</Outputs>
       <AdditionalInputs>$(QTDIR)\$(Platform)\bin\rcc.exe;%(FullPath)</AdditionalInputs>
       <OutputItemType>ClCompile</OutputItemType>
+      <BuildInParallel>true</BuildInParallel>
+    </CustomBuild>
+    <CustomBuild Include="about.ui">
+      <Command>"$(QTDIR)\$(Platform)\bin\uic.exe" "%(FullPath)" -o "$(IntDir)\%(Filename)_ui.h"</Command>
+      <Message>User interface compile %(Filename).ui</Message>
+      <Outputs>$(IntDir)\%(Filename)_ui.h</Outputs>
+      <AdditionalInputs>$(QTDIR)\$(Platform)\bin\uic.exe;%(FullPath)</AdditionalInputs>
+      <OutputItemType>ClInclude</OutputItemType>
       <BuildInParallel>true</BuildInParallel>
     </CustomBuild>
     <CustomBuild Include="brkpt.ui">
@@ -287,6 +317,14 @@
       <BuildInParallel>true</BuildInParallel>
     </CustomBuild>
     <CustomBuild Include="fsetup.ui">
+      <Command>"$(QTDIR)\$(Platform)\bin\uic.exe" "%(FullPath)" -o "$(IntDir)\%(Filename)_ui.h"</Command>
+      <Message>User interface compile %(Filename).ui</Message>
+      <Outputs>$(IntDir)\%(Filename)_ui.h</Outputs>
+      <AdditionalInputs>$(QTDIR)\$(Platform)\bin\uic.exe;%(FullPath)</AdditionalInputs>
+      <OutputItemType>ClInclude</OutputItemType>
+      <BuildInParallel>true</BuildInParallel>
+    </CustomBuild>
+    <CustomBuild Include="pprev.ui">
       <Command>"$(QTDIR)\$(Platform)\bin\uic.exe" "%(FullPath)" -o "$(IntDir)\%(Filename)_ui.h"</Command>
       <Message>User interface compile %(Filename).ui</Message>
       <Outputs>$(IntDir)\%(Filename)_ui.h</Outputs>
@@ -350,8 +388,17 @@
       <OutputItemType>ClCompile</OutputItemType>
       <BuildInParallel>true</BuildInParallel>
     </CustomBuild>
+    <CustomBuild Include="poutwin.h">
+      <Command>"$(QTDIR)\$(Platform)\bin\moc.exe" "%(FullPath)" -o "$(IntDir)\%(Filename)_moc.cpp"</Command>
+      <Message>Meta object compile %(Filename).h</Message>
+      <Outputs>$(IntDir)\%(Filename)_moc.cpp</Outputs>
+      <AdditionalInputs>$(QTDIR)\$(Platform)\bin\moc.exe;%(FullPath)</AdditionalInputs>
+      <OutputItemType>ClCompile</OutputItemType>
+      <BuildInParallel>true</BuildInParallel>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="asciictl.h" />
     <ClInclude Include="absdisas.h" />
     <ClInclude Include="absgui.h" />
     <ClInclude Include="acia1.h" />
@@ -360,7 +407,6 @@
     <ClInclude Include="bdate.h" />
     <ClInclude Include="bdir.h" />
     <ClInclude Include="benv.h" />
-    <ClInclude Include="bfileptr.h" />
     <ClInclude Include="binifile.h" />
     <ClInclude Include="bintervl.h" />
     <ClInclude Include="bjoystck.h" />
@@ -371,11 +417,14 @@
     <ClInclude Include="bobshelp.h" />
     <ClInclude Include="brcfile.h" />
     <ClInclude Include="bregistr.h" />
+    <ClInclude Include="bscopeex.h" />
     <ClInclude Include="btime.h" />
     <ClInclude Include="bui.h" />
     <ClInclude Include="bytereg.h" />
     <ClInclude Include="cacttrns.h" />
+    <ClInclude Include="cistring.h" />
     <ClInclude Include="clogfile.h" />
+    <ClInclude Include="colors.h" />
     <ClInclude Include="command.h" />
     <ClInclude Include="confignt.h" />
     <ClInclude Include="cpustate.h" />
@@ -389,9 +438,11 @@
     <ClInclude Include="e2floppy.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="efiletim.h" />
+    <ClInclude Include="fattrib.h" />
     <ClInclude Include="fcinfo.h" />
     <ClInclude Include="fcnffile.h" />
     <ClInclude Include="fcopyman.h" />
+    <ClInclude Include="fdoptman.h" />
     <ClInclude Include="fdirent.h" />
     <ClInclude Include="ffilebuf.h" />
     <ClInclude Include="ffilecnt.h" />
@@ -399,21 +450,23 @@
     <ClInclude Include="filecnts.h" />
     <ClInclude Include="filecont.h" />
     <ClInclude Include="fileread.h" />
+    <ClInclude Include="flblfile.h" />
     <ClInclude Include="flexemu.h" />
     <ClInclude Include="flexerr.h" />
+    <ClInclude Include="fversion.h" />
     <ClInclude Include="foptman.h" />
     <ClInclude Include="idircnt.h" />
     <ClInclude Include="iffilcnt.h" />
     <ClInclude Include="ifilcnti.h" />
     <ClInclude Include="ifilecnt.h" />
     <ClInclude Include="inout.h" />
-    <ClInclude Include="ioaccess.h" />
     <ClInclude Include="iodevdbg.h" />
     <ClInclude Include="iodevice.h" />
     <ClInclude Include="joystick.h" />
     <ClInclude Include="keyboard.h" />
     <ClInclude Include="mc146818.h" />
     <ClInclude Include="mc6809.h" />
+    <ClInclude Include="mc6809lg.h" />
     <ClInclude Include="mc6809st.h" />
     <ClInclude Include="mc6821.h" />
     <ClInclude Include="mc6850.h" />
@@ -424,19 +477,28 @@
     <ClInclude Include="misc1.h" />
     <ClInclude Include="mmu.h" />
     <ClInclude Include="ndircont.h" />
+    <ClInclude Include="pagedet.h" />
+    <ClInclude Include="pagedetd.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="pia1.h" />
     <ClInclude Include="pia2.h" />
     <ClInclude Include="pia2v5.h" />
+    <ClInclude Include="poverhlp.h" />
     <ClInclude Include="propsui.h" />
+    <ClInclude Include="qtfree.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="rfilecnt.h" />
+    <ClInclude Include="rndcheck.h" />
     <ClInclude Include="schedcpu.h" />
     <ClInclude Include="schedule.h" />
     <ClInclude Include="scpulog.h" />
     <ClInclude Include="sodiff.h" />
     <ClInclude Include="soptions.h" />
-    <ClInclude Include="sprinter.h" />
+    <ClInclude Include="termimpc.h" />
+    <ClInclude Include="termimpd.h" />
+    <ClInclude Include="termimpf.h" />
+    <ClInclude Include="termimpi.h" />
+    <ClInclude Include="termimps.h" />
     <ClInclude Include="terminal.h" />
     <ClInclude Include="typedefs.h" />
     <ClInclude Include="vico1.h" />

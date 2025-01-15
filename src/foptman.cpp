@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 #include "misc1.h"
-#include <signal.h>
 #include <stdexcept>
 #include <string>
 #include <new>
@@ -32,47 +31,109 @@
 #include "foptman.h"
 #include "bregistr.h"
 #include "brcfile.h"
+#include <cstring>
+#include <filesystem>
+#include <sys/stat.h>
 
 
-void FlexemuOptions::PrintHelp(FILE *fp)
-{
-    fprintf(fp, "usage: flexemu <options>\n");
-    fprintf(fp, "  <options> are:\n");
-    fprintf(fp, "  -f <hexfile>\n");
-    fprintf(fp, "  -0 <diskimage/directory drive 0>\n");
-    fprintf(fp, "  -1 <diskimage/directory drive 1>\n");
-    fprintf(fp, "  -2 <diskimage/directory drive 2>\n");
-    fprintf(fp, "  -3 <diskimage/directory drive 3>\n");
-    fprintf(fp, "  -p (directory for FLEX disks)\n");
-    fprintf(fp, "  -j <factor for screen size>\n");
-    fprintf(fp, "  -m (use 2 x 288 KByte RAM extension)\n");
-    fprintf(fp, "  -u (support undocumented MC6809 processor instructions)\n");
-    fprintf(fp, "  -F <frequency> (set CPU frequency in MHz)\n");
-    fprintf(fp, "     0.0 sets maximum frequency, -1.0 sets original frequency.\n");
-    fprintf(fp, "  -C <startup command>\n");
-#ifdef HAVE_TERMIOS_H
-    fprintf(fp, "  -t (terminal only mode)\n");
-    fprintf(fp, "  -r <two-hex-digit reset key>\n");
+namespace fs = std::filesystem;
+
+static const char * const OLDFLEXEMURC = ".flexemurc";
+static const char * const FLEXEMURC = "flexemurc";
+
+static const char * const FLEXDISKDIR = "DiskDirectory";
+static const char * const FLEXDISK0 = "Disk0Path";
+static const char * const FLEXDISK1 = "Disk1Path";
+static const char * const FLEXDISK2 = "Disk2Path";
+static const char * const FLEXDISK3 = "Disk3Path";
+static const char * const FLEXMDCRDRIVE0 = "MdcrDrive0Path";
+static const char * const FLEXMDCRDRIVE1 = "MdcrDrive1Path";
+static const char * const FLEXCOLOR = "DisplayColor";
+static const char * const FLEXNCOLORS = "NoOfColors";
+static const char * const FLEXINVERSE = "DisplayInverse";
+static const char * const FLEXHIMEM = "HighMemory";
+static const char * const FLEXFLEXIBLEMMU = "UseFlexibleMmu";
+static const char * const FLEXRAMEXTENSION = "UseRamExtension";
+static const char * const FLEXEUROCOM2V5 = "UseEurocom2V5";
+static const char * const FLEXUNDOCUMENTED = "UndocumentedMc6809";
+static const char * const FLEXRTC = "UseRTC";
+static const char * const FLEXFORMATDRIVE0 = "CanFormatDrive0";
+static const char * const FLEXFORMATDRIVE1 = "CanFormatDrive1";
+static const char * const FLEXFORMATDRIVE2 = "CanFormatDrive2";
+static const char * const FLEXFORMATDRIVE3 = "CanFormatDrive3";
+#ifdef _WIN32
+static const char * const FLEXDOCDIR = "DocDirectory";
 #endif
-    fprintf(fp, "  -c <color> define foreground color\n");
-    fprintf(fp, "  -i (display inverse video)\n");
-    fprintf(fp, "  -O <cccc> (Support formatting disk in drive 0..3\n");
-    fprintf(fp, "     'c' represents drive 0..3 and can be: '0'=no; '1'=yes or "
-            "'-'=unchanged,\n");
-    fprintf(fp, "     Example: -O 001- Drive 2 allows format, drive 0,1 not, ");
-    fprintf(fp, "drive 3 unchanged.\n");
-    fprintf(fp, "  -n <# of colors>\n");
-    fprintf(fp, "  -h (display this)\n");
-    fprintf(fp, "  -? (display this)\n");
-    fprintf(fp, "  -v (print version number)\n");
-} // PrintHelp
+static const char * const FLEXMONITOR = "MonitorPath";
+static const char * const FLEXVERSION = "Version";
+static const char * const FLEXSCREENFACTOR = "ScreenFactor";
+static const char * const FLEXICONSIZE = "IconSize";
+static const char * const FLEXISSTATUSBARVISIBLE = "IsStatusBarVisible";
+static const char * const FLEXFREQUENCY = "Frequency";
+static const char * const FLEXFILETIMEACCESS = "FileTimeAccess";
+static const char * const FLEXDISPLAYSMOOTH = "DisplaySmooth";
+static const char * const FLEXISCONFIRMEXIT = "IsConfirmExit";
+static const char * const FLEXTERMINALIGNOREESC = "TerminalIgnoreESC";
+static const char * const FLEXTERMINALIGNORENUL = "TerminalIgnoreNUL";
+static const char * const FLEXTERMINALTYPE = "TerminalType";
+static const char * const FLEXPRINTFONT = "PrintFont";
+static const char * const FLEXPRINTPAGEBREAKDETECTED = "PrintPageBreakDetected";
+static const char * const FLEXPRINTORIENTATION = "PrintOrientation";
+static const char * const FLEXPRINTPAGESIZE = "PrintPageSize";
+static const char * const FLEXPRINTUNIT = "PrintUnit";
+static const char * const FLEXPRINTOUTPUTWINDOWGEOMETRY = "PrintOutputWindowGeometry";
+static const char * const FLEXPRINTPREVIEWDIALOGGEOMETRY =
+                    "PrintPreviewDialogGeometry";
+static const char * const FLEXPRINTCONFIG = "PrintConfig";
+static const char * const FLEXDIRECTORYDISKTRACKS = "DirectoryDiskTracks";
+static const char * const FLEXDIRECTORYDISKSECTORS = "DirectoryDiskSectors";
+static const char * const FLEXISDIRECTORYDISKACTIVE = "IsDirectoryDiskActive";
+
+void FlexemuOptions::PrintHelp(std::ostream &os)
+{
+    os << "usage: flexemu <options>\n"
+          "  <options> are:\n"
+          "  -f <hexfile>\n"
+          "  -0 <diskimage/directory drive 0>\n"
+          "  -1 <diskimage/directory drive 1>\n"
+          "  -2 <diskimage/directory drive 2>\n"
+          "  -3 <diskimage/directory drive 3>\n"
+          "  -p (directory for FLEX disks)\n"
+          "  -j <factor for screen size>\n"
+          "  -m (use 2 x 288 KByte RAM extension)\n"
+          "  -u (support undocumented MC6809 processor instructions)\n"
+          "  -F <frequency> (set CPU frequency in MHz)\n"
+          "     0.0 sets maximum frequency, -1.0 sets original frequency.\n"
+          "  -C <startup command>\n"
+#ifdef UNIX
+          "  -t (terminal only mode)\n"
+#ifdef HAVE_TERMIOS_H
+          "  -r <two-hex-digit reset key>\n"
+#endif
+          "  -T <terminal_type> ('scroll' or 'curses')\n"
+#endif
+          "  -c <color> define foreground color\n"
+          "  -i (display inverse video)\n"
+          "  -O <cccc> (Support formatting disk in drive 0..3\n"
+          "     'c' represents drive 0..3 and can be: '0'=no; '1'=yes or "
+            "'-'=unchanged,\n"
+          "     Example: -O 001- Drive 2 allows format, drive 0,1 not, "
+          "drive 3 unchanged.\n"
+          "  -n <# of colors>\n"
+          "  -L <file_path> Enable CPU instruction logging.\n"
+          "     File extension: *.log or *.txt logs to a text file; "
+          "*.csv logs to a csv file.\n"
+          "  -h (display this)\n"
+          "  -? (display this)\n"
+          "  -V (print version number)\n";
+}
 
 void FlexemuOptions::InitOptions(struct sOptions &options)
 {
-    options.drive[0] = "system.dsk";
-    options.drive[1] = "";
-    options.drive[2] = "";
-    options.drive[3] = "";
+    options.drives[0] = "system.dsk";
+    options.drives[1] = "";
+    options.drives[2] = "";
+    options.drives[3] = "";
     options.mdcrDrives[0] = "system.mdcr";
     options.mdcrDrives[1] = "";
     options.hex_file = "neumon54.hex";
@@ -84,10 +145,10 @@ void FlexemuOptions::InitOptions(struct sOptions &options)
     options.isEurocom2V5 = false;
     options.use_undocumented = false;
     options.useRtc = true;
-    options.canFormatDrive[0] = false;
-    options.canFormatDrive[1] = false;
-    options.canFormatDrive[2] = false;
-    options.canFormatDrive[3] = false;
+    options.canFormatDrives[0] = false;
+    options.canFormatDrives[1] = false;
+    options.canFormatDrives[2] = false;
+    options.canFormatDrives[3] = false;
     options.fileTimeAccess = FileTimeAccess::NONE;
     options.reset_key = 0x1e; // is Ctrl-^ for reset or Sig. INT
     options.frequency = -1.0; // default: ignore
@@ -96,36 +157,49 @@ void FlexemuOptions::InitOptions(struct sOptions &options)
     options.nColors = 2;
     options.isInverse = false;
     options.isSmooth = false;
+    options.isConfirmExit = true;
     options.isTerminalIgnoreESC = true;
     options.isTerminalIgnoreNUL = true;
+#ifdef _WIN32
+    options.terminalType = 0;
+#endif
 #ifdef UNIX
+    options.terminalType = 1;
     options.doc_dir = F_DATADIR;
     options.disk_dir = F_DATADIR;
 #endif
 #ifdef _WIN32
-    options.doc_dir = getExecutablePath() + PATHSEPARATORSTRING + "Documentation";
-    options.disk_dir = getExecutablePath() + PATHSEPARATORSTRING + "Data";
+    options.doc_dir =
+        flx::getExecutablePath() + PATHSEPARATORSTRING + "Documentation";
+    options.disk_dir = flx::getExecutablePath() + PATHSEPARATORSTRING + "Data";
 #endif
     options.pixelSize = 2;
+    options.iconSize = 16;
     options.readOnlyOptionIds.clear();
-} // InitOptions
+    options.isPrintPageBreakDetected = false;
+    options.directoryDiskTracks = 80;
+    options.directoryDiskSectors = 36;
+    options.isDirectoryDiskActive = true;
+    options.isStatusBarVisible = true;
+}
 
 void FlexemuOptions::GetCommandlineOptions(
     struct sOptions &options,
     int argc,
+// Parameter comes from main().
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
     char *const argv[])
 {
-    char    optstr[64];
-    int     i;
-    float   f;
+    int i;
+    float f;
     optind = 1;
     opterr = 1;
-    strcpy(optstr, "mup:f:0:1:2:3:j:F:C:O:");
+    std::string optstr("mup:f:0:1:2:3:j:F:C:O:L:");
 #ifdef HAVE_TERMIOS_H
-    strcat(optstr, "tr:");  // terminal mode and reset key
+    optstr.append("tr:T:"); // terminal mode, reset key and terminal type
 #endif
-    strcat(optstr, "ic:n:");          // color, inverse video, # of colors
-    strcat(optstr, "vh");   // version and help
+    optstr.append("ic:n:"); // color, inverse video, # of colors
+    optstr.append("Vh"); // version and help
 
     auto setReadOnly =
         [&roOptions = options.readOnlyOptionIds](FlexemuOptionId enumValue)
@@ -137,9 +211,9 @@ void FlexemuOptions::GetCommandlineOptions(
         }
     };
 
-    while (1)
+    while (true)
     {
-        int result = getopt(argc, argv, optstr);
+        int result = getopt(argc, argv, optstr.c_str());
 
         if (result == -1)
         {
@@ -154,22 +228,22 @@ void FlexemuOptions::GetCommandlineOptions(
                 break;
 
             case '0':
-                options.drive[0] = optarg;
+                options.drives[0] = optarg;
                 setReadOnly(FlexemuOptionId::Drive0);
                 break;
 
             case '1':
-                options.drive[1] = optarg;
+                options.drives[1] = optarg;
                 setReadOnly(FlexemuOptionId::Drive1);
                 break;
 
             case '2':
-                options.drive[2] = optarg;
+                options.drives[2] = optarg;
                 setReadOnly(FlexemuOptionId::Drive2);
                 break;
 
             case '3':
-                options.drive[3] = optarg;
+                options.drives[3] = optarg;
                 setReadOnly(FlexemuOptionId::Drive3);
                 break;
 
@@ -189,30 +263,45 @@ void FlexemuOptions::GetCommandlineOptions(
                 break;
 
             case 'j':
-                sscanf(optarg, "%d", &i);
-
-                if (i > 0 && i <= MAX_PIXELSIZE)
                 {
-                    options.pixelSize = i;
-                    setReadOnly(FlexemuOptionId::PixelSize);
+                    std::stringstream str(optarg);
+
+                    if (!(str >> i) || i < 1 || i > SCREEN_SIZES)
+                    {
+                        std::cerr << "Invalid -j value: '" << optarg << "'.\n"
+                            "Only values 1 to " << SCREEN_SIZES <<
+                            " are allowed.\n";
+                        exit(EXIT_FAILURE);
+                    }
                 }
+
+                options.pixelSize = i;
+                setReadOnly(FlexemuOptionId::PixelSize);
 
                 break;
 
             case 'F':
-                sscanf(optarg, "%f", &f);
-
-                if (f >= 0.0)
                 {
-                    options.frequency = f;
-                    setReadOnly(FlexemuOptionId::Frequency);
+                    std::stringstream str(optarg);
+
+                    if (!(str >> f) || (f < 0.0 && f != -1.0))
+                    {
+                        std::cerr << "Invalid -F value: '" << optarg << "'.\n"
+                            "Only values >= 0.0 or -1.0 are allowed, "
+                            "unit is MHz.\n";
+                        exit(EXIT_FAILURE);
+                    }
                 }
+
+                options.frequency = f;
+                setReadOnly(FlexemuOptionId::Frequency);
 
                 break;
 
             case 'C':
                 options.startup_command = optarg;
                 break;
+#ifdef UNIX
 #ifdef HAVE_TERMIOS_H
 
             case 't':
@@ -220,11 +309,55 @@ void FlexemuOptions::GetCommandlineOptions(
                 break;
 
             case 'r':
-                sscanf(optarg, "%hx", (Word *)&options.reset_key);
+                {
+                    std::stringstream str(optarg);
+
+                    if (std::strlen(optarg) != 2 ||
+                        !(str >> std::hex >> options.reset_key))
+                    {
+                        std::cerr << "Invalid -r value: '" << optarg << "'.\n"
+                            "Only a two digit hex value is allowed.\n";
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                break;
+#endif
+            case 'T':
+                {
+                    std::string str(optarg);
+
+                    if (str.compare("scroll") != 0 &&
+                        str.compare("curses") != 0)
+                    {
+                        std::cerr << "Invalid -T value: '" << optarg << "'.\n"
+                            "Only 'scroll' and 'curses' is supported.\n";
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if (str.compare("scroll") == 0)
+                    {
+                        options.terminalType = 1;
+                    }
+                    else if (str.compare("curses") == 0)
+                    {
+                        options.terminalType = 2;
+                    }
+                    setReadOnly(FlexemuOptionId::TerminalType);
+                }
                 break;
 #endif
             case 'n':
-                sscanf(optarg, "%d", &i);
+                {
+                    std::stringstream str(optarg);
+
+                    if (!(str >> i) ||
+                        (i != 2 && i != 8 && i != 64))
+                    {
+                        std::cerr << "Invalid -n value: '" << optarg << "'.\n"
+                            "Only 2, 8 or 64 colors are allowed.\n";
+                        exit(EXIT_FAILURE);
+                    }
+                }
                 options.nColors = i;
                 setReadOnly(FlexemuOptionId::NColors);
                 break;
@@ -242,7 +375,9 @@ void FlexemuOptions::GetCommandlineOptions(
             case 'O':
                 if (std::string(optarg).size() != 4)
                 {
-                    fprintf(stderr, "parameter -O should have 4 characters\n");
+                    std::cerr << "Invalid -O value: '" << optarg << "'.\n"
+                        "It should have four characters, each "
+                        "can be '0', '1' or '-'.\n";
                     exit(EXIT_FAILURE);
                 }
                 i = 0;
@@ -250,39 +385,53 @@ void FlexemuOptions::GetCommandlineOptions(
                 {
                     if (ch != '0' && ch != '1' && ch != '-')
                     {
-                        fprintf(stderr, "parameter -O contains wrong value "
-                                "'%c' for drive number %d\n", ch, i);
+                        std::cerr << "parameter -O contains wrong value '" <<
+                            ch << "' for drive number " << i << ".\n";
                         exit(EXIT_FAILURE);
                     }
                     if (ch != '-')
                     {
-                        options.canFormatDrive[i] = (ch == '1');
+                        options.canFormatDrives[i] = (ch == '1');
                         setReadOnly(canFormatDriveOptionId[i]);
                     }
                     ++i;
                 }
                 break;
 
-            case 'v':
-                fprintf(stdout, PROGRAMNAME ": V %s\n", PROGRAM_VERSION);
+            case 'L':
+                {
+                    const std::string tmp = optarg;
+                    const auto ext = flx::tolower(flx::getFileExtension(tmp));
+                    if (ext != ".log" && ext != ".txt" && ext != ".csv")
+                    {
+                        std::cerr << "logging path '" <<
+                            tmp << "' has an unsupported file extension.\n";
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                options.cpuLogPath = optarg;
+                break;
+
+            case 'V':
+                flx::print_versions(std::cout, PROGRAMNAME);
                 exit(EXIT_SUCCESS);
 
             case '?':
             case 'h':
-                PrintHelp(stderr);
+                PrintHelp(std::cerr);
                 exit(EXIT_SUCCESS);
-        }  // switch
-    } // while
-} // GetCommandlineOptions
+        }
+    }
+}
 
 
 void FlexemuOptions::WriteOptions(
     const struct sOptions &options,
-    bool  ifNotExists, /* = false */
+    bool ifNotExists, /* = false */
     bool isReadWriteOptionsOnly /* = false */
 )
 {
-    auto optionIds(allFlexemuOptionIds);
+    auto optionIds(GetAllFlexemuOptionIds());
 
     if (isReadWriteOptionsOnly)
     {
@@ -297,9 +446,19 @@ void FlexemuOptions::WriteOptions(
     WriteOptionsToRegistry(options, optionIds, ifNotExists);
 #endif
 #ifdef UNIX
-    const auto rcFileName = getHomeDirectory() + PATHSEPARATORSTRING FLEXEMURC;
+    struct stat sbuf{};
+    const auto rcFilePath =
+        (flx::getFlexemuUserConfigPath() += PATHSEPARATORSTRING) += FLEXEMURC;
+    fs::create_directories(flx::getFlexemuUserConfigPath());
 
-    WriteOptionsToFile(options, optionIds, rcFileName, ifNotExists);
+    WriteOptionsToFile(options, optionIds, rcFilePath, ifNotExists);
+
+    const auto oldRcFilePath =
+        (flx::getHomeDirectory() += PATHSEPARATORSTRING) += OLDFLEXEMURC;
+    if (stat(oldRcFilePath.c_str(), &sbuf) == 0)
+    {
+        fs::remove(oldRcFilePath);
+    }
 #endif
 
 } /* WriteOptions */
@@ -312,9 +471,10 @@ void FlexemuOptions::WriteOptionsToRegistry(
         )
 {
     BRegistry reg(BRegistry::currentUser, FLEXEMUREG);
-    std::string v;
+    std::string str;
+    bool ok;
 
-    if (ifNotExists && reg.GetValue(FLEXVERSION, v) == ERROR_SUCCESS)
+    if (ifNotExists && reg.GetValue(FLEXVERSION, str) == ERROR_SUCCESS)
     {
         return;
     }
@@ -364,6 +524,10 @@ void FlexemuOptions::WriteOptionsToRegistry(
             reg.SetValue(FLEXSCREENFACTOR, options.pixelSize);
             break;
 
+        case FlexemuOptionId::IconSize:
+            reg.SetValue(FLEXICONSIZE, options.iconSize);
+            break;
+
         case FlexemuOptionId::HexFile:
             reg.SetValue(FLEXMONITOR, options.hex_file.c_str());
             break;
@@ -373,19 +537,19 @@ void FlexemuOptions::WriteOptionsToRegistry(
             break;
 
         case FlexemuOptionId::Drive0:
-            reg.SetValue(FLEXDISK0, options.drive[0].c_str());
+            reg.SetValue(FLEXDISK0, options.drives[0].c_str());
             break;
 
         case FlexemuOptionId::Drive1:
-            reg.SetValue(FLEXDISK1, options.drive[1].c_str());
+            reg.SetValue(FLEXDISK1, options.drives[1].c_str());
             break;
 
         case FlexemuOptionId::Drive2:
-            reg.SetValue(FLEXDISK2, options.drive[2].c_str());
+            reg.SetValue(FLEXDISK2, options.drives[2].c_str());
             break;
 
         case FlexemuOptionId::Drive3:
-            reg.SetValue(FLEXDISK3, options.drive[3].c_str());
+            reg.SetValue(FLEXDISK3, options.drives[3].c_str());
             break;
 
         case FlexemuOptionId::MdcrDrive0:
@@ -397,23 +561,28 @@ void FlexemuOptions::WriteOptionsToRegistry(
             break;
 
         case FlexemuOptionId::CanFormatDrive0:
-            reg.SetValue(FLEXFORMATDRIVE0, options.canFormatDrive[0] ? 1 : 0);
+            reg.SetValue(FLEXFORMATDRIVE0, options.canFormatDrives[0] ? 1 : 0);
             break;
 
         case FlexemuOptionId::CanFormatDrive1:
-            reg.SetValue(FLEXFORMATDRIVE1, options.canFormatDrive[1] ? 1 : 0);
+            reg.SetValue(FLEXFORMATDRIVE1, options.canFormatDrives[1] ? 1 : 0);
             break;
 
         case FlexemuOptionId::CanFormatDrive2:
-            reg.SetValue(FLEXFORMATDRIVE2, options.canFormatDrive[2] ? 1 : 0);
+            reg.SetValue(FLEXFORMATDRIVE2, options.canFormatDrives[2] ? 1 : 0);
             break;
 
         case FlexemuOptionId::CanFormatDrive3:
-            reg.SetValue(FLEXFORMATDRIVE3, options.canFormatDrive[3] ? 1 : 0);
+            reg.SetValue(FLEXFORMATDRIVE3, options.canFormatDrives[3] ? 1 : 0);
             break;
 
         case FlexemuOptionId::Frequency:
-            reg.SetValue(FLEXFREQUENCY, std::to_string(options.frequency));
+            str =
+              flx::toString<decltype(options.frequency)>(options.frequency, ok);
+            if (ok)
+            {
+                reg.SetValue(FLEXFREQUENCY, str);
+            }
             break;
 
         case FlexemuOptionId::FileTimeAccess:
@@ -424,10 +593,67 @@ void FlexemuOptions::WriteOptionsToRegistry(
         case FlexemuOptionId::IsDisplaySmooth:
             reg.SetValue(FLEXDISPLAYSMOOTH, options.isSmooth ? 1 : 0);
             break;
-        }
 
-        reg.SetValue(FLEXVERSION, VERSION);
-        reg.DeleteValue(FLEXDOCDIR); // Deprecated option value
+        case FlexemuOptionId::IsConfirmExit:
+            reg.SetValue(FLEXISCONFIRMEXIT, options.isConfirmExit ? 1 : 0);
+            break;
+
+        case FlexemuOptionId::DirectoryDiskTrkSec:
+            reg.SetValue(FLEXDIRECTORYDISKTRACKS,
+                options.directoryDiskTracks);
+            reg.SetValue(FLEXDIRECTORYDISKSECTORS,
+                options.directoryDiskSectors);
+            break;
+
+        case FlexemuOptionId::PrintFont:
+            reg.SetValue(FLEXPRINTFONT, options.printFont.c_str());
+            break;
+
+        case FlexemuOptionId::IsPrintPageBreakDetected:
+            reg.SetValue(FLEXPRINTPAGEBREAKDETECTED,
+                    options.isPrintPageBreakDetected ? 1 : 0);
+            break;
+
+        case FlexemuOptionId::PrintOrientation:
+            reg.SetValue(FLEXPRINTORIENTATION,
+                    options.printOrientation.c_str());
+            break;
+
+        case FlexemuOptionId::PrintPageSize:
+            reg.SetValue(FLEXPRINTPAGESIZE, options.printPageSize.c_str());
+            break;
+
+        case FlexemuOptionId::PrintUnit:
+            reg.SetValue(FLEXPRINTUNIT, options.printUnit.c_str());
+            break;
+
+        case FlexemuOptionId::PrintOutputWindowGeometry:
+            reg.SetValue(FLEXPRINTOUTPUTWINDOWGEOMETRY,
+                    options.printOutputWindowGeometry.c_str());
+            break;
+
+        case FlexemuOptionId::PrintPreviewDialogGeometry:
+            reg.SetValue(FLEXPRINTPREVIEWDIALOGGEOMETRY,
+                    options.printPreviewDialogGeometry.c_str());
+            break;
+
+        case FlexemuOptionId::PrintConfigs:
+            for (const auto& [subKey, value] : options.printConfigs)
+            {
+                const auto key = std::string(FLEXPRINTCONFIG) + subKey;
+                reg.SetValue(key.c_str(), value.c_str());
+            }
+            break;
+
+        case FlexemuOptionId::IsStatusBarVisible:
+            reg.SetValue(FLEXISSTATUSBARVISIBLE,
+                options.isStatusBarVisible ? 1 : 0);
+                break;
+
+        case FlexemuOptionId::IsDirectoryDiskActive:
+            reg.SetValue(FLEXISDIRECTORYDISKACTIVE,
+                options.isDirectoryDiskActive ? 1 : 0);
+        }
     }
 }
 #endif
@@ -444,7 +670,7 @@ void FlexemuOptions::WriteOptionsToFile(
         return;
     }
 
-    auto optionIds(allFlexemuOptionIds);
+    auto optionIds(GetAllFlexemuOptionIds());
 
     // Collect all optionIds to overwrite from previous options.
     for (auto optionId : optionIdsToWrite)
@@ -505,6 +731,10 @@ void FlexemuOptions::WriteOptionsToFile(
             optionsToWrite.pixelSize = previousOptions.pixelSize;
             break;
 
+        case FlexemuOptionId::IconSize:
+            optionsToWrite.iconSize = previousOptions.iconSize;
+            break;
+
         case FlexemuOptionId::HexFile:
             optionsToWrite.hex_file = previousOptions.hex_file;
             break;
@@ -514,39 +744,39 @@ void FlexemuOptions::WriteOptionsToFile(
             break;
 
         case FlexemuOptionId::Drive0:
-            optionsToWrite.drive[0] = previousOptions.drive[0];
+            optionsToWrite.drives[0] = previousOptions.drives[0];
             break;
 
         case FlexemuOptionId::Drive1:
-            optionsToWrite.drive[1] = previousOptions.drive[1];
+            optionsToWrite.drives[1] = previousOptions.drives[1];
             break;
 
         case FlexemuOptionId::Drive2:
-            optionsToWrite.drive[2] = previousOptions.drive[2];
+            optionsToWrite.drives[2] = previousOptions.drives[2];
             break;
 
         case FlexemuOptionId::Drive3:
-            optionsToWrite.drive[3] = previousOptions.drive[3];
+            optionsToWrite.drives[3] = previousOptions.drives[3];
             break;
 
         case FlexemuOptionId::CanFormatDrive0:
-            optionsToWrite.canFormatDrive[0] =
-                previousOptions.canFormatDrive[0];
+            optionsToWrite.canFormatDrives[0] =
+                previousOptions.canFormatDrives[0];
             break;
 
         case FlexemuOptionId::CanFormatDrive1:
-            optionsToWrite.canFormatDrive[1] =
-                previousOptions.canFormatDrive[1];
+            optionsToWrite.canFormatDrives[1] =
+                previousOptions.canFormatDrives[1];
             break;
 
         case FlexemuOptionId::CanFormatDrive2:
-            optionsToWrite.canFormatDrive[2] =
-                previousOptions.canFormatDrive[2];
+            optionsToWrite.canFormatDrives[2] =
+                previousOptions.canFormatDrives[2];
             break;
 
         case FlexemuOptionId::CanFormatDrive3:
-            optionsToWrite.canFormatDrive[3] =
-                previousOptions.canFormatDrive[3];
+            optionsToWrite.canFormatDrives[3] =
+                previousOptions.canFormatDrives[3];
             break;
 
         case FlexemuOptionId::MdcrDrive0:
@@ -569,6 +799,10 @@ void FlexemuOptions::WriteOptionsToFile(
             optionsToWrite.isSmooth = previousOptions.isSmooth;
             break;
 
+        case FlexemuOptionId::IsConfirmExit:
+            optionsToWrite.isConfirmExit = previousOptions.isConfirmExit;
+            break;
+
         case FlexemuOptionId::IsTerminalIgnoreESC:
             optionsToWrite.isTerminalIgnoreESC =
                 previousOptions.isTerminalIgnoreESC;
@@ -578,42 +812,137 @@ void FlexemuOptions::WriteOptionsToFile(
             optionsToWrite.isTerminalIgnoreNUL =
                 previousOptions.isTerminalIgnoreNUL;
             break;
+
+        case FlexemuOptionId::TerminalType:
+            optionsToWrite.terminalType = previousOptions.terminalType;
+            break;
+
+        case FlexemuOptionId::IsDirectoryDiskActive:
+            optionsToWrite.isDirectoryDiskActive =
+                previousOptions.isDirectoryDiskActive;
+            break;
+
+        case FlexemuOptionId::DirectoryDiskTrkSec:
+            optionsToWrite.directoryDiskTracks =
+                previousOptions.directoryDiskTracks;
+            optionsToWrite.directoryDiskSectors =
+                previousOptions.directoryDiskSectors;
+            break;
+
+        case FlexemuOptionId::PrintFont:
+            optionsToWrite.printFont = previousOptions.printFont;
+            break;
+
+        case FlexemuOptionId::IsPrintPageBreakDetected:
+            optionsToWrite.isPrintPageBreakDetected =
+                previousOptions.isPrintPageBreakDetected;
+            break;
+
+        case FlexemuOptionId::PrintOrientation:
+            optionsToWrite.printOrientation = previousOptions.printOrientation;
+            break;
+
+        case FlexemuOptionId::PrintPageSize:
+            optionsToWrite.printPageSize = previousOptions.printPageSize;
+            break;
+
+        case FlexemuOptionId::PrintUnit:
+            optionsToWrite.printUnit = previousOptions.printUnit;
+            break;
+
+        case FlexemuOptionId::PrintOutputWindowGeometry:
+            optionsToWrite.printOutputWindowGeometry =
+                    previousOptions.printOutputWindowGeometry;
+            break;
+
+        case FlexemuOptionId::PrintPreviewDialogGeometry:
+            optionsToWrite.printPreviewDialogGeometry =
+                    previousOptions.printPreviewDialogGeometry;
+            break;
+
+        case FlexemuOptionId::PrintConfigs:
+            optionsToWrite.printConfigs = previousOptions.printConfigs;
+            break;
+
+        case FlexemuOptionId::IsStatusBarVisible:
+            optionsToWrite.isStatusBarVisible =
+                previousOptions.isStatusBarVisible;
+            break;
         }
+
+        optionsToWrite.version = VERSION;
     }
 
-    BRcFile rcFile(fileName.c_str());
+    BRcFile rcFile(fileName);
+    bool ok;
     rcFile.Initialize(); // truncate file
+    rcFile.SetValue(FLEXVERSION, VERSION);
     rcFile.SetValue(FLEXINVERSE, optionsToWrite.isInverse ? 1 : 0);
     rcFile.SetValue(FLEXDISPLAYSMOOTH, optionsToWrite.isSmooth ? 1 : 0);
-    rcFile.SetValue(FLEXCOLOR, optionsToWrite.color.c_str());
+    rcFile.SetValue(FLEXISCONFIRMEXIT, optionsToWrite.isConfirmExit ? 1 : 0);
+    rcFile.SetValue(FLEXCOLOR, optionsToWrite.color);
     rcFile.SetValue(FLEXNCOLORS, optionsToWrite.nColors);
     rcFile.SetValue(FLEXSCREENFACTOR, optionsToWrite.pixelSize);
-    rcFile.SetValue(FLEXMONITOR, optionsToWrite.hex_file.c_str());
-    rcFile.SetValue(FLEXDISKDIR, optionsToWrite.disk_dir.c_str());
-    rcFile.SetValue(FLEXDISK0, optionsToWrite.drive[0].c_str());
-    rcFile.SetValue(FLEXDISK1, optionsToWrite.drive[1].c_str());
-    rcFile.SetValue(FLEXDISK2, optionsToWrite.drive[2].c_str());
-    rcFile.SetValue(FLEXDISK3, optionsToWrite.drive[3].c_str());
-    rcFile.SetValue(FLEXMDCRDRIVE0, optionsToWrite.mdcrDrives[0].c_str());
-    rcFile.SetValue(FLEXMDCRDRIVE1, optionsToWrite.mdcrDrives[1].c_str());
+    rcFile.SetValue(FLEXICONSIZE, optionsToWrite.iconSize);
+    rcFile.SetValue(FLEXMONITOR, optionsToWrite.hex_file);
+    rcFile.SetValue(FLEXDISKDIR, optionsToWrite.disk_dir);
+    rcFile.SetValue(FLEXDISK0, optionsToWrite.drives[0]);
+    rcFile.SetValue(FLEXDISK1, optionsToWrite.drives[1]);
+    rcFile.SetValue(FLEXDISK2, optionsToWrite.drives[2]);
+    rcFile.SetValue(FLEXDISK3, optionsToWrite.drives[3]);
+    rcFile.SetValue(FLEXMDCRDRIVE0, optionsToWrite.mdcrDrives[0]);
+    rcFile.SetValue(FLEXMDCRDRIVE1, optionsToWrite.mdcrDrives[1]);
     rcFile.SetValue(FLEXRAMEXTENSION, optionsToWrite.isRamExtension ? 1 : 0);
     rcFile.SetValue(FLEXHIMEM, optionsToWrite.isHiMem ? 1 : 0);
     rcFile.SetValue(FLEXFLEXIBLEMMU, optionsToWrite.isFlexibleMmu ? 1 : 0);
     rcFile.SetValue(FLEXEUROCOM2V5, optionsToWrite.isEurocom2V5 ? 1 : 0);
     rcFile.SetValue(FLEXUNDOCUMENTED, optionsToWrite.use_undocumented ? 1 : 0);
     rcFile.SetValue(FLEXRTC, optionsToWrite.useRtc ? 1 : 0);
-    rcFile.SetValue(FLEXFREQUENCY,
-                    std::to_string(optionsToWrite.frequency).c_str());
-    rcFile.SetValue(FLEXFORMATDRIVE0, optionsToWrite.canFormatDrive[0] ? 1 : 0);
-    rcFile.SetValue(FLEXFORMATDRIVE1, optionsToWrite.canFormatDrive[1] ? 1 : 0);
-    rcFile.SetValue(FLEXFORMATDRIVE2, optionsToWrite.canFormatDrive[2] ? 1 : 0);
-    rcFile.SetValue(FLEXFORMATDRIVE3, optionsToWrite.canFormatDrive[3] ? 1 : 0);
+    auto str = flx::toString<decltype(options.frequency)>(
+                optionsToWrite.frequency, ok);
+    if (ok)
+    {
+        rcFile.SetValue(FLEXFREQUENCY, str);
+    }
+    rcFile.SetValue(FLEXFORMATDRIVE0,
+            optionsToWrite.canFormatDrives[0] ? 1 : 0);
+    rcFile.SetValue(FLEXFORMATDRIVE1,
+            optionsToWrite.canFormatDrives[1] ? 1 : 0);
+    rcFile.SetValue(FLEXFORMATDRIVE2,
+            optionsToWrite.canFormatDrives[2] ? 1 : 0);
+    rcFile.SetValue(FLEXFORMATDRIVE3,
+            optionsToWrite.canFormatDrives[3] ? 1 : 0);
     rcFile.SetValue(FLEXFILETIMEACCESS,
                     static_cast<int>(optionsToWrite.fileTimeAccess));
     rcFile.SetValue(FLEXTERMINALIGNOREESC,
             optionsToWrite.isTerminalIgnoreESC ? 1 : 0);
     rcFile.SetValue(FLEXTERMINALIGNORENUL,
             optionsToWrite.isTerminalIgnoreNUL ? 1 : 0);
+    rcFile.SetValue(FLEXTERMINALTYPE, optionsToWrite.terminalType);
+    rcFile.SetValue(FLEXDIRECTORYDISKTRACKS,
+            optionsToWrite.directoryDiskTracks);
+    rcFile.SetValue(FLEXDIRECTORYDISKSECTORS,
+            optionsToWrite.directoryDiskSectors);
+    rcFile.SetValue(FLEXISDIRECTORYDISKACTIVE,
+            optionsToWrite.isDirectoryDiskActive ? 1 : 0);
+    rcFile.SetValue(FLEXISSTATUSBARVISIBLE,
+            optionsToWrite.isStatusBarVisible ? 1 : 0);
+    rcFile.SetValue(FLEXPRINTFONT, optionsToWrite.printFont);
+    rcFile.SetValue(FLEXPRINTPAGEBREAKDETECTED,
+            optionsToWrite.isPrintPageBreakDetected ? 1 : 0);
+    rcFile.SetValue(FLEXPRINTORIENTATION, optionsToWrite.printOrientation);
+    rcFile.SetValue(FLEXPRINTPAGESIZE, optionsToWrite.printPageSize);
+    rcFile.SetValue(FLEXPRINTUNIT, optionsToWrite.printUnit);
+    rcFile.SetValue(FLEXPRINTOUTPUTWINDOWGEOMETRY,
+            optionsToWrite.printOutputWindowGeometry);
+    rcFile.SetValue(FLEXPRINTPREVIEWDIALOGGEOMETRY,
+            optionsToWrite.printPreviewDialogGeometry);
+
+    for (const auto &iter : optionsToWrite.printConfigs)
+    {
+        const auto key = std::string(FLEXPRINTCONFIG) + iter.first;
+        rcFile.SetValue(key.c_str(), iter.second);
+    }
 }
 #endif
 
@@ -625,11 +954,12 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
 #ifdef _WIN32
     BRegistry reg(BRegistry::currentUser, FLEXEMUREG);
 
+    reg.GetValue(FLEXVERSION, options.version);
     reg.GetValue(FLEXDISKDIR, options.disk_dir);
-    reg.GetValue(FLEXDISK0, options.drive[0]);
-    reg.GetValue(FLEXDISK1, options.drive[1]);
-    reg.GetValue(FLEXDISK2, options.drive[2]);
-    reg.GetValue(FLEXDISK3, options.drive[3]);
+    reg.GetValue(FLEXDISK0, options.drives[0]);
+    reg.GetValue(FLEXDISK1, options.drives[1]);
+    reg.GetValue(FLEXDISK2, options.drives[2]);
+    reg.GetValue(FLEXDISK3, options.drives[3]);
     reg.GetValue(FLEXMDCRDRIVE0, options.mdcrDrives[0]);
     reg.GetValue(FLEXMDCRDRIVE1, options.mdcrDrives[1]);
     reg.GetValue(FLEXMONITOR, options.hex_file);
@@ -650,12 +980,18 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
             int_result = 1;
         }
 
-        if (int_result > MAX_PIXELSIZE)
+        if (int_result > SCREEN_SIZES)
         {
-            int_result = MAX_PIXELSIZE;
+            int_result = SCREEN_SIZES;
         }
 
         options.pixelSize = int_result;
+    }
+
+    if (!reg.GetValue(FLEXICONSIZE, int_result))
+    {
+        options.iconSize = (int_result >= 24) ? 24 : 16;
+        options.iconSize = (int_result >= 32) ? 32 : options.iconSize;
     }
 
     if (!reg.GetValue(FLEXINVERSE, int_result))
@@ -700,34 +1036,33 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
 
     if (!reg.GetValue(FLEXFREQUENCY, string_result))
     {
-        try
+        using T = decltype(options.frequency);
+        T value{};
+
+        if (flx::fromString<T>(string_result, value))
         {
-            options.frequency = (stof(string_result));
-        }
-        catch(std::exception &)
-        {
-            // Intentionally ignore value if not convertible to float.
+            options.frequency = value;
         }
     }
 
     if (!reg.GetValue(FLEXFORMATDRIVE0, int_result))
     {
-        options.canFormatDrive[0] = (int_result != 0);
+        options.canFormatDrives[0] = (int_result != 0);
     }
 
     if (!reg.GetValue(FLEXFORMATDRIVE1, int_result))
     {
-        options.canFormatDrive[1] = (int_result != 0);
+        options.canFormatDrives[1] = (int_result != 0);
     }
 
     if (!reg.GetValue(FLEXFORMATDRIVE2, int_result))
     {
-        options.canFormatDrive[2] = (int_result != 0);
+        options.canFormatDrives[2] = (int_result != 0);
     }
 
     if (!reg.GetValue(FLEXFORMATDRIVE3, int_result))
     {
-        options.canFormatDrive[3] = (int_result != 0);
+        options.canFormatDrives[3] = (int_result != 0);
     }
 
     if (!reg.GetValue(FLEXFILETIMEACCESS, int_result))
@@ -748,15 +1083,68 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
         options.isSmooth = (int_result != 0);
     }
 
+    if (!reg.GetValue(FLEXISCONFIRMEXIT, int_result))
+    {
+        options.isConfirmExit = (int_result != 0);
+    }
+
+    if (!reg.GetValue(FLEXDIRECTORYDISKTRACKS, int_result))
+    {
+        int_result = std::max(int_result, 2);
+        int_result = std::min(int_result, 256);
+        options.directoryDiskTracks = int_result;
+    }
+
+    if (!reg.GetValue(FLEXDIRECTORYDISKSECTORS, int_result))
+    {
+        int_result = std::max(int_result, 6);
+        int_result = std::min(int_result, 255);
+        options.directoryDiskSectors = int_result;
+    }
+
+    if (!reg.GetValue(FLEXISDIRECTORYDISKACTIVE, int_result))
+    {
+        options.isDirectoryDiskActive = (int_result != 0);
+    }
+
+    if (!reg.GetValue(FLEXISSTATUSBARVISIBLE, int_result))
+    {
+        options.isStatusBarVisible = (int_result != 0);
+    }
+
+    reg.GetValue(FLEXPRINTFONT, options.printFont);
+
+    if (!reg.GetValue(FLEXPRINTPAGEBREAKDETECTED, int_result))
+    {
+        options.isPrintPageBreakDetected = (int_result != 0);
+    }
+
+    reg.GetValue(FLEXPRINTORIENTATION, options.printOrientation);
+    reg.GetValue(FLEXPRINTPAGESIZE, options.printPageSize);
+    reg.GetValue(FLEXPRINTUNIT, options.printUnit);
+    reg.GetValue(FLEXPRINTOUTPUTWINDOWGEOMETRY,
+            options.printOutputWindowGeometry);
+    reg.GetValue(FLEXPRINTPREVIEWDIALOGGEOMETRY,
+            options.printPreviewDialogGeometry);
+    reg.GetValues(FLEXPRINTCONFIG, options.printConfigs);
 #endif
 #ifdef UNIX
-    const auto rcFileName = getHomeDirectory() + PATHSEPARATORSTRING FLEXEMURC;
-    BRcFile rcFile(rcFileName.c_str());
+    struct stat sbuf{};
+    auto rcFilePath = (flx::getFlexemuUserConfigPath() += PATHSEPARATORSTRING)
+        += FLEXEMURC;
+    if (stat(rcFilePath.c_str(), &sbuf) != 0)
+    {
+        rcFilePath = (flx::getHomeDirectory() += PATHSEPARATORSTRING) +=
+            OLDFLEXEMURC;
+    }
+
+    BRcFile rcFile(rcFilePath);
+    rcFile.GetValue(FLEXVERSION, options.version);
     rcFile.GetValue(FLEXDISKDIR, options.disk_dir);
-    rcFile.GetValue(FLEXDISK0, options.drive[0]);
-    rcFile.GetValue(FLEXDISK1, options.drive[1]);
-    rcFile.GetValue(FLEXDISK2, options.drive[2]);
-    rcFile.GetValue(FLEXDISK3, options.drive[3]);
+    rcFile.GetValue(FLEXDISK0, options.drives[0]);
+    rcFile.GetValue(FLEXDISK1, options.drives[1]);
+    rcFile.GetValue(FLEXDISK2, options.drives[2]);
+    rcFile.GetValue(FLEXDISK3, options.drives[3]);
     rcFile.GetValue(FLEXMDCRDRIVE0, options.mdcrDrives[0]);
     rcFile.GetValue(FLEXMDCRDRIVE1, options.mdcrDrives[1]);
     rcFile.GetValue(FLEXMONITOR, options.hex_file);
@@ -772,17 +1160,16 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
 
     if (!rcFile.GetValue(FLEXSCREENFACTOR, int_result))
     {
-        if (int_result < 1)
-        {
-            int_result = 1;
-        }
-
-        if (int_result > MAX_PIXELSIZE)
-        {
-            int_result = MAX_PIXELSIZE;
-        }
+        int_result = std::max(int_result, 1);
+        int_result = std::min<int>(int_result, SCREEN_SIZES);
 
         options.pixelSize = int_result;
+    }
+
+    if (!rcFile.GetValue(FLEXICONSIZE, int_result))
+    {
+        options.iconSize = (int_result >= 24) ? 24 : 16;
+        options.iconSize = (int_result >= 32) ? 32 : options.iconSize;
     }
 
     if (!rcFile.GetValue(FLEXINVERSE, int_result))
@@ -822,34 +1209,32 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
 
     if (!rcFile.GetValue(FLEXFREQUENCY, string_result))
     {
-        try
+        using T = decltype(options.frequency);
+        T value{};
+        if (flx::fromString<T>(string_result, value))
         {
-            options.frequency = (stof(string_result));
-        }
-        catch(std::exception &)
-        {
-            // Intentionally ignore value if not convertible to float.
+            options.frequency = value;
         }
     }
 
     if (!rcFile.GetValue(FLEXFORMATDRIVE0, int_result))
     {
-        options.canFormatDrive[0] = (int_result != 0);
+        options.canFormatDrives[0] = (int_result != 0);
     }
 
     if (!rcFile.GetValue(FLEXFORMATDRIVE1, int_result))
     {
-        options.canFormatDrive[1] = (int_result != 0);
+        options.canFormatDrives[1] = (int_result != 0);
     }
 
     if (!rcFile.GetValue(FLEXFORMATDRIVE2, int_result))
     {
-        options.canFormatDrive[2] = (int_result != 0);
+        options.canFormatDrives[2] = (int_result != 0);
     }
 
     if (!rcFile.GetValue(FLEXFORMATDRIVE3, int_result))
     {
-        options.canFormatDrive[3] = (int_result != 0);
+        options.canFormatDrives[3] = (int_result != 0);
     }
 
     if (!rcFile.GetValue(FLEXFILETIMEACCESS, int_result))
@@ -870,6 +1255,11 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
         options.isSmooth = (int_result != 0);
     }
 
+    if (!rcFile.GetValue(FLEXISCONFIRMEXIT, int_result))
+    {
+        options.isConfirmExit = (int_result != 0);
+    }
+
     if (!rcFile.GetValue(FLEXTERMINALIGNOREESC, int_result))
     {
         options.isTerminalIgnoreESC = (int_result != 0);
@@ -880,6 +1270,52 @@ void FlexemuOptions::GetOptions(struct sOptions &options)
         options.isTerminalIgnoreNUL = (int_result != 0);
     }
 
+    if (!rcFile.GetValue(FLEXTERMINALTYPE, int_result))
+    {
+        int_result = std::max(int_result, 1);
+        int_result = std::min(int_result, 2);
+        options.terminalType = int_result;
+    }
+
+    if (!rcFile.GetValue(FLEXDIRECTORYDISKTRACKS, int_result))
+    {
+        int_result = std::max(int_result, 2);
+        int_result = std::min(int_result, 256);
+        options.directoryDiskTracks = int_result;
+    }
+
+    if (!rcFile.GetValue(FLEXDIRECTORYDISKSECTORS, int_result))
+    {
+        int_result = std::max(int_result, 6);
+        int_result = std::min(int_result, 255);
+        options.directoryDiskSectors = int_result;
+    }
+
+    if (!rcFile.GetValue(FLEXISDIRECTORYDISKACTIVE, int_result))
+    {
+        options.isDirectoryDiskActive = (int_result != 0);
+    }
+
+    if (!rcFile.GetValue(FLEXISSTATUSBARVISIBLE, int_result))
+    {
+        options.isStatusBarVisible = (int_result != 0);
+    }
+
+    rcFile.GetValue(FLEXPRINTFONT, options.printFont);
+
+    if (!rcFile.GetValue(FLEXPRINTPAGEBREAKDETECTED, int_result))
+    {
+        options.isPrintPageBreakDetected = (int_result != 0);
+    }
+
+    rcFile.GetValue(FLEXPRINTORIENTATION, options.printOrientation);
+    rcFile.GetValue(FLEXPRINTPAGESIZE, options.printPageSize);
+    rcFile.GetValue(FLEXPRINTUNIT, options.printUnit);
+    rcFile.GetValue(FLEXPRINTOUTPUTWINDOWGEOMETRY,
+            options.printOutputWindowGeometry);
+    rcFile.GetValue(FLEXPRINTPREVIEWDIALOGGEOMETRY,
+            options.printPreviewDialogGeometry);
+    rcFile.GetValues(FLEXPRINTCONFIG, options.printConfigs);
 #endif
-} // GetOptions
+}
 

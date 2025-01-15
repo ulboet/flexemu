@@ -1,0 +1,59 @@
+# Appveyor build script for flexemu.
+#
+# Supported builds:
+# - Ubuntu1604 x64 Release with Qt5 (Qt apt package and gcc-7/g++-7)
+
+image:
+  - Ubuntu1604
+
+environment:
+  APPVEYOR_YML_DISABLE_PS_LINUX: true
+  matrix:
+    - QTMAJOR: 5
+
+install:
+  - sh: |
+      CC=gcc
+      CXX=g++
+      LDD=ldd
+      CCVER='/[^0-9]([0-9]+\.[0-9]+\.[0-9]+)/p;q'
+      QTVER='s|([A-Za-z0-9.>/_[:space:]:-]+)([0-9]+\.[0-9]+\.[0-9]+).*|\2|p'
+      if [ "$APPVEYOR_BUILD_WORKER_IMAGE" == "Ubuntu1604" ]; then
+          # Install Qt5 from apt packages.
+          sudo apt-get update
+          sudo apt-get install libncursesw5-dev qt5-default libqt5x11extras5-dev -y
+          pushd /lib/x86_64-linux-gnu; sudo ln -s libncursesw.so.5.9 libncursesw.so; popd
+          sudo ldconfig
+          VER=`ls -l /usr/lib/x86_64-linux-gnu/libQt5Core.so | sed -nE $QTVER`
+      fi
+      echo ==================== Build on $APPVEYOR_BUILD_WORKER_IMAGE ====================
+      echo `lscpu | grep "^CPU(s):"`
+      echo `lscpu | grep "Thread(s)"`
+      echo "Qt version:" $VER
+      VER=`$CC --version | sed -nE $CCVER`
+      echo "C compiler version:" $VER
+      VER=`$CXX --version | sed -nE $CCVER`
+      echo "C++ compiler version:" $VER
+      git submodule update --init --recursive
+
+for:
+  -
+    matrix:
+      only:
+        - image: Ubuntu1604
+    before_build:
+      - sh: ./configure --prefix=$HOME/usr --sysconfdir=$HOME/etc
+    build_script:
+      - make -j5
+    after_build:
+      - make install
+    test_script:
+      - $LDD src/flexemu
+      - $LDD src/flexplorer
+      - make -j5 check && cat test/unittests.log
+      - test/test_gccasm
+      - src/dsktool -l disks/games.dsk
+      - src/dsktool -f new.dsk -S 80dsdd
+      - src/dsktool -C disks/system.dsk -T new.dsk
+      - src/dsktool -l new.dsk
+

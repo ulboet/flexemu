@@ -2,8 +2,8 @@
     fcinfo.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,63 +20,32 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <stdio.h>
-#include <string.h>
 
 #include "fcinfo.h"
-#include "filecntb.h"   // needed for containertypes
-
-#ifdef _
-    #undef _
-#endif
-
-#define _(p) p
+#include "filecntb.h"
 
 
-FlexContainerInfo::FlexContainerInfo() :
-    sectors(0),
-    tracks(0),
-    number(0U),
-    type(0),
-    free(0),
-    totalSize(0),
-    attributes(0),
-    is_flex_format(false),
-    is_write_protected(false),
-    is_valid(false)
-{
-} // FlexContainerInfo
-
-FlexContainerInfo::~FlexContainerInfo()
-{
-}
-
-const std::string FlexContainerInfo::GetTypeString() const
+std::string FlexDiskAttributes::GetTypeString() const
 {
     std::string str;
 
-    if (type & TYPE_CONTAINER)
+    switch (type)
     {
-        if (type & TYPE_DSK_CONTAINER)
-        {
-            str = _("file container, DSK format");
-        }
-        else if (type & TYPE_FLX_CONTAINER)
-        {
-            str = _("file container, FLX format");
-        }
-        else
-        {
-            str = _("file container");
-        }
-    }
-    else if (type & TYPE_DIRECTORY)
-    {
-        str = _("directory");
-    }
-    else
-    {
-        str = _("Unknown type");
+        case DiskType::DSK:
+            str = "Disk image file, DSK format";
+            break;
+
+        case DiskType::FLX:
+            str = "Disk image file, FLX format";
+            break;
+
+        case DiskType::Directory:
+            str = "directory";
+            break;
+
+        default:
+            str = "Unknown type";
+            break;
     }
 
     return str;

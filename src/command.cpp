@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,10 +22,6 @@
 
 
 #include "misc1.h"
-#ifdef ultrix
-    #include <strings.h>
-#endif
-#include <ctype.h>
 #include <new>
 
 #include "e2.h"
@@ -33,31 +29,32 @@
 #include "typedefs.h"
 #include "absgui.h"
 #include "flexerr.h"
+#include "filecntb.h"
 #include "e2floppy.h"
 #include "inout.h"
 #include "schedule.h"
+#include "filfschk.h"
 #include <sstream>
 #include <iomanip>
+#include <iostream>
 
 
 Command::Command(
-        Inout &x_inout,
-        Scheduler &x_scheduler,
-        E2floppy &x_fdc) :
-    inout(x_inout), scheduler(x_scheduler), fdc(x_fdc),
-    command_index(0), answer_index(0)
-{
-    memset(command, 0, sizeof(command));
-}
-
-Command::~Command()
+        Inout &p_inout,
+        Scheduler &p_scheduler,
+        E2floppy &p_fdc,
+        const sOptions &p_options)
+    : inout(p_inout)
+    , scheduler(p_scheduler)
+    , fdc(p_fdc)
+    , options(p_options)
 {
 }
 
 void Command::resetIo()
 {
     command_index = 0;
-    answer_index  = 0;
+    answer_index = 0;
     answer.clear();
 }
 
@@ -86,334 +83,359 @@ Byte Command::readIo(Word /*offset*/)
     return 0x00;
 }
 
-const char *Command::next_token(char **pp, int *pcount)
+std::string Command::next_token(command_t::iterator &iter, int &count)
 {
-    while (*pp != nullptr && **pp != '\0' && **pp == ' ')
+    std::string token;
+
+    while (iter != std::end(command) && *iter == ' ')
     {
-        (*pp)++;
+        iter++;
     }
 
-    if (*pp != nullptr && **pp != '\0')
+    if (iter != std::end(command) && *iter != '\0')
     {
-        (*pcount)++;
+        ++count;
     }
 
-    return *pp;
-}
-
-
-void Command::skip_token(char **pp)
-{
-    while (*pp != nullptr && **pp != '\0' && **pp != ' ')
+    while (*iter != '\0' && *iter != ' ')
     {
-        (*pp)++;
+        token.append(1, *(iter++));
     }
 
-    if (*pp != nullptr && **pp == ' ')
-    {
-        **pp = '\0';
-        (*pp)++;
-    }
-}
-
-// remove drive id and file extension
-// from command token
-const char *Command::modify_command_token(char *p)
-{
-    char *p1 = p;
-    int i = 0;
-
-    if (p1 == nullptr)
-    {
-        return nullptr;
-    }
-
-    if (*p1 == '\0')
-    {
-        return p1;
-    }
-
-    if (isdigit(*p1) && *(p1 + 1) == '.')
-    {
-        p1 += 2;
-    }
-
-    do
-    {
-        if (*(p1 + i) == '.')
-        {
-            *(p1 + i) = '\0';
-            break;
-        }
-
-        i++;
-    }
-    while (*(p1 + i) != '\0');
-
-    return p1;
+    return token;
 }
 
 void Command::writeIo(Word /*offset*/, Byte val)
 {
-    try
+    answer.clear();
+
+    if (command_index < MAX_COMMAND - 1)
     {
-        answer.clear();
+        command[command_index++] = static_cast<char>(val);
+    }
+    else
+    {
+        command[command_index] = static_cast<char>(val);
+    }
 
-        if (command_index < MAX_COMMAND - 1)
+    if (val == '\0')
+    {
+        // MSVC does not support auto *commandIter.
+        // NOLINTNEXTLINE(readability-qualified-auto)
+        auto commandIter = std::begin(command);
+        std::stringstream answer_stream;
+
+        command_index = 0;
+        answer_index = 0;
+        auto number = static_cast<Word>(INVALID_DRIVE);
+        auto count = 0;
+        const auto arg1 = flx::rtrim(flx::tolower(
+                    next_token(commandIter, count)));
+        const auto arg2 = next_token(commandIter, count);
+        const auto arg3 = next_token(commandIter, count);
+        const auto arg4 = next_token(commandIter, count);
+        next_token(commandIter, count);
+
+        switch (count)
         {
-            command[command_index++] = val;
-        }
-        else
-        {
-            command[command_index] = val;
-        }
+            case 1:
+                if (arg1.compare("exit") == 0)
+                {
+                    scheduler.request_new_state(CpuState::Exit);
+                    return;
+                }
 
-        if (val == '\0')
-        {
-            char       *p;
-            const char *arg1, *arg2, *arg3, *arg4;
-            int         count, number;
-            std::stringstream answer_stream;
+                if (arg1.compare("irq") == 0)
+                {
+                    Notify(NotifyId::SetIrq);
+                    return;
+                }
 
-            command_index = 0;
-            answer_index  = 0;
-            number        = INVALID_DRIVE;
-            count         = 0;
-            p             = command;
-            arg1 = next_token(&p, &count);  // get arg1
-            skip_token(&p);
-            arg2 = next_token(&p, &count);  // get arg2
-            skip_token(&p);
-            arg3 = next_token(&p, &count);  // get arg3
-            skip_token(&p);
-            arg4 = next_token(&p, &count);  // get arg4
-            skip_token(&p);
-            next_token(&p, &count);
+                if (arg1.compare("firq") == 0)
+                {
+                    Notify(NotifyId::SetFirq);
+                    return;
+                }
 
-            switch (count)
-            {
-                case 1:
-                    if (stricmp(arg1, "exit") == 0)
-                    {
-                        scheduler.request_new_state(CpuState::Exit);
-                        return;
-                    }
-                    else if (stricmp(arg1, "irq")  == 0)
-                    {
-                        Notify(NotifyId::SetIrq);
-                        return;
-                    }
-                    else if (stricmp(arg1, "firq")  == 0)
-                    {
-                        Notify(NotifyId::SetFirq);
-                        return;
-                    }
-                    else if (stricmp(arg1, "nmi")  == 0)
-                    {
-                        Notify(NotifyId::SetNmi);
-                        return;
-                    }
-                    else if (stricmp(arg1, "terminal") == 0)
-                    {
-                        inout.output_to_terminal();
-                        return;
-                    }
-                    else if (stricmp(arg1, "graphic") == 0)
-                    {
-                        if (!inout.output_to_graphic())
-                        {
-                            answer_stream << "EMU error: Unable to change to "
-                                             "graphic mode.";
-                            answer = answer_stream.str();
-                        }
+                if (arg1.compare("nmi") == 0)
+                {
+                    Notify(NotifyId::SetNmi);
+                    return;
+                }
 
-                        return;
-                    }
-                    else if (stricmp(arg1, "freq") == 0)
+                if (arg1.compare("terminal") == 0)
+                {
+                    if (!inout.output_to_terminal())
                     {
-                        answer_stream << std::fixed << std::setprecision(2)
-                                      << scheduler.get_frequency() << " MHz";
-                        answer = answer_stream.str();
-                        return;
-                    }
-                    else if (stricmp(arg1, "cycles") == 0)
-                    {
-                        answer_stream << scheduler.get_total_cycles()
-                                      << " cycles";
-                        answer = answer_stream.str();
-                        return;
-                    }
-                    else if (stricmp(arg1, "info") == 0)
-                    {
-                        for (Word drive_nr = 0; drive_nr <= 3; drive_nr++)
-                        {
-                            answer_stream << fdc.drive_info_string(drive_nr);
-                        }
+                        answer_stream << "EMU error: Unable to switch to "
+                                         "terminal mode.\n"
+#ifdef UNIX
+                                         "flexemu has to be started from "
+                                         "within a terminal to support this.";
+#endif
+#ifdef _WIN32
+                                         "On Windows terminal mode is not "
+                                         "supported";
+#endif
 
                         answer = answer_stream.str();
-                        return;
                     }
-                    else if (stricmp(arg1, "sync") == 0)
+                    return;
+                }
+
+                if (arg1.compare("graphic") == 0)
+                {
+                    if (!inout.output_to_graphic())
                     {
-                        if (!fdc.sync_all_drives())
-                        {
-                            answer_stream << "EMU error: "
-                                             "Unable to sync all drives.";
-                            answer = answer_stream.str();
-                        }
-
-                        return;
+                        answer_stream << "EMU error: Unable to switch to "
+                                         "graphic mode.";
+                        answer = answer_stream.str();
                     }
+                    return;
+                }
 
-                    break;
+                if (arg1.compare("freq") == 0)
+                {
+                    answer_stream << std::fixed << std::setprecision(2)
+                                  << scheduler.get_frequency() << " MHz";
+                    answer = answer_stream.str();
+                    return;
+                }
 
-                case 2:
-                    if (stricmp(arg1, "freq") == 0)
+                if (arg1.compare("cycles") == 0)
+                {
+                    answer_stream << scheduler.get_total_cycles()
+                                  << " cycles";
+                    answer = answer_stream.str();
+                    return;
+                }
+
+                if (arg1.compare("info") == 0)
+                {
+                    for (Word drive_nr = 0; drive_nr <= 3; drive_nr++)
                     {
-                        float freq;
-
-                        if ((sscanf(arg2, "%f", &freq) == 1) &&
-                            freq >= 0.0)
-                        {
-                            scheduler.set_frequency(freq);
-                        }
-
-                        return;
+                        answer_stream << fdc.drive_attributes_string(drive_nr);
                     }
 
-                    if ((sscanf(arg2, "%d", &number) != 1) ||
-                        number < 0 || number > 3)
+                    answer = answer_stream.str();
+                    return;
+                }
+
+                if (arg1.compare("sync") == 0)
+                {
+                    if (!fdc.sync_all_drives())
+                    {
+                        answer_stream << "EMU error: "
+                                         "Unable to sync all drives.";
+                        answer = answer_stream.str();
+                    }
+
+                    return;
+                }
+
+                break;
+
+            case 2:
+                if (arg1.compare("freq") == 0)
+                {
+                    float freq;
+                    std::stringstream stream(arg2);
+
+                    if (!(stream >> freq).fail() && freq >= 0.0)
+                    {
+                        Notify(NotifyId::SetFrequency, &freq);
+                    }
+
+                    return;
+                }
+
+                {
+                    std::stringstream stream(arg2);
+
+                    if ((stream >> number).fail() || number >3)
                     {
                         answer_stream << "EMU parameter error: " << arg2 <<
                                          " is not a valid drive number.";
                         answer = answer_stream.str();
                         return;
                     }
+                }
 
-                    if (stricmp(arg1, "umount") == 0)
+                if (arg1.compare("umount") == 0)
+                {
+                    if (!fdc.umount_drive(number))
                     {
-                        if (!fdc.umount_drive(static_cast<Word>(number)))
-                        {
-                            answer_stream << "EMU error: "
-                                             "Unable to unmount drive #" <<
-                                             number << ".";
-                            answer = answer_stream.str();
-                        }
-
-                        return;
-                    }
-                    else if (stricmp(arg1, "info") == 0)
-                    {
-                        answer =
-                            fdc.drive_info_string(static_cast<Word>(number));
-                        return;
-                    }
-                    else if (stricmp(arg1, "sync") == 0)
-                    {
-                        if (!fdc.sync_drive(static_cast<Word>(number)))
-                        {
-                            answer_stream << "EMU error: "
-                                             "Unable to sync drive #" <<
-                                             number << ".";
-                            answer = answer_stream.str();
-                        }
-
-                        return;
+                        answer_stream << "EMU error: "
+                                         "Unable to unmount drive #" <<
+                                         number << ".";
+                        answer = answer_stream.str();
                     }
 
-                    break;
+                    return;
+                }
 
-                case 3:
-                    if (stricmp(arg1, "mount") == 0)
+                if (arg1.compare("info") == 0)
+                {
+                    answer = fdc.drive_attributes_string(number);
+                    return;
+                }
+
+                if (arg1.compare("sync") == 0)
+                {
+                    if (!fdc.sync_drive(number))
                     {
-                        if ((sscanf(arg3, "%d", &number) != 1) ||
-                            number < 0 || number > 3)
-                        {
-                            answer_stream << "EMU parameter error: " << arg3 <<
-                                             " is not a valid drive number.";
-                            answer = answer_stream.str();
-                            return;
-                        }
-
-                        if (!fdc.mount_drive(arg2, static_cast<Byte>(number)))
-                        {
-                            answer_stream << "EMU error: "
-                                             "Unable to mount " << arg2 <<
-                                             " to drive #" << number << ".";
-                            answer = answer_stream.str();
-                        }
-
-                        return;
-                    }
-                    else if (stricmp(arg1, "rmount") == 0)
-                    {
-                        if ((sscanf(arg3, "%d", &number) != 1) ||
-                            number < 0 || number > 3)
-                        {
-                            answer_stream << "EMU parameter error: " << arg3 <<
-                                             " is not a valid drive number.";
-                            answer = answer_stream.str();
-                            return;
-                        }
-
-                        if (!fdc.mount_drive(arg2, static_cast<Byte>(number),
-                                             MOUNT_RAM))
-                        {
-                            answer_stream << "EMU error: "
-                                             "Unable to mount " << arg2 <<
-                                             " to drive #" << number << ".";
-                            answer = answer_stream.str();
-                        }
-
-                        return;
+                        answer_stream << "EMU error: "
+                                         "Unable to sync drive #" <<
+                                         number << ".";
+                        answer = answer_stream.str();
                     }
 
-                    break;
+                    return;
+                }
 
-                case 4:
-                    if (stricmp(arg1, "format") == 0)
+                if (arg1.compare("check") == 0)
+                {
+                    const auto *floppy = fdc.get_drive(number);
+                    if (floppy == nullptr)
                     {
-                        int trk, sec;
-
-                        if ((sscanf(arg3, "%d", &trk) != 1) ||
-                            trk < 2 || trk > 255)
+                        answer_stream << "drive #" << number << " not ready";
+                    }
+                    else
+                    {
+                        FlexDiskCheck check(*floppy, options.fileTimeAccess);
+                        answer_stream << "Drive #" << number << " ";
+                        if (check.CheckFileSystem())
                         {
-                            answer_stream << "EMU parameter error: " << arg3 <<
-                                             " is not a valid track count.";
-                            answer = answer_stream.str();
-                            return;
+                            answer_stream << "is OK.";
                         }
-                        if ((sscanf(arg4, "%d", &sec) != 1) ||
-                            sec < 6 || sec > 255)
+                        else
                         {
-                            answer_stream << "EMU parameter error: " << arg4 <<
-                                             " is not a valid sector count.";
-                            answer = answer_stream.str();
-                            return;
-                        }
+                            bool with_nl = false;
 
-                        if (!fdc.format_disk(
-                            static_cast<SWord>(trk),
-                            static_cast<SWord>(sec),
-                            arg2, TYPE_DSK_CONTAINER))
-                        {
-                            answer_stream << "EMU error: Unable to format " <<
-                                             arg2 << ".";
-                            answer = answer_stream.str();
+                            answer_stream << "has " <<
+                                check.GetStatisticsString() << '\n';
+                            for (const auto &result : check.GetResult())
+                            {
+                                if (with_nl)
+                                {
+                                    answer_stream << '\n';
+                                }
+                                with_nl = true;
+                                answer_stream << "  " << result;
+                            }
                         }
+                    }
+                    answer = answer_stream.str();
+                    return;
+                }
+                break;
 
+            case 3:
+                {
+                    std::stringstream stream(arg3);
+
+                    if ((stream >> number).fail() || number > 3)
+                    {
+                        answer_stream << "EMU parameter error: " << arg3 <<
+                                         " is not a valid drive number.";
+                        answer = answer_stream.str();
+                        return;
+                    }
+                }
+
+                if (arg1.compare("mount") == 0)
+                {
+                    if (!fdc.mount_drive(arg2, number))
+                    {
+                        answer_stream << "EMU error: "
+                                         "Unable to mount " << arg2 <<
+                                         " to drive #" << number << ".";
+                        answer = answer_stream.str();
+                    }
+
+                    return;
+                }
+
+                if (arg1.compare("rmount") == 0)
+                {
+                    if (!fdc.mount_drive(arg2, number, MOUNT_RAM))
+                    {
+                        answer_stream << "EMU error: "
+                                         "Unable to mount " << arg2 <<
+                                         " to drive #" << number << ".";
+                        answer = answer_stream.str();
+                    }
+
+                    return;
+                }
+
+                break;
+
+            case 4:
+                if (arg1.compare("format") == 0)
+                {
+                    int trk;
+                    int sec;
+                    DiskType disk_type{};
+                    const auto extension =
+                        flx::tolower(flx::getFileExtension(arg2));
+
+                    if (extension.empty())
+                    {
+                        disk_type = DiskType::Directory;
+                    }
+                    else if ((extension.compare(".dsk") == 0) ||
+                        (extension.compare(".wta") == 0))
+                    {
+                        disk_type = DiskType::DSK;
+                    }
+                    else if (extension.compare(".flx") == 0)
+                    {
+                        disk_type = DiskType::FLX;
+                    }
+                    else
+                    {
+                        answer_stream << "EMU parameter error: file extension "
+                                         "of '" << arg2 << "' is unsupported.";
+                        answer = answer_stream.str();
                         return;
                     }
 
-                    break;
-            } // switch
-            answer_stream << "Unknown command: " << command << ".";
-            answer = answer_stream.str();
-        } // if
-    }
-    catch (std::bad_alloc UNUSED(&e))
-    {
-        answer = gMemoryAllocationErrorString;
+                    std::stringstream tstream{arg3};
+                    if ((tstream >> trk).fail() || trk < 2 || trk > 255)
+                    {
+                        answer_stream << "EMU parameter error: " << arg3 <<
+                                         " is not a valid track count.";
+                        answer = answer_stream.str();
+                        return;
+                    }
+
+                    std::stringstream sstream{arg4};
+                    if ((sstream >> sec).fail() || sec < 6 || sec > 255)
+                    {
+                        answer_stream << "EMU parameter error: " << arg4 <<
+                                         " is not a valid sector count.";
+                        answer = answer_stream.str();
+                        return;
+                    }
+
+                    if (!fdc.format_disk(
+                        static_cast<SWord>(trk),
+                        static_cast<SWord>(sec),
+                        arg2, disk_type))
+                    {
+                        answer_stream << "EMU error: Unable to format " <<
+                                         arg2 << ".";
+                        answer = answer_stream.str();
+                    }
+
+                    return;
+                }
+
+                break;
+        }
+        answer_stream << "Unknown command: " << command.data() << ".";
+        answer = answer_stream.str();
     }
 }
 

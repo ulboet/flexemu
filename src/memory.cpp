@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,14 +22,16 @@
 
 
 #include <sstream>
-#include <stdio.h>
-#include <ctype.h>
 #include "memory.h"
-#include "bfileptr.h"
 #include "fcnffile.h"
 #include "soptions.h"
+#include <cstring>
+#include <iostream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
-Byte Memory::initial_content[8] =
+std::array<Byte, 8> Memory::initial_content =
 { 0x23, 0x54, 0xF1, 0xAA, 0x78, 0xD3, 0xF2, 0x0 };
 
 Memory::Memory(const struct sOptions &options) :
@@ -37,17 +39,16 @@ Memory::Memory(const struct sOptions &options) :
     isHiMem(options.isHiMem),
     isFlexibleMmu(options.isFlexibleMmu),
     isEurocom2V5(options.isEurocom2V5),
-    memory_size(0x10000),
-    video_ram_size(0),
-    ramBank(0),
-    video_ram_active_bits(0)
+
+    deviceAccess(0x10000 - GENIO_BASE, ioDeviceAccess{NO_DEVICE, 0U})
+
 {
-    memory = std::unique_ptr<Byte[]>(new Byte[memory_size]);
+    memory.resize(memory_size);
     if (isRamExtension)
     {
         video_ram_size = VIDEORAM_SIZE *
-                     (isHiMem ? MAXVIDEORAM_BANKS : (MAXVIDEORAM_BANKS >> 2));
-        video_ram = std::unique_ptr<Byte[]>(new Byte[video_ram_size]);
+                     (isHiMem ? MAXVIDEORAM_BANKS : (MAXVIDEORAM_BANKS >> 2U));
+        video_ram.resize(video_ram_size);
     }
 
     init_memory();
@@ -66,25 +67,25 @@ void Memory::init_memory()
     Byte j;
     Byte *p;
 
-    p = initial_content;
+    p = initial_content.data();
 
     for (i = 0; i < video_ram_size; i++)
     {
         if (*p == 0x00)
         {
-            p = initial_content;
+            p = initial_content.data();
         }
 
         video_ram[i] = *(p++);
     }
 
-    p = initial_content;
+    p = initial_content.data();
 
     for (i = 0; i < memory_size; i++)
     {
         if (*p == 0x00)
         {
-            p = initial_content;
+            p = initial_content.data();
         }
 
         memory[i] = *(p++);
@@ -121,47 +122,47 @@ void Memory::init_memory()
                 i = 0;
             }
 
-            init_vram_ptr(j | 0x0c, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x0d, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x0e, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x0f, &memory[VIDEORAM_SIZE * (j >> 4)]);
-            init_vram_ptr(j | 0x04, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x05, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x06, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x07, &memory[VIDEORAM_SIZE * (j >> 4)]);
-            init_vram_ptr(j | 0x08, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x09, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x0a, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x0b, &memory[VIDEORAM_SIZE * (j >> 4)]);
-            init_vram_ptr(j | 0x00, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x01, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x02, &video_ram[VIDEORAM_SIZE * i++]);
-            init_vram_ptr(j | 0x03, &memory[VIDEORAM_SIZE * (j >> 4)]);
+            init_vram_ptr(j | 0x0CU, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x0DU, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x0EU, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x0FU, &memory[VIDEORAM_SIZE * (j >> 4U)]);
+            init_vram_ptr(j | 0x04U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x05U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x06U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x07U, &memory[VIDEORAM_SIZE * (j >> 4U)]);
+            init_vram_ptr(j | 0x08U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x09U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x0AU, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x0BU, &memory[VIDEORAM_SIZE * (j >> 4U)]);
+            init_vram_ptr(j | 0x00U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x01U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x02U, &video_ram[VIDEORAM_SIZE * i++]);
+            init_vram_ptr(j | 0x03U, &memory[VIDEORAM_SIZE * (j >> 4U)]);
         }
 
-        if (i != (isHiMem ? MAXVIDEORAM_BANKS : MAXVIDEORAM_BANKS >> 2))
+        if (i != (isHiMem ? MAXVIDEORAM_BANKS : MAXVIDEORAM_BANKS / 4U))
         {
-            fprintf(stderr,
-                    "Memory management initialization failure (i=%u)\n", i);
+            std::cerr << "Memory management initialization failure (i="
+                      << i << ")\n";
         }
     }
 
     // initialize mmu pointers
     for (i = 0; i < 16; i++)
     {
-        ppage[i] = &memory[VIDEORAM_SIZE * (i >> 2)];
+        ppage[i] = &memory[VIDEORAM_SIZE * (i >> 2U)];
     }
 
     if (isEurocom2V5)
     {
         for (i = 12; i < 15; i++)
         {
-            ppage[i] = &memory[VIDEORAM_SIZE * ((i - 4) >> 2)];
+            ppage[i] = &memory[VIDEORAM_SIZE * ((i - 4U) >> 2U)];
         }
     }
 
     video_ram_active_bits = 0;
-} // init_memory
+}
 
 void Memory::init_vram_ptr(Byte vram_ptr_index, Byte *ram_ptr)
 {
@@ -175,7 +176,8 @@ void Memory::init_vram_ptr(Byte vram_ptr_index, Byte *ram_ptr)
     // extended RAM to 0x00.
     if (do_preset_ram < 0)
     {
-        FlexemuConfigFile configFile(getFlexemuSystemConfigFile().c_str());
+        const auto path(flx::getFlexemuConfigFile());
+        FlexemuConfigFile configFile(path);
         const auto value = configFile.GetDebugSupportOption("presetRAM");
 
         do_preset_ram = (value == "1") ? 1 : 0;
@@ -183,7 +185,7 @@ void Memory::init_vram_ptr(Byte vram_ptr_index, Byte *ram_ptr)
 
     if (do_preset_ram == 1)
     {
-        memset(ram_ptr, vram_ptr_index, VIDEORAM_SIZE);
+        std::memset(ram_ptr, vram_ptr_index, VIDEORAM_SIZE);
     }
 }
 
@@ -215,7 +217,6 @@ bool Memory::add_io_device(
         Word base_address,
         int size /* = -1 */)
 {
-    Word offset;
     Word sizeOfIo = device.sizeOfIo();
 
     if (size < 0)
@@ -223,20 +224,29 @@ bool Memory::add_io_device(
         size = sizeOfIo;
     }
 
-// io-device addressess outside the IO-regions, then return false
-    if (! ((base_address >= GENIO_BASE && ((int)base_address + size <= GENIO_END)) || (base_address >= GENIO_BASE2 && ((int)base_address + size <= GENIO_END2))))
+    if (base_address < GENIO_BASE ||
+        (static_cast<int>(base_address) + size > 0xffff))
     {
         return false;
     }
 
+    auto deviceIndex = static_cast<Byte>(ioDevices.size());
+    if (deviceIndex == NO_DEVICE)
+    {
+        return false; // No more I/O devices allowed.
+    }
     ioDevices.push_back(std::ref(device));
 
-    for (offset = 0; offset < size; ++offset)
+    // To access a device store the device index and it's byte offset
+    // in a vector. The vector index is the address - GENIO_BASE.
+    // If device index contains NO_DEVICE there is no memory mapped device
+    // at this address location.
+    for (Word offset = 0; offset < static_cast<Word>(size); ++offset)
     {
-        ioAccessForAddressMap.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple<Word>(base_address + offset),
-            std::forward_as_tuple<IoDevice &, Word>(device, offset % sizeOfIo));
+        auto byteOffset = static_cast<Byte>(offset % sizeOfIo);
+        ioDeviceAccess access{ deviceIndex, byteOffset };
+
+        deviceAccess[base_address + offset - GENIO_BASE] = access;
     }
 
     return true;
@@ -251,67 +261,69 @@ void Memory::reset_io()
 }
 
 // Write Byte into RAM or ROM independent of MMU.
-void Memory::write_ram_rom(Word offset, Byte value)
+void Memory::write_ram_rom(Word address, Byte value)
 {
-    memory[offset] = value;
-} // write_ram_rom
+    memory[address] = value;
+}
 
 // Read Byte from RAM or ROM independent of MMU.
-Byte Memory::read_ram_rom(Word offset)
+Byte Memory::read_ram_rom(Word address)
 {
-    return memory[offset];
-} // read_ram_rom
+    return memory[address];
+}
 
 void Memory::switch_mmu(Word offset, Byte val)
 {
-    int ppage_index = 0;
+    Word ppage_index = 0U;
 
-    if ((val & 0x03) != 0x03)
+    if ((val & 0x03U) != 0x03U)
     {
         if (isHiMem && isFlexibleMmu)
         {
-            ppage_index = val & 0x3f;
+            ppage_index = val & 0x3FU;
         }
         else
         {
-            ppage_index = ((offset << 2) & 0x30) | (val & 0x0f);
+            ppage_index = (static_cast<DWord>(offset << 2U) & 0x30U) |
+                (val & 0x0FU);
         }
-        video_ram_active_bits |= (1 << offset);
+        video_ram_active_bits |= (1U << offset);
     }
     else
     {
-        ppage_index = ((offset << 2) & 0x30) | (val & 0x0f);
-        video_ram_active_bits &= ~(1 << offset);
+        ppage_index = (static_cast<DWord>(offset << 2U) & 0x30U) |
+            (val & 0x0FU);
+        video_ram_active_bits &= ~(1U << offset);
     }
 
     ppage[offset] = vram_ptrs[ppage_index];
-} // switch_mmu
+}
 
-void Memory::dump_ram_rom(Word min, Word max)
+void Memory::dump_ram_rom(std::ostream &os, Word min, Word max)
 {
     Word address = min;
     Byte value;
     Byte padding;
 
     padding = 3 * (address % 16);
-    printf("%04X ", address);
+    os << fmt::format("{:04X} ", address);
     if (padding)
     {
-        printf("%*c", padding, ' ');
+        os << fmt::format("{0:{1}}", ' ', padding);
     }
 
     while (true)
     {
         value = read_ram_rom(address);
-        printf(" %02X", value);
+        os << fmt::format(" {:02X}", value);
         if (address == max)
         {
-            printf("\n");
+            os << "\n";
             return;
         }
         if (address % 16 == 15)
         {
-            printf("\n%04X ", address + 1);
+            os << fmt::format("\n{:04X} ", address + 1);
         }
         ++address;
     }
@@ -330,9 +342,9 @@ void Memory::UpdateFrom(NotifyId id, void *param)
     }
 }
 
-void Memory::CopyFrom(const Byte *buffer, size_t address, size_t aSize)
+void Memory::CopyFrom(const Byte *source, DWord address, DWord size)
 {
-    size_t secureSize = aSize;
+    DWord secureSize = size;
 
     if (address >= memory_size)
     {
@@ -341,8 +353,9 @@ void Memory::CopyFrom(const Byte *buffer, size_t address, size_t aSize)
 
     if (address + secureSize >= memory_size)
     {
-        secureSize -= address + aSize - memory_size;
+        secureSize -= address + size - memory_size;
     }
 
-    memcpy(memory.get() + address, buffer, secureSize);
+    std::memcpy(memory.data() + address, source, secureSize);
 }
+

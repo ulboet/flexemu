@@ -1,30 +1,24 @@
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT([Flexemu],[3.12])
+AC_INIT([Flexemu],[3.28])
 AC_CONFIG_SRCDIR([src/main.cpp])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR(m4)
 AC_CANONICAL_TARGET
 AC_ARG_PROGRAM dnl Perform program name transformation
-AM_INIT_AUTOMAKE
-LT_INIT
+AM_INIT_AUTOMAKE([ subdir-objects ])
 AM_MAINTAINER_MODE([disable])
 AC_CONFIG_HEADERS([src/config.h:src/config.hin])
+AM_SILENT_RULES([yes])
 
 dnl Checks for programs.
-case $host_os in
-  *cygwin* ) CYGWIN=yes;;
-         * ) CYGWIN=no;;
-esac
-case $host_os in
-  *mingw32* ) MINGW32=yes;;
-          * ) MINGW32=no;;
-esac
 AC_PROG_LN_S
 AC_PROG_CC
 AC_PROG_CXX
+AM_PROG_AR
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
+LT_INIT
 
 dnl Checks for header files.
 AC_PATH_XTRA
@@ -36,7 +30,7 @@ AC_CHECK_HEADERS_ONCE([sys/time.h])
 AC_CHECK_HEADERS(stdarg.h)
 AC_CHECK_HEADERS(unistd.h inttypes.h stdint.h)
 AC_CHECK_HEADERS(fcntl.h sys/ioctl.h termios.h)
-AC_CHECK_HEADERS(sys/statvfs.h sys/mount.h)
+AC_CHECK_HEADERS(sys/statvfs.h)
 AC_CHECK_HEADER(windows.h, AC_DEFINE(WIN32,1,[1 if Windows headers are available]))
 AC_CHECK_HEADER(linux/joystick.h, AC_DEFINE(LINUX_JOYSTICK_IS_PRESENT,1,[1 if Linux joystick headers are available]))
 AC_CHECK_FUNCS(gettid)
@@ -49,8 +43,18 @@ dnl Check for --enable-speed flag
 FLX_ENABLE_SPEED
 dnl Check for --disable-post-install flag
 FLX_ENABLE_POST_INSTALL
-dnl Check for -pedantic -Wall compiler switch
-AX_CXXFLAGS_WARN_ALL
+
+dnl check for --en/disable-precompiled-headers flag
+FLX_PRECOMPILED_HEADERS
+INCLUDE_PCH=
+PCH_H_GCH=
+if test "x$enable_precompiled_headers" == "xyes"; then
+    INCLUDE_PCH="-include pch.h"
+    PCH_H_GCH="pch.h.gch"
+fi
+AC_SUBST(INCLUDE_PCH)
+AC_SUBST(PCH_H_GCH)
+
 dnl Check for specific compiler warning support
 CC_CHECK_FLAGS_APPEND([CFLAGS],[CFLAGS],[\
         -std=gnu99 \
@@ -60,11 +64,11 @@ CC_CHECK_FLAGS_APPEND([CFLAGS],[CFLAGS],[\
         -Wshadow \
 ])
 AC_LANG_PUSH([C++])
-CC_CHECK_FLAGS_APPEND([CXXFLAGS],[CXXFLAGS],[\
+CC_CHECK_FLAGS_APPEND([CXXWARNINGS],[CXXWARNINGS],[\
+        -Wall \
         -Wextra \
         -Wshadow \
         -Wswitch-enum \
-        -Wuseless-cast \
         -Wfloat-conversion \
         -Wundef \
 ])
@@ -72,6 +76,14 @@ AC_LANG_POP([C++])
 
 dnl check for qt libraries and tools
 AX_HAVE_QT
+dnl check for ncursesw library and header
+AX_WITH_CURSES
+if test "x$ax_cv_ncursesw" != xyes && test "x$ax_cv_ncurses" != xyes; then
+    AC_MSG_ERROR([requires libncursesw.so or libncurses.so library])
+fi
+
+dnl Create command line options for clang-tidy
+AX_CLANG_TIDY_OPTS([$QT_CXXFLAGS])
 
 dnl Checks for typedefs
 AC_C_CONST
@@ -100,23 +112,13 @@ AC_FUNC_VPRINTF
 AC_PROG_GCC_TRADITIONAL
 
 dnl Check for system services
-case $host_os in
-       *mingw32*) FLEXEMU_LDADD="-mwindows" ;;
-       *cygwin*)  FLEXEMU_LDADD="-mwindows" ;;
-       *)         FLEXEMU_LDADD="" ;;
-esac
-case $host_os in
-       *mingw32*) FLEX_RC='flexemu.${OBJEXT}' ;;
-       *cygwin*)  FLEX_RC='flexemu.${OBJEXT}' ;;
-       *)         FLEX_RC="" ;;
-esac
-case $host_os in
-       *linux*)   OS_TYPE="-D__LINUX" ;;
-       *freebsd*) OS_TYPE="-D__BSD -D__FREEBSD" ;;
-       *openbsd*) OS_TYPE="-D__OPENBSD" ;;
-       *mingw32*) OS_TYPE="-D__MINGW32 -DWIN32" ;;
-       *cygwin*)  OS_TYPE="-D__CYGWIN32 -DWIN32" ;;
-       *)         OS_TYPE="" ;;
+case $build_os in
+       *linux*)   OS_TYPE="-DUNIX" ;;
+       *freebsd*) OS_TYPE="-DUNIX" ;;
+       *openbsd*) OS_TYPE="-DUNIX" ;;
+       *netbsd*)  OS_TYPE="-DUNIX" ;;
+       *darwin*)  OS_TYPE="-DUNIX"; MACOSX_VERSION_MIN="-mmacosx-version-min=10.15" ;;
+       *)         OS_TYPE="";;
 esac
 AC_EXEEXT
 AC_OBJEXT
@@ -125,7 +127,7 @@ AC_PATH_PROG(UPDATE_DESKTOP_DATABASE,[update-desktop-database],[true])
 AC_PATH_PROG(UPDATE_MIME_DATABASE,[update-mime-database],[true])
 AC_PATH_PROG(GTK_UPDATE_ICON_CACHE,[gtk-update-icon-cache],[true])
 
-if test "x$with_x" != "xno"; then
+if test "x$no_x" != "xyes"; then
     X_LIBS="$X_LIBS $X_PRE_LIBS $X_EXTRA_LIBS"
     dnl AC_PATH_XTRA only defines the path needed to find the X libs,
     dnl it does not add the libs; therefore we add them here
@@ -137,26 +139,16 @@ fi
 AC_SUBST(PTHREAD_LD)
 AC_SUBST(WIN32_LIBS)
 AC_SUBST(WNO_VARIADIC_MACROS)
-AC_SUBST([FLEX_RC])
-AC_SUBST([FLEXEMU_LDADD])
 AC_SUBST([OS_TYPE])
+AC_SUBST([MACOSX_VERSION_MIN])
 AC_SUBST([FLEXPLORER], ['flexplorer${EXEEXT}'])
+AC_SUBST([CXXWARNINGS])
 
 dnl which optimizations are possible depends on the cpu architecture
 CXXSPEED="-D__CPU=$target_cpu"
 if test "x$enable_speed" = "xyes"; then
-   case $host_os in
+   case $build_os in
       *linux*)
-	case $target_cpu in
-           i*86) CXXSPEED="$CXXSPEED -Winline -O3 -finline-limit=4000 \
- -frename-registers -fomit-frame-pointer -mcpu=$target_cpu -DUSE_ASM" ;;
-        esac ;;
-      *cygwin*)
-	case $target_cpu in
-           i*86) CXXSPEED="$CXXSPEED -Winline -O3 -finline-limit=4000 \
- -frename-registers -fomit-frame-pointer -mcpu=$target_cpu -DUSE_ASM" ;;
-        esac ;;
-      *mingw32*)
 	case $target_cpu in
            i*86) CXXSPEED="$CXXSPEED -Winline -O3 -finline-limit=4000 \
  -frename-registers -fomit-frame-pointer -mcpu=$target_cpu -DUSE_ASM" ;;
@@ -170,6 +162,20 @@ if test "x$enable_speed" = "xyes"; then
 fi
 
 AC_SUBST([CXXSPEED])
+
+AH_TOP([/* Following macros are generated by autoheader. */
+/* For this reason LINT macro checks have to be suppressed. */
+/* NOLINTBEGIN(modernize-macro-to-enum, cppcoreguidelines-macro-usage) */])
+AH_BOTTOM([/* NOLINTEND(modernize-macro-to-enum, cppcoreguidelines-macro-usage) */])
+
+dnl Link files to be available in an out-of-source build.
+dnl (e.g. with make distcheck).
+AC_CONFIG_LINKS([test/data/cat.cmd:test/data/cat.cmd])
+AC_CONFIG_LINKS([test/data/cat.hex:test/data/cat.hex])
+AC_CONFIG_LINKS([test/data/cat.s19:test/data/cat.s19])
+AC_CONFIG_LINKS([test/data/testdisk.dsk:test/data/testdisk.dsk])
+AC_CONFIG_LINKS([test/data/testdisk.flx:test/data/testdisk.flx])
+AC_CONFIG_LINKS([test/data/flexlabl.conf:test/data/flexlabl.conf])
 
 AC_CONFIG_FILES([Makefile \
 	src/Makefile \
@@ -186,30 +192,29 @@ AC_CONFIG_FILES([Makefile \
 	monitor/Makefile \
 	monitor/mon24/Makefile \
 	monitor/mon24z/Makefile \
-        build/Makefile \
-        build/windows/Makefile \
-        build/windows/installer/Makefile \
 	doc/Makefile \
-	doc/images/Makefile])
+	doc/images/Makefile \
+	test/Makefile])
 AC_OUTPUT
+
+if test "x$no_x" = "xyes"; then
+  xlib_text="Not found"
+else
+  xlib_text="yes"
+fi
+if test "x$have_qt" = "xno"; then
+  qt_text="Not found"
+else
+  qt_text="yes"
+fi
 
   echo
   echo "************************** summary ************************************"
-  echo " CFLAGS:                     $CFLAGS"
-  echo " CXXFLAGS:                   $CXXFLAGS"
+  echo " CFLAGS:                      $CFLAGS"
+  echo " CXXFLAGS:                    $CXXFLAGS"
   echo " WIN32_LIBS:                  $WIN32_LIBS"
-  echo -n " Xlib:                        "
-if test "x$with_x" = "xno"; then
-  echo "Not found"
-else
-  echo "yes"
-fi
-  echo -n " Qt:                          "
-if test "x$have_qt" = "xno"; then
-  echo "Not found"
-else
-  echo "yes"
-fi
+  echo " Xlib:                        $xlib_text"
+  echo " Qt:                          $qt_text"
   echo " speed optimized compilation: $enable_speed"
   echo " execute post installation:   $enable_post_install"
   echo " canonical build:             $build"
@@ -218,12 +223,6 @@ fi
   echo "***********************************************************************"
   echo
 
-if test "x$with_x" = "xno"; then
-    AC_MSG_WARN([
-            Please check that libX11.so is installed. On debian based
-            systems the package libX11-dev has to be installed.
-    ])
-fi
 if test "x$have_qt" = "xno"; then
     AC_MSG_WARN([
             Please check that libQt 5.x is installed. On debian based
@@ -236,11 +235,7 @@ fi
 if test "x$have_qt" = "xno"; then
   echo "mdcrtool, dsktool and flex2hex"
 else
-  if test "x$with_x" = "xno"; then
-    echo "flexplorer, mdcrtool, dsktool and flex2hex"
-  else
-    echo "flexemu, flexplorer, mdcrtool, dsktool and flex2hex"
-  fi
+  echo "flexemu, flexplorer, mdcrtool, dsktool and flex2hex"
 fi
   echo
 

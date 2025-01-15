@@ -2,8 +2,8 @@
     ffilebuf.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,19 +27,28 @@
 #include "filecntb.h"
 #include "bdate.h"
 #include "btime.h"
+#include "efiletim.h"
+#include "fdirent.h"
 #include <memory>
 #include <functional>
 #include <sstream>
 #include <iomanip>
 #include <array>
+#include <vector>
 #include <string>
+#include "warnoff.h"
+#include <optional>
+#include "warnon.h"
 
 
-typedef char FlexFileName[FLEX_FILENAME_LENGTH];
 const std::array<char,4> flexFileHeaderMagicNumber = {
     // '\xde', '\xad', '\xbe', '\xaf' old magic number without hour, minute.
     '\xde', '\xad', '\xbe', '\xae'
 };
+
+/* POD are needed here for memcpy() to/from clipboard. */
+/* NOLINTBEGIN(modernize-avoid-c-arrays) */
+using FlexFileName = char[FLEX_FILENAME_LENGTH];
 
 // This is a POD data structure. It can be used to
 // read or write FLEX files to and from the clipboard.
@@ -50,50 +59,60 @@ struct tFlexFileHeader
 {
     char magicNumber[4];
     DWord fileSize;
-    Word  attributes;
-    Word  sectorMap;
-    Word  day;
-    Word  month;
-    Word  year;
-    Word  hour;
-    Word  minute;
+    Word attributes;
+    Word sectorMap;
+    Word day;
+    Word month;
+    Word year;
+    Word hour;
+    Word minute;
     FlexFileName fileName;
 };
+/* NOLINTEND(modernize-avoid-c-arrays) */
 
 class FlexFileBuffer
 {
+    enum class ReadCmdState : uint8_t
+    {
+        GetType,
+        GetDataAddress,
+        GetCount,
+        GetData,
+        GetStartAddress,
+        GetNUL,
+    };
+
 public:
     FlexFileBuffer();
     FlexFileBuffer(const FlexFileBuffer &src);
-    FlexFileBuffer(FlexFileBuffer &&src);
-    virtual ~FlexFileBuffer();
+    FlexFileBuffer(FlexFileBuffer &&src) noexcept;
+    virtual ~FlexFileBuffer() = default;
 
     FlexFileBuffer &operator=(const FlexFileBuffer &src);
-    FlexFileBuffer &operator=(FlexFileBuffer &&src);
+    FlexFileBuffer &operator=(FlexFileBuffer &&src) noexcept;
 
     void ConvertToTextFile();
     void ConvertToFlexTextFile();
     void ConvertToDumpFile(DWord bytesPerLine);
-    bool WriteToFile(const char *path) const;
-    bool ReadFromFile(const char *path);
+    bool WriteToFile(const std::string &path,
+            FileTimeAccess fileTimeAccess, bool doRandomCheck = false) const;
+    bool ReadFromFile(const std::string &path, FileTimeAccess fileTimeAccess,
+            bool doRandomCheck = false);
     bool IsTextFile() const;
     bool IsFlexTextFile() const;
     bool IsFlexExecutableFile() const;
-    void CopyHeaderBigEndianFrom(const tFlexFileHeader &from);
-    bool CopyFrom(const Byte *from, DWord aSize, DWord offset = 0);
-    bool CopyTo(Byte *to, DWord aSize,
-                DWord offset = 0, int stuffByte = -1) const;
-    void FillWith(const Byte pattern = 0);
+    void CopyHeaderBigEndianFrom(const tFlexFileHeader &src);
+    bool CopyFrom(const Byte *source, DWord size, DWord offset = 0);
+    bool CopyTo(Byte *target, DWord size,
+                DWord offset = 0,
+                std::optional<Byte> stuffByte = std::nullopt) const;
+    void FillWith(Byte pattern = '\0');
     void Realloc(DWord newSize, bool restoreContents = false);
     const Byte *GetBuffer(DWord offset = 0, DWord bytes = 1) const;
-    const tFlexFileHeader &GetHeader() const
-    {
-        return fileHeader;
-    }
     tFlexFileHeader GetHeaderBigEndian() const;
     void SetDateTime(const BDate &date, const BTime &time);
-    void SetFilename(const char *name);
-    inline const char *GetFilename() const
+    void SetFilename(const std::string &name);
+    inline std::string GetFilename() const
     {
         return fileHeader.fileName;
     };
@@ -103,18 +122,16 @@ public:
     };
     inline bool IsEmpty() const
     {
-        return !buffer || fileHeader.fileSize == 0;
+        return buffer.empty() || fileHeader.fileSize == 0;
     };
-    inline operator const Byte *() const
+    inline explicit operator const Byte *() const
     {
         if (IsEmpty())
         {
             return nullptr;
         }
-        else
-        {
-            return GetBuffer(0);
-        }
+
+        return GetBuffer(0);
     };
     inline Byte GetAttributes() const
     {
@@ -128,9 +145,9 @@ public:
     {
         return (fileHeader.sectorMap != 0);
     }
-    inline void SetSectorMap(int aSectorMap)
+    inline void SetSectorMap(int sectorMap)
     {
-        fileHeader.sectorMap = static_cast<Word>(aSectorMap);
+        fileHeader.sectorMap = static_cast<Word>(sectorMap);
     }
     inline int GetSectorMap() const
     {
@@ -138,22 +155,24 @@ public:
     }
     BDate GetDate() const;
     BTime GetTime() const;
+    FlexDirEntry GetDirEntry() const;
 
 private:
     void SetAdjustedFilename(const std::string &name);
     void copyFrom(const FlexFileBuffer &src);
-    void TraverseForTextFileConversion(std::function<void(char c)> fct) const;
-    void TraverseForFlexTextFileConversion(std::function<void(char c)> fct)
-         const;
-    void TraverseForDumpFileConversion(DWord bytesPerLine,
-                                       std::function<void(char c)> fct) const;
+    void TraverseForTextFileConversion(
+            const std::function<void(Byte c)>& fct) const;
+    void TraverseForFlexTextFileConversion(
+            const std::function<void(Byte c)>& fct) const;
+    void TraverseForDumpFileConversion(
+            DWord bytesPerLine,
+            const std::function<void(Byte c)>& fct) const;
     DWord SizeOfConvertedTextFile() const;
     DWord SizeOfConvertedFlexTextFile() const;
     DWord SizeOfConvertedDumpFile(DWord bytesPerLine) const;
 
-    tFlexFileHeader fileHeader;
-    DWord capacity;
-    std::unique_ptr<Byte[]> buffer;
+    tFlexFileHeader fileHeader{};
+    std::vector<Byte> buffer;
 };
 
 #endif

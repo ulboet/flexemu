@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2022  W. Schwotzer
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,7 +26,9 @@
 #define SFPOPTS_INCLUDED
 
 #include <string>
+#include <vector>
 #include "efiletim.h"
+#include "efilesiz.h"
 
 struct sFPOptions
 {
@@ -34,12 +36,24 @@ struct sFPOptions
     sFPOptions(const sFPOptions &src) = default;
     sFPOptions& operator=(const sFPOptions &src) = default;
 
-    FileTimeAccess ft_access;
+    FileTimeAccess ft_access{};
+    FileSizeType fileSizeType{};
+    int iconSize{};
+    std::string version;
     std::string bootSectorFile;
-    bool injectTextFileConvert;
-    bool injectTextFileAskUser;
-    bool extractTextFileConvert;
-    bool extractTextFileAskUser;
+    bool injectTextFileConvert{};
+    bool injectTextFileAskUser{};
+    bool extractTextFileConvert{};
+    bool extractTextFileAskUser{};
+    bool onTrack0OnlyDirSectors{};
+    std::string openDiskPath;
+    std::string openDirectoryPath;
+    std::string openInjectFilePath;
+    std::vector<std::string> recentDiskPaths;
+    std::vector<std::string> recentDirectoryPaths;
+
+    static const int maxRecentFiles = 24;
+    static const int maxRecentDirectories = 24;
 };
 
 #endif

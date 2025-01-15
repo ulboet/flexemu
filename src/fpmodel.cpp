@@ -2,8 +2,8 @@
     fpmodel.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,17 +24,20 @@
 #include "misc1.h"
 #include "fdirent.h"
 #include "flexerr.h"
+#include "fattrib.h"
 #include "ffilecnt.h"
 #include "dircont.h"
 #include "fcopyman.h"
 #include "ifilecnt.h"
 #include "ffilebuf.h"
 #include "filecont.h"
+#include "qtfree.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "warnoff.h"
 #include <QtGlobal>
 #include <QObject>
+#include <QLocale>
 #include <QString>
 #include <QDate>
 #include <QVector>
@@ -50,57 +53,66 @@
 #endif
 #include "warnon.h"
 #include "fpmodel.h"
+#include <unordered_map>
+#include <utility>
+#include <memory>
 
 
-std::array<const char *, FlexplorerTableModel::COLUMNS>
-    FlexplorerTableModel::headerNames =
+HeaderNames_t &FlexplorerTableModel::GetHeaderNames()
 {
-    "Id", "Filename", "Filetype", "Random", "Size", "Date", "Attributes"
-};
+    static HeaderNames_t headerNames =
+    {
+        tr("Id"), tr("Filename"), tr("Filetype"), tr("Random"), tr("Filesize"),
+        tr("Date"), tr("Attributes"),
+    };
 
-QVector<QPair<char, Byte> > FlexplorerTableModel::attributeCharToFlag
-{
-    { 'W', WRITE_PROTECT },
-    { 'D', DELETE_PROTECT },
-    { 'R', READ_PROTECT },
-    { 'C', CATALOG_PROTECT },
-};
-
-const QVector<FlexplorerTableModel::sFileTypes>
-    FlexplorerTableModel::fileTypes
-{
-    { "BIN", "Binary file" },
-    { "TXT", "Text file" },
-    { "CMD", "Executable file" },
-    { "BAS", "Basic file" },
-    { "SYS", "System file" },
-    { "BAK", "Backup file" },
-    { "BAC", "Backup file" },
-    { "DAT", "Data file" },
-};
-
-FlexplorerTableModel::FlexplorerTableModel(const char *p_path,
-                                           const FileTimeAccess &fileTimeAccess,
-                                           QObject *parent)
-    : QAbstractTableModel(parent)
-{
-    OpenContainer(p_path, fileTimeAccess);
-    Initialize();
+    return headerNames;
 }
 
-FlexplorerTableModel::~FlexplorerTableModel()
+const FlexplorerTableModel::FileTypes_t &FlexplorerTableModel::GetFileTypes()
 {
+    static const FileTypes_t fileTypes
+    {
+        { "BIN", "Binary file" },
+        { "TXT", "Text file" },
+        { "CMD", "Executable file" },
+        { "BAS", "Basic file" },
+        { "SYS", "System file" },
+        { "BAK", "Backup file" },
+        { "BAC", "Backup file" },
+        { "DAT", "Data file" },
+    };
+
+    return fileTypes;
+}
+
+FlexplorerTableModel::FlexplorerTableModel(const char *p_path,
+                                           struct sFPOptions &p_options,
+                                           QObject *parent)
+    : QAbstractTableModel(parent)
+    , options(p_options)
+{
+    OpenFlexDisk(p_path, options.ft_access);
+    // For each column set a string with aproximate maximum size.
+    // Date column width depends on options. See GetColumnMaxStrings()
+    // for details.
+    maxStrings = QStringList({
+        "*88888*", "*MMMMMMMM.MMM*", "*Executable file*", "*Random*",
+        "*Filesize*", "", "*Attributes*"
+    });
+
 }
 
 QString FlexplorerTableModel::GetFileType(const FlexDirEntry &dirEntry)
 {
     QString fileExtension(dirEntry.GetFileExt().c_str());
 
+    const auto &fileTypes = GetFileTypes();
     for (const auto &fileType : fileTypes)
     {
         if (fileType.fileExt == fileExtension)
         {
-            return tr(fileType.fileType.toUtf8().data());
+            return fileType.fileType;
         }
     }
 
@@ -114,25 +126,25 @@ void FlexplorerTableModel::CreateAttributesBitmasks(const QString &attributes,
     setMask = 0;
     clearMask = 0;
 
-    for (const auto &item : attributeCharToFlag)
+    for (const auto &item : GetAttributeCharToFlag())
     {
         if (attributes.contains(item.first))
         {
-            setMask |= item.second;
+            setMask |= static_cast<Byte>(item.second);
         }
         else
         {
-            clearMask |= item.second;
+            clearMask |= static_cast<Byte>(item.second);
         }
     }
 }
 
-QModelIndex FlexplorerTableModel::AddRow(const FlexDirEntry &dirEntry, int role)
+QModelIndex FlexplorerTableModel::SetRow(const FlexDirEntry &dirEntry, int row,
+                                         int role)
 {
+    static const int ssm4 = SECTOR_SIZE - 4;
     int column = 0;
-    auto row = rowCount();
 
-    insertRows(row, 1);
     setData(index(row, column++), row, role);
     QString fileName(dirEntry.GetTotalFileName().c_str());
     setData(index(row, column++), fileName, role);
@@ -141,6 +153,10 @@ QModelIndex FlexplorerTableModel::AddRow(const FlexDirEntry &dirEntry, int role)
     QString random(dirEntry.IsRandom() ? "Yes" : "");
     setData(index(row, column++), random, role);
     auto filesize = dirEntry.GetFileSize();
+    if (options.fileSizeType == FileSizeType::DataSize)
+    {
+        filesize = filesize / SECTOR_SIZE * ssm4;
+    }
     setData(index(row, column++), filesize, role);
     const auto &date = dirEntry.GetDate();
     QDate qdate(date.GetYear(), date.GetMonth(), date.GetDay());
@@ -156,11 +172,20 @@ QModelIndex FlexplorerTableModel::AddRow(const FlexDirEntry &dirEntry, int role)
 
 void FlexplorerTableModel::Initialize()
 {
-    FileContainerIterator iter;
+    FlexDiskIterator iter;
+    int columnIndex = 0;
 
     for (iter = container->begin(); iter != container->end(); ++iter)
     {
-        AddRow(*iter);
+        ++columnIndex;
+    }
+
+    insertRows(0, columnIndex);
+    columnIndex = 0;
+    for (iter = container->begin(); iter != container->end(); ++iter)
+    {
+        SetRow(*iter, columnIndex, Qt::DisplayRole);
+        ++columnIndex;
     }
 }
 
@@ -171,7 +196,7 @@ QString FlexplorerTableModel::GetPath() const
 
 QString FlexplorerTableModel::GetUserFriendlyPath() const
 {
-    return getFileName(path.toUtf8().data()).c_str();
+    return flx::getFileName(path.toStdString()).c_str();
 }
 
 bool FlexplorerTableModel::IsWriteProtected() const
@@ -184,27 +209,60 @@ std::string FlexplorerTableModel::GetSupportedAttributes() const
     return container->GetSupportedAttributes();
 }
 
-int FlexplorerTableModel::GetContainerType() const                                
+void FlexplorerTableModel::UpdateFileSizeHeaderName()
 {
-    return container->GetContainerType();
+    const auto &headerText = GetHeaderNameForFileSize(options.fileSizeType);
+    auto variant = QVariant(headerText);
+
+    setHeaderData(FlexplorerTableModel::COL_SIZE, Qt::Horizontal, variant,
+                  Qt::DisplayRole);
 }
 
-const FlexContainerInfo FlexplorerTableModel::GetContainerInfo() const                                
+void FlexplorerTableModel::UpdateFileSizeColumn()
 {
-    FlexContainerInfo info;
+    static const int column = COL_SIZE;
+    static const int ssm4 = SECTOR_SIZE - 4;
 
-    container->GetInfo(info);
+    for (auto &row : rows)
+    {
+        auto value = row.at(column).toUInt();
+        if (options.fileSizeType == FileSizeType::FileSize)
+        {
+            value = value / ssm4 * SECTOR_SIZE;
+        }
+        else if (options.fileSizeType == FileSizeType::DataSize)
+        {
+            value = value / SECTOR_SIZE * ssm4;
+        }
+        QVariant variant(value);
+        row.at(column) = variant;
+    }
+    QVector<int> roles { Qt::DisplayRole };
 
-    return info;
+    emit dataChanged(index(0, column), index(rowCount(), column), roles);
 }
 
-QVector<QString> FlexplorerTableModel::GetFilenames(
+DiskType FlexplorerTableModel::GetFlexDiskType() const
+{
+    return container->GetFlexDiskType();
+}
+
+FlexDiskAttributes FlexplorerTableModel::GetFlexDiskAttributes() const
+{
+    FlexDiskAttributes diskAttributes;
+
+    container->GetDiskAttributes(diskAttributes);
+
+    return diskAttributes;
+}
+
+QStringList FlexplorerTableModel::GetFilenames(
         const QModelIndexList &indexList) const
 {
-    QVector<QString> filenames;
+    QStringList filenames;
 
     filenames.reserve(indexList.size());
-    for (auto &index : indexList)
+    for (const auto &index : indexList)
     {
         if (index.isValid())
         {
@@ -215,9 +273,9 @@ QVector<QString> FlexplorerTableModel::GetFilenames(
     return filenames;
 }
 
-QVector<QString> FlexplorerTableModel::GetFilenames() const
+QStringList FlexplorerTableModel::GetFilenames() const
 {
-    QVector<QString> filenames;
+    QStringList filenames;
 
     for (int row = 0; row < rowCount(); ++row)
     {
@@ -244,12 +302,14 @@ QVector<Byte> FlexplorerTableModel::GetAttributes(
     QSet<QString> filenames;
 
     filenames.reserve(vFilenames.size());
+    // clang-tidy: auto *srcIter is not compatible with Qt6.
+    // NOLINTNEXTLINE(readability-qualified-auto)
     for (auto srcIter = vFilenames.begin(); srcIter != vFilenames.end(); )
     {
         filenames.insert(*(srcIter++));
     }
 
-    FileContainerIterator iter;
+    FlexDiskIterator iter;
     QVector<Byte> attributes;
     attributes.reserve(filenames.size());
     for (iter = container->begin(); iter != container->end(); ++iter)
@@ -271,7 +331,7 @@ bool FlexplorerTableModel::GetAttributesString(const QModelIndex &index,
     if (index.isValid())
     {
         auto filename = GetFilename(index);
-        FileContainerIterator iter(filename.toUtf8().data());
+        FlexDiskIterator iter(filename.toStdString());
 
         iter = container->begin();
         if (iter != container->end())
@@ -290,7 +350,7 @@ bool FlexplorerTableModel::GetAttributes(const QModelIndex &index,
     if (index.isValid())
     {
         const auto filename = GetFilename(index);
-        FileContainerIterator iter(filename.toUtf8().data());
+        FlexDiskIterator iter(filename.toStdString());
 
         iter = container->begin();
         if (iter != container->end())
@@ -341,16 +401,16 @@ QVector<int> FlexplorerTableModel::FindFiles(const QString &pattern) const
 
 QModelIndex FlexplorerTableModel::AddFile(const FlexFileBuffer &buffer)
 {
-    FlexDirEntry dirEntry;
-    auto filename = buffer.GetFilename();
-
     container->WriteFromBuffer(buffer);
-    if (container->FindFile(filename, dirEntry))
+
+    auto dirEntry = buffer.GetDirEntry();
+    if (!dirEntry.IsEmpty())
     {
-        return AddRow(dirEntry, Qt::DisplayRole);
+        insertRows(rowCount(), 1);
+        return SetRow(dirEntry, rowCount() - 1, Qt::DisplayRole);
     }
 
-    return QModelIndex();
+    return {};
 }
 
 void FlexplorerTableModel::DeleteFile(const QModelIndex &index)
@@ -358,7 +418,7 @@ void FlexplorerTableModel::DeleteFile(const QModelIndex &index)
     if (index.isValid())
     {
         auto filename = GetFilename(index);
-        container->DeleteFile(filename.toUtf8().data());
+        container->DeleteFile(filename.toStdString());
         removeRows(index.row(), 1);
     }
 }
@@ -370,13 +430,13 @@ void FlexplorerTableModel::RenameFile(const QModelIndex &index,
     {
         FlexDirEntry dirEntry;
         auto oldFilename = GetFilename(index);
-        dirEntry.SetTotalFileName(oldFilename.toUtf8().data());
+        dirEntry.SetTotalFileName(oldFilename.toStdString());
         auto oldFileType = GetFileType(dirEntry);
 
         try
         {
-            container->RenameFile(oldFilename.toUtf8().data(),
-                                  newFilename.toUtf8().data());
+            container->RenameFile(oldFilename.toStdString(),
+                                  newFilename.toStdString());
         }
         catch (FlexException &ex)
         {
@@ -389,7 +449,7 @@ void FlexplorerTableModel::RenameFile(const QModelIndex &index,
         // 1. Update file name column.
         setData(index, newFilename);
         // 2. Update the file type column if changed.
-        dirEntry.SetTotalFileName(newFilename.toUtf8().data());
+        dirEntry.SetTotalFileName(newFilename.toStdString());
         auto newFileType = GetFileType(dirEntry);
         if (newFileType != oldFileType)
         {
@@ -405,51 +465,53 @@ FlexFileBuffer FlexplorerTableModel::CopyFile(const QModelIndex &index) const
     if (index.isValid())
     {
         auto filename = GetFilename(index);
-        return container->ReadToBuffer(filename.toUtf8().data());
+        return container->ReadToBuffer(filename.toStdString());
     }
 
-    return FlexFileBuffer();
+    return {};
 }
 
 void FlexplorerTableModel::SetAttributesString(const QModelIndex &index,
-                                               const QString &newAttribString)
+                                               const QString &attributes)
 {
     if (index.isValid())
     {
-        auto oldAttribString = rows[index.row()][COL_ATTRIBUTES].toString();
+        auto oldAttributes = rows[index.row()][COL_ATTRIBUTES].toString();
         auto filename = GetFilename(index);
 
-        if (oldAttribString != newAttribString)
+        if (oldAttributes != attributes)
         {
-            Byte setMask, clearMask;
+            Byte setMask;
+            Byte clearMask;
 
-            CreateAttributesBitmasks(newAttribString, setMask, clearMask);
+            CreateAttributesBitmasks(attributes, setMask, clearMask);
             auto attribIndex =
                 QAbstractTableModel::index(index.row(), COL_ATTRIBUTES);
 
             try
             {
-                container->SetAttributes(filename.toUtf8().data(),
+                container->SetAttributes(filename.toStdString(),
                                          setMask, clearMask);
             }
             catch (FlexException &ex)
             {
                 // Set attributes failed: Restore the old file attributes.
-                setData(attribIndex, oldAttribString);
+                setData(attribIndex, oldAttributes);
                 throw ex;
             }
 
-            setData(attribIndex, newAttribString);
+            setData(attribIndex, attributes);
         }
     }
 }
 
-int FlexplorerTableModel::rowCount(const QModelIndex &) const
+int FlexplorerTableModel::rowCount(const QModelIndex & /*parent*/) const
 {
-    return rows.size();
+    // This is an override method with a defined return type.
+    return cast_from_qsizetype(rows.size());
 }
 
-int FlexplorerTableModel::columnCount(const QModelIndex &) const
+int FlexplorerTableModel::columnCount(const QModelIndex & /*parent*/) const
 {
     return COLUMNS;
 }
@@ -465,7 +527,7 @@ QVariant FlexplorerTableModel::data(const QModelIndex &index, int role) const
         }
     }
 
-    return QVariant();
+    return {};
 }
 
 bool FlexplorerTableModel::setData(
@@ -482,7 +544,7 @@ bool FlexplorerTableModel::setData(
             if (rows.at(index.row()).at(index.column()) != value)
             {
                 rows[index.row()].at(index.column()) = value;
-                dataChanged(index, index, roles);
+                emit dataChanged(index, index, roles);
                 return true;
             }
         }
@@ -500,17 +562,43 @@ QVariant FlexplorerTableModel::headerData(
     {
         if (orientation == Qt::Horizontal &&
             section >= 0 &&
-            section < static_cast<int>(headerNames.size()))
+            section < static_cast<int>(GetHeaderNames().size()))
         {
-            return tr(headerNames.at(section));
+            return GetHeaderNames().at(section);
         }
-        else if (orientation == Qt::Vertical)
+
+        if (orientation == Qt::Vertical)
         {
             return QString("%1").arg(section + 1);
         }
     }
 
-    return QVariant();
+    return {};
+}
+
+bool FlexplorerTableModel::setHeaderData(
+        int section,
+        Qt::Orientation orientation,
+        const QVariant &value,
+        int role)
+{
+    auto &headerNames = GetHeaderNames();
+    if (role == Qt::DisplayRole && orientation == Qt::Horizontal &&
+        section >= 0 &&
+        section < static_cast<int>(headerNames.size()))
+    {
+        bool isChanged = (headerNames[section] != value.toString());
+
+        if (isChanged)
+        {
+            headerNames[section] = value.toString();
+            emit headerDataChanged(orientation, section, section);
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 Qt::ItemFlags FlexplorerTableModel::flags(const QModelIndex &index) const
@@ -524,32 +612,31 @@ Qt::ItemFlags FlexplorerTableModel::flags(const QModelIndex &index) const
 
         if (isEditable)
         {
-            return QAbstractItemModel::flags(index) | Qt::ItemIsEditable;
+            return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
         }
-        else
-        {
-            return QAbstractItemModel::flags(index);
-        }
+
+        return QAbstractTableModel::flags(index);
     }
-    else
-    {
-        return Qt::ItemIsEnabled;
-    }
+
+    return Qt::ItemIsEnabled;
 }
 
 bool FlexplorerTableModel::insertRows(
         int row,
         int count,
-        const QModelIndex &)
+        const QModelIndex & /*parent*/)
 {
-    if (count >= 0 && row <= rows.size() + 1)
+    if (count >= 0 && row == rows.size())
     {
         if (count > 0)
         {
             RowType newRow;
-            beginInsertRows(QModelIndex(), row, row + count - 1);
-            auto iter = rows.begin() + row;
-            rows.insert(iter, newRow);
+            auto max = row + count;
+            beginInsertRows(QModelIndex(), row, max - 1);
+            for (auto i = row; i < max; ++i)
+            {
+                rows.append(newRow);
+            }
             endInsertRows();
         }
 
@@ -562,14 +649,16 @@ bool FlexplorerTableModel::insertRows(
 bool FlexplorerTableModel::removeRows(
         int row,
         int count,
-        const QModelIndex &)
+        const QModelIndex & /*parent*/)
 {
     if (count >= 0 && row + count <= rows.size())
     {
         if (count > 0)
         {
             beginRemoveRows(QModelIndex(), row, row + count - 1);
-            auto iter = rows.begin() + row;
+            // clang-tidy: auto *const iter is not compatible with Qt6.
+            // NOLINTNEXTLINE(readability-qualified-auto)
+            const auto iter = rows.begin() + row;
             rows.erase(iter, iter + count);
             endRemoveRows();
         }
@@ -587,7 +676,7 @@ FlexplorerTableModel::IdsType FlexplorerTableModel::GetIds() const
     ids.reserve(rowCount());
     for (const auto &row : rows)
     {
-        ids.push_back(row[COL_ID].toString());
+        ids.push_back(row[COL_ID].toInt());
     }
 
     return ids;
@@ -599,13 +688,23 @@ void FlexplorerTableModel::CalculateAndChangePersistentIndexList(
     auto newIds = GetIds();
     QModelIndexList fromList;
     QModelIndexList toList;
+    std::unordered_map<int, int> idToNewRow;
+    int newRow = 0;
 
+    idToNewRow.reserve(oldIds.size());
+    for (int newId : newIds)
+    {
+        idToNewRow.emplace(std::pair<int, int>(newId, newRow));
+        ++newRow;
+    }
+
+    fromList.reserve(oldIds.size() * COLUMNS);
+    toList.reserve(oldIds.size() * COLUMNS);
     for (int oldRow = 0; oldRow < oldIds.size(); ++oldRow)
     {
         if (oldIds[oldRow] != newIds[oldRow])
         {
-            auto pos = std::find(newIds.begin(), newIds.end(), oldIds[oldRow]);
-            int newRow = static_cast<int>(pos - newIds.begin());
+            newRow = idToNewRow[oldIds[oldRow]];
 
             for (int col = 0; col < COLUMNS; ++col)
             {
@@ -620,6 +719,10 @@ void FlexplorerTableModel::CalculateAndChangePersistentIndexList(
 
 void FlexplorerTableModel::sort(int column, Qt::SortOrder order)
 {
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-enum"
+#endif
     if (column < 0 || column >= rows.size())
     {
         return;
@@ -632,51 +735,113 @@ void FlexplorerTableModel::sort(int column, Qt::SortOrder order)
     {
         case Qt::AscendingOrder:
             compare = [&column](const RowType &lhs, const RowType &rhs){
-                if (lhs[column].type() == QVariant::String)
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+                switch (lhs[column].typeId())
                 {
-                    return lhs[column].toString() < rhs[column].toString();
-                }
-                else if (lhs[column].type() == QVariant::DateTime)
-                {
-                    return lhs[column].toDateTime() < rhs[column].toDateTime();
-                }
-                else if (lhs[column].type() == QVariant::Int)
-                {
-                    return lhs[column].toInt() < rhs[column].toInt();
-                }
-                else
-                {
-                    auto msg = std::string(
-                        "FlexplorerTableModel::sort(): Unexpected type '");
-                    msg += std::string(lhs[column].typeName()) + "'";
+                    case QMetaType::QString:
+                        return lhs[column].toString() < rhs[column].toString();
 
-                    throw std::logic_error(msg);
+                    case QMetaType::QDateTime:
+                        return lhs[column].toDateTime() <
+                            rhs[column].toDateTime();
+
+                    case QMetaType::Int:
+                        return lhs[column].toInt() < rhs[column].toInt();
+
+                    case QMetaType::UInt:
+                        return lhs[column].toUInt() < rhs[column].toUInt();
+
+                    default:
+                    {
+                        auto msg = std::string(
+                            "FlexplorerTableModel::sort(): Unexpected type '");
+                        msg += std::string(lhs[column].typeName()) + "'";
+
+                        throw std::logic_error(msg);
+                    }
                 }
+#else
+                switch (lhs[column].type())
+                {
+                    case QVariant::String:
+                        return lhs[column].toString() < rhs[column].toString();
+
+                    case QVariant::DateTime:
+                        return lhs[column].toDateTime() <
+                            rhs[column].toDateTime();
+
+                    case QVariant::Int:
+                        return lhs[column].toInt() < rhs[column].toInt();
+
+                    case QVariant::UInt:
+                        return lhs[column].toUInt() < rhs[column].toUInt();
+
+                    default:
+                    {
+                        auto msg = std::string(
+                            "FlexplorerTableModel::sort(): Unexpected type '");
+                        msg += std::string(lhs[column].typeName()) + "'";
+
+                        throw std::logic_error(msg);
+                    }
+                }
+#endif
             };
             break;
 
         case Qt::DescendingOrder:
             compare = [&column](const RowType &lhs, const RowType &rhs){
-                if (lhs[column].type() == QVariant::String)
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+                switch (lhs[column].typeId())
                 {
-                    return lhs[column].toString() > rhs[column].toString();
-                }
-                else if (lhs[column].type() == QVariant::DateTime)
-                {
-                    return lhs[column].toDateTime() > rhs[column].toDateTime();
-                }
-                else if (lhs[column].type() == QVariant::Int)
-                {
-                    return lhs[column].toInt() > rhs[column].toInt();
-                }
-                else
-                {
-                    auto msg = std::string(
-                        "FlexplorerTableModel::sort(): Unexpected type '");
-                    msg += std::string(lhs[column].typeName()) + "'";
+                    case QMetaType::QString:
+                        return lhs[column].toString() > rhs[column].toString();
 
-                    throw std::logic_error(msg);
+                    case QMetaType::QDateTime:
+                        return lhs[column].toDateTime() >
+                            rhs[column].toDateTime();
+
+                    case QMetaType::Int:
+                        return lhs[column].toInt() > rhs[column].toInt();
+
+                    case QMetaType::UInt:
+                        return lhs[column].toUInt() > rhs[column].toUInt();
+
+                    default:
+                    {
+                        auto msg = std::string(
+                            "FlexplorerTableModel::sort(): Unexpected type '");
+                        msg += std::string(lhs[column].typeName()) + "'";
+
+                        throw std::logic_error(msg);
+                    }
                 }
+#else
+                switch (lhs[column].type())
+                {
+                    case QVariant::String:
+                        return lhs[column].toString() > rhs[column].toString();
+
+                    case QVariant::DateTime:
+                        return lhs[column].toDateTime() >
+                            rhs[column].toDateTime();
+
+                    case QVariant::Int:
+                        return lhs[column].toInt() > rhs[column].toInt();
+
+                    case QVariant::UInt:
+                        return lhs[column].toUInt() > rhs[column].toUInt();
+
+                    default:
+                    {
+                        auto msg = std::string(
+                            "FlexplorerTableModel::sort(): Unexpected type '");
+                        msg += std::string(lhs[column].typeName()) + "'";
+
+                        throw std::logic_error(msg);
+                    }
+                }
+#endif
             };
             break;
     }
@@ -688,14 +853,42 @@ void FlexplorerTableModel::sort(int column, Qt::SortOrder order)
     CalculateAndChangePersistentIndexList(oldIds);
 
     emit layoutChanged();
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+}
+
+QString FlexplorerTableModel::VariantToString(const QVariant &variant) const
+{
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    if (variant.typeId() == QMetaType::QDateTime)
+#else
+    if (variant.type() == QVariant::DateTime)
+#endif
+    {
+        const auto locale = QLocale::system();
+
+        if (options.ft_access == FileTimeAccess::NONE)
+        {
+            const auto d = variant.toDate();
+            return locale.toString(d, QLocale::ShortFormat);
+        }
+
+        const auto dateTime = variant.toDateTime();
+        return locale.toString(dateTime, QLocale::ShortFormat);
+    }
+
+    return variant.toString();
 }
 
 QString FlexplorerTableModel::AsHtml(const QModelIndexList &indexList) const
 {
     int column;
     QString htmlString;
-    QTextStream stream(&htmlString, QIODevice::ReadOnly);
+    QTextStream stream(&htmlString, QIODevice::WriteOnly | QIODevice::Text);
 
+    htmlString.reserve(400 + (100 * indexList.size()));
     stream <<
         "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\">\n" <<
         "<html>\n" <<
@@ -728,10 +921,11 @@ QString FlexplorerTableModel::AsHtml(const QModelIndexList &indexList) const
         stream << "<tr>";
         for (column = 1; column < COLUMNS; ++column)
         {
-            auto modelIndex = index(rowIndex.row(), column);
+            const auto modelIndex = index(rowIndex.row(), column);
+            const auto variant = data(modelIndex, Qt::DisplayRole);
             stream <<
                 "<td>" <<
-                data(modelIndex, Qt::DisplayRole).toString() <<
+                VariantToString(variant) <<
                 "</td>";
         }
         stream << "</tr>\n";
@@ -755,16 +949,19 @@ QString FlexplorerTableModel::AsText(const QModelIndexList &indexList,
 
     int column;
     QString textString;
-    QTextStream stream(&textString, QIODevice::ReadOnly);
+    QTextStream stream(&textString, QIODevice::WriteOnly | QIODevice::Text);
     std::function<void(int)> fieldWidthFct = [](int){ };
     std::function<void(int)> separatorFct = [](int){ };
 
     if (mimeType == "text/plain")
     {
+        static QVector<int> widths { 13, 16, 7, 9, 12, 11 };
+        widths[COL_DATE - 1] = (options.ft_access == FileTimeAccess::NONE) ?
+            12 : 17;
         fieldWidthFct = [&](int col){
-            static QVector<int> widths { 13, 17, 7, 7, 12, 11 };
             stream.setFieldWidth(widths[col - 1]);
         };
+        textString.reserve(74 * indexList.size());
     }
     else if (mimeType == "text/csv")
     {
@@ -774,6 +971,7 @@ QString FlexplorerTableModel::AsText(const QModelIndexList &indexList,
                 stream << ",";
             }
         };
+        textString.reserve(50 * indexList.size());
     }
     else
     {
@@ -783,7 +981,7 @@ QString FlexplorerTableModel::AsText(const QModelIndexList &indexList,
     for (column = 1; column < COLUMNS; ++column)
     {
         fieldWidthFct(column);
-        stream << 
+        stream <<
             headerData(column, Qt::Horizontal, Qt::DisplayRole).toString();
         separatorFct(column);
     }
@@ -796,7 +994,7 @@ QString FlexplorerTableModel::AsText(const QModelIndexList &indexList,
         {
             fieldWidthFct(column);
             auto modelIndex = index(rowIndex.row(), column);
-            stream << data(modelIndex, Qt::DisplayRole).toString();
+            stream << VariantToString(data(modelIndex, Qt::DisplayRole));
             separatorFct(column);
         }
         stream.setFieldWidth(0);
@@ -806,56 +1004,82 @@ QString FlexplorerTableModel::AsText(const QModelIndexList &indexList,
     return textString;
 }
 
-void FlexplorerTableModel::OpenContainer(const char *p_path,
+void FlexplorerTableModel::OpenFlexDisk(const char *p_path,
                                          const FileTimeAccess &fileTimeAccess)
 {
-    struct stat sbuf;
-    
+    struct stat sbuf{};
+
     // path can either be a directory or a file container.
-    if (p_path == nullptr || *p_path == '\0' || stat(p_path, &sbuf))
-    {   
+    if (p_path == nullptr)
+    {
         throw FlexException(FERR_INVALID_NULL_POINTER, "p_path");
     }
-    else if (stat(p_path, &sbuf))
-    {   
+
+    if (stat(p_path, &sbuf))
+    {
         throw FlexException(FERR_UNABLE_TO_OPEN, p_path);
     }
-    
+
     path = p_path;
-    
+
     if (S_ISDIR(sbuf.st_mode))
     {
         std::string directory(p_path);
-        
-        if (endsWithPathSeparator(directory))
-        {   
+
+        if (flx::endsWithPathSeparator(directory))
+        {
             directory = directory.substr(0, directory.size()-1);
         }
-        
-        container.reset(
-            new DirectoryContainer(directory.c_str(), fileTimeAccess));
+
+        container =
+            std::make_unique<FlexDirectoryDiskByFile>(directory, fileTimeAccess);
     }
     else
-    {   
-        try 
-        {   
+    {
+        auto mode = std::ios::in | std::ios::out | std::ios::binary;
+        try
+        {
             // 1st try opening read-write.
-            container.reset(new FlexFileContainer(p_path, "rb+",
-                            fileTimeAccess));
+            container = std::make_unique<FlexDisk>(
+                            p_path, mode, fileTimeAccess);
         }
         catch (FlexException &)
-        {   
+        {
             // 2nd try opening read-only.
-            container.reset(new FlexFileContainer(p_path, "rb",
-                            fileTimeAccess));
+            mode &= ~std::ios::out;
+            container = std::make_unique<FlexDisk>(
+                            p_path, mode, fileTimeAccess);
         }
     }
-    auto container_s =
-        dynamic_cast<FileContainerIfSector *>(container.get());
+    auto *container_s =
+        dynamic_cast<IFlexDiskBySector *>(container.get());
     if (container_s != nullptr && !container_s->IsFlexFormat())
     {
         container.reset();
         throw FlexException(FERR_CONTAINER_UNFORMATTED, p_path);
     }
+}
+
+QStringList FlexplorerTableModel::GetColumnMaxStrings()
+{
+    if (options.ft_access == FileTimeAccess::NONE)
+    {
+        maxStrings[COL_DATE] =  "*88/88/8888*";
+    }
+    else
+    {
+        maxStrings[COL_DATE] =  "88/88/88 88:88 MM";
+    }
+
+    return maxStrings;
+}
+
+const QString &FlexplorerTableModel::GetHeaderNameForFileSize(FileSizeType type)
+{
+    static const QString headerNameFileSize(tr("Filesize"));
+    static const QString headerNameDataSize(tr("Datasize"));
+
+    return (type == FileSizeType::FileSize) ?
+        headerNameFileSize : headerNameDataSize;
 }
 

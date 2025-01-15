@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,8 +43,9 @@ bool SelectAllOnFocusInLE::eventFilter(QObject *object, QEvent *event)
 
     if (event->type() == QEvent::FocusIn)
     {
-        auto *focusEvent = static_cast<QFocusEvent *>(event);
+        auto *focusEvent = dynamic_cast<QFocusEvent *>(event);
 
+        assert(focusEvent != nullptr);
         if (focusEvent->gotFocus())
         {
             DoSelectAll();
@@ -52,8 +53,9 @@ bool SelectAllOnFocusInLE::eventFilter(QObject *object, QEvent *event)
     }
     else if (event->type() == QEvent::MouseButtonPress)
     {
-        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        auto *mouseEvent = dynamic_cast<QMouseEvent *>(event);
 
+        assert(mouseEvent != nullptr);
         if (mouseEvent->button() == Qt::LeftButton)
         {
             DoSelectAll();

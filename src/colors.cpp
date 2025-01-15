@@ -1,15 +1,37 @@
-/* colors.cpp
- *
+/*
+    colors.cpp
+
+
+    flexemu, an MC6809 emulator running FLEX
+    Copyright (C) 2016-2025  W. Schwotzer
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
 
-#include "misc1.h"
+#include "colors.h"
+#include <string>
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct sRGBDef colors[] =
+// List of supported colors with their RGB values.
+// All color names are specified in lowercase.
+const struct sRGBDef flx::colors[] =
 {
     {"white", 255, 255, 255},
     {"red", 255, 0, 0},
@@ -25,7 +47,8 @@ struct sRGBDef colors[] =
     {"brown", 165, 42, 42},
 };
 
-const size_t color_count = sizeof(colors) / sizeof(colors[0]);
+const std::size_t flx::color_count =
+    sizeof(flx::colors) / sizeof(flx::colors[0]);
 
 /*
 {"gray", 192, 192, 192},
@@ -679,37 +702,38 @@ yellowgreen", 154 205 50
 
 */
 
-int getRGBForName(const char *colorName, Word *red, Word *green, Word *blue)
+bool flx::getRGBForName(const std::string &colorName, Word &red, Word &green,
+                        Word &blue)
 {
-    for (size_t i = 0; i < (sizeof(colors) / sizeof(colors[0])); ++i)
+    for (const auto &color : colors)
     {
-        if (strcmp(colorName, colors[i].colorName) == 0)
+        if (colorName.compare(color.colorName) == 0)
         {
-            *red = colors[i].red;
-            *green = colors[i].green;
-            *blue = colors[i].blue;
-            return 1;
+            red = color.red;
+            green = color.green;
+            blue = color.blue;
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 
-int getColorForName(const char *colorName, DWord *rgbColor)
+bool flx::getColorForName(const std::string &colorName, DWord &rgbColor)
 {
     Word red;
     Word green;
     Word blue;
 
-    if (getRGBForName(colorName, &red, &green, &blue))
+    if (getRGBForName(colorName, red, green, blue))
     {
-        *rgbColor = red & 0xff;
-        *rgbColor |= (green & 0xff) << 8;
-        *rgbColor |= (DWord)(blue & 0xff) << 16;
-        return 1;
+        rgbColor = red & 0xFFU;
+        rgbColor |= (green & 0xFFU) << 8U;
+        rgbColor |= (static_cast<DWord>(blue) & 0xFFU) << 16U;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 #ifdef __cplusplus

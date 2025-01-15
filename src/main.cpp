@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,49 +26,46 @@
 #ifdef _MSC_VER
     #include <new.h>
 #endif
-
 #include "foptman.h"
-#include "flexerr.h"
 #include "apprun.h"
 #include "soptions.h"
+#include "termimpf.h"
 #include "winctxt.h"
 #include "winmain.h"
-#include "cvtwchar.h"
+#include "ffilecnt.h"
+#include "warnoff.h"
 #include <QApplication>
+#include <QMessageBox>
+#include "warnon.h"
 
 
 #ifdef _WIN32
 WinApiContext winApiContext;
 #endif
 
-
-// define an exception handler when new fails
-
+// define a customized new handler which is called whenever a memory
+// allocation attempt fails.
 #ifdef _MSC_VER
-// with MSC it's possible to retry memory allocation
-int std_new_handler(size_t /* [[maybe_unused]] size_t n */)
+#define RETURN_VALUE 1
+int flexemu_new_handler(size_t /* [[maybe_unused]] size_t n */)
+#else
+#define RETURN_VALUE
+static void flexemu_new_handler()
+#endif
 {
-    int result;
-
-    result = MessageBox(
-        nullptr,
-        ConvertToUtf16String(gMemoryAllocationErrorString).c_str(),
-        ConvertToUtf16String(PROGRAMNAME " error").c_str(),
-        MB_RETRYCANCEL | MB_ICONWARNING);
-
-    if (result == IDRETRY)
+    if (QMessageBox::warning(nullptr, PROGRAMNAME " warning",
+        "<b>Memory allocation failed.</b><br>\n"
+        "Increasing available memory by e.g.<br>\n"
+        "closing other applications may<br>\n"
+        "prevent this.",
+        QMessageBox::Retry | QMessageBox::Abort, QMessageBox::Retry) ==
+            QMessageBox::Retry)
     {
-        return 1;    // retry once more
+        return RETURN_VALUE; // return means to retry memory allocation.
     }
 
-    throw std::bad_alloc();
+    std::terminate();
 }
-#else
-void std_new_handler()
-{
-    throw std::bad_alloc();
-}
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -76,17 +73,19 @@ int main(int argc, char *argv[])
     bool isRestarted = false;
 
 #ifdef _MSC_VER
-    set_new_handler(std_new_handler);
+    set_new_handler(flexemu_new_handler);
 #else
-    std::set_new_handler(std_new_handler);
+    std::set_new_handler(flexemu_new_handler);
 #endif
 
-    Q_INIT_RESOURCE(flexemu_qrc_cpp);
+    Q_INIT_RESOURCE(flexemu);
 
+    FlexDisk::InitializeClass();
 
     while (return_code == EXIT_RESTART)
     {
         struct sOptions options;
+        QApplication app(argc, argv);
 
         try
         {
@@ -101,48 +100,33 @@ int main(int argc, char *argv[])
                 options.term_mode = false;
             }
 
-            QApplication app(argc, argv);
-            ApplicationRunner runner(options);
+            const auto termType =
+                static_cast<TerminalType>(options.terminalType);
+            auto termImpl = TerminalImplFactory::Create(termType, options);
 
-            return_code = runner.startup();
+            ApplicationRunner runner(options, std::move(termImpl));
+
+            QApplication::setQuitOnLastWindowClosed(false);
+            return_code = runner.startup(app);
             if (!return_code)
             {
-                return_code = app.exec();
+                return_code = QApplication::exec();
             }
+
             isRestarted = true;
         }
-
-#ifdef _WIN32
-        catch (std::bad_alloc UNUSED(&e))
-        {
-            MessageBox(
-                nullptr,
-                ConvertToUtf16String(gMemoryAllocationErrorString).c_str(),
-                ConvertToUtf16String(PROGRAMNAME " error").c_str(),
-                 MB_OK | MB_ICONERROR);
-            return_code = 1;
-            break;
-        }
-#endif
         catch (std::exception &ex)
         {
             std::stringstream msg;
 
-            msg << PROGRAMNAME << ": An error has occured: " << ex.what();
+            msg << "<b>An exception has occured.</b><br>" << ex.what();
 
-#ifdef _WIN32
-            MessageBox(
-                nullptr,
-                ConvertToUtf16String(msg.str()).c_str(),
-                ConvertToUtf16String(PROGRAMNAME " error").c_str(),
-                MB_OK | MB_ICONERROR);
-#else
-            fprintf(stderr, "%s\n", msg.str().c_str());
-#endif
+            QMessageBox::critical(nullptr, PROGRAMNAME " critical",
+                msg.str().c_str(), QMessageBox::Abort, QMessageBox::Abort);
+
             return_code = 1;
-            break;
         }
-    };
+    }
 
     return return_code;
 }

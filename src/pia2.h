@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -45,9 +45,9 @@ private:
     Mc6809 &cpu;
     KeyboardIO &keyboardIO;
     JoystickIO &joystickIO;
-    cycles_t cycles;
+    cycles_t cycles{0};
 
-#ifdef  LINUX_JOYSTICK_IS_PRESENT
+#ifdef LINUX_JOYSTICK_IS_PRESENT
     BJoystick joystick;
 #endif
 
@@ -64,8 +64,8 @@ public:
     {
         return "pia2";
     };
-    Pia2(Mc6809 &x_cpu, KeyboardIO &x_keyboardIO, JoystickIO &x_joystick);
-    virtual             ~Pia2();
+    Pia2(Mc6809 &p_cpu, KeyboardIO &p_keyboardIO, JoystickIO &p_joystick);
+    ~Pia2() override = default;
 };
 
 #endif // PIA2_INCLUDED

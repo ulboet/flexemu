@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
 class Mc6821 : public IoDevice
 {
 public:
-    enum class ControlLine : Byte
+    enum class ControlLine : uint8_t
     {
         NONE = 0,
         CA1 = 1,
@@ -47,12 +47,16 @@ protected:
     // Internal registers:
     //
     // cra, crb control register A, B
-    // ddra, ddrb   data direction register A, B
+    // ddra, ddrb data direction register A, B
     // ora, orb output register A, B
 
-    Byte cra, ora, ddra;
-    Byte crb, orb, ddrb;
-    Mc6821::ControlLine cls;
+    Byte cra{0};
+    Byte ora{0};
+    Byte ddra{0};
+    Byte crb{0};
+    Byte orb{0};
+    Byte ddrb{0};
+    Mc6821::ControlLine cls{ControlLine::NONE};
 
 public:
 
@@ -92,19 +96,19 @@ protected:
     virtual void requestInputB();
 
     // write data to port-pins
-    virtual void writeOutputA(Byte val);
-    virtual void writeOutputB(Byte val);
+    virtual void writeOutputA(Byte value);
+    virtual void writeOutputB(Byte value);
 
 public:
 
-    Mc6821();
-    virtual ~Mc6821();
+    Mc6821() = default;
+    ~Mc6821() override = default;
 };
 
 inline Mc6821::ControlLine operator| (Mc6821::ControlLine lhs,
                                       Mc6821::ControlLine rhs)
 {
-    using T = std::underlying_type<Mc6821::ControlLine>::type;
+    using T = std::underlying_type_t<Mc6821::ControlLine>;
 
     return static_cast<Mc6821::ControlLine>(static_cast<T>(lhs) |
                                             static_cast<T>(rhs));
@@ -113,7 +117,7 @@ inline Mc6821::ControlLine operator| (Mc6821::ControlLine lhs,
 inline Mc6821::ControlLine operator& (Mc6821::ControlLine lhs,
                                       Mc6821::ControlLine rhs)
 {
-    using T = std::underlying_type<Mc6821::ControlLine>::type;
+    using T = std::underlying_type_t<Mc6821::ControlLine>;
 
     return static_cast<Mc6821::ControlLine>(static_cast<T>(lhs) &
                                             static_cast<T>(rhs));
@@ -133,7 +137,7 @@ inline Mc6821::ControlLine operator&= (Mc6821::ControlLine &lhs,
 
 inline Mc6821::ControlLine operator~ (const Mc6821::ControlLine lhs)
 {
-    using T = std::underlying_type<Mc6821::ControlLine>::type;
+    using T = std::underlying_type_t<Mc6821::ControlLine>;
 
     return static_cast<Mc6821::ControlLine>(~static_cast<T>(lhs));
 }

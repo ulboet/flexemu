@@ -3,7 +3,7 @@
 
     Basic class representing a closed interval with lower and upper bound.
     Implementation is a subset of boost::interval and fully compatible.
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,11 +20,12 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifndef _BINTERVL_H_
-#define _BINTERVL_H_
+#ifndef BINTERVAL_INCLUDED
+#define BINTERVAL_INCLUDED
 
 #include <algorithm>
 #include <vector>
+#include <utility>
 #include <ostream>
 
 
@@ -33,7 +34,7 @@ class BInterval
 {
 public:
 
-    BInterval() : lower_(0), upper_(0) { };
+    BInterval() = default;
     BInterval(T lower, T upper) : lower_(lower), upper_(upper)
     {
         if (lower_ > upper_)
@@ -44,24 +45,25 @@ public:
     };
     BInterval(const BInterval &src) = default;
     ~BInterval() = default;
-	
+
     T const &lower() const { return lower_; };
     T const &upper() const { return upper_; };
+    std::pair<T, T> get() const { return std::pair<T, T>{ lower_, upper_ };};
     void assign(T lower, T upper)
     {
+        if (lower > upper)
+        {
+            throw std::invalid_argument(
+                    "lower has to be lower or equal to upper");
+        }
         lower_ = lower;
         upper_ = upper;
     }
-    BInterval& operator= (const BInterval& src)
-    {
-        lower_ = src.lower_;
-        upper_ = src.upper_;
-        return *this;
-    }
+    BInterval& operator= (const BInterval& src) = default;
 
 private:
-	T lower_;
-	T upper_;
+    T lower_{};
+    T upper_{};
 };
 
 template <typename T>
@@ -111,11 +113,9 @@ bool overlap(const BInterval<T>& lhs, const BInterval<T>& rhs)
         return (rhs.lower() >= lhs.lower() && rhs.lower() <= lhs.upper()) ||
                (rhs.upper() >= lhs.lower() && rhs.upper() <= lhs.upper());
     }
-    else
-    {
-        return (lhs.lower() >= rhs.lower() && lhs.lower() <= rhs.upper()) ||
-               (lhs.upper() >= rhs.lower() && lhs.upper() <= rhs.upper());
-    }
+
+    return (lhs.lower() >= rhs.lower() && lhs.lower() <= rhs.upper()) ||
+            (lhs.upper() >= rhs.lower() && lhs.upper() <= rhs.upper());
 }
 
 template <typename T>
@@ -196,5 +196,5 @@ void join(std::vector<BInterval<T> > &bintervals)
         }
     }
 }
-#endif // #ifndef _BINTERVL_H_
+#endif
 

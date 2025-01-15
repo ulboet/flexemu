@@ -3,7 +3,7 @@
 
 
     Basic abstract class used to implement an observer pattern
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifndef _BOBSERVD_INCLUDED_
-#define _BOBSERVD_INCLUDED_
+#ifndef BOBSERVED_INCLUDED
+#define BOBSERVED_INCLUDED
 
 #include <vector>
 #include <functional>
@@ -40,8 +40,8 @@ public:
     BObserved() = default;
     virtual ~BObserved() = default;
 
-    void Attach(BObserver &x_observer);
-    void Detach(BObserver &x_observer);
+    void Attach(BObserver &p_observer);
+    void Detach(BObserver &p_observer);
 
 protected:
     void Notify(NotifyId id, void *param = nullptr);
@@ -50,5 +50,5 @@ private:
     std::vector<std::reference_wrapper<BObserver> > observers;
 };
 
-#endif // #ifndef _BOBSERVD_INCLUDED_
+#endif // #ifndef BOBSERVED_INCLUDED
 

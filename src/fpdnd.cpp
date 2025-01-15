@@ -2,8 +2,8 @@
     fpdnd.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,31 +21,21 @@
 */
 
 #include "misc1.h"
-
 #include "fpdnd.h"
-#include "ffilecnt.h"
-#include "fdirent.h"
-#include "fcinfo.h"
+#include "flexerr.h"
 #include "ffilebuf.h"
+#include <cstring>
 
 
-FlexDnDFiles::FlexDnDFiles()
-{
-}
-
-FlexDnDFiles::FlexDnDFiles(
-        const std::string &pPath,
-        const std::string &pDnsHostName) :
-      path(pPath)
-    , dnsHostName(pDnsHostName)
+FlexDnDFiles::FlexDnDFiles(std::string p_Path, std::string p_DnsHostName) :
+      path(std::move(p_Path))
+    , dnsHostName(std::move(p_DnsHostName))
 {
 }
 
 void FlexDnDFiles::ReadDataFrom(const Byte *buffer)
 {
     const Byte *ptr = buffer;
-    DWord count, index;
-    DWord size;
 
     fileBuffers.clear();
 
@@ -54,28 +44,29 @@ void FlexDnDFiles::ReadDataFrom(const Byte *buffer)
         return;
     }
 
-    size = *reinterpret_cast<const DWord *>(ptr);
+    auto size = *reinterpret_cast<const DWord *>(ptr);
     // Independent of the cpu architecture the
     // clipboard format uses big endian.
-    size = fromBigEndian<DWord>(size);
+    size = flx::fromBigEndian<DWord>(size);
     ptr += sizeof(size);
     dnsHostName = reinterpret_cast<const char *>(ptr);
     ptr += size;
 
     size = *reinterpret_cast<const DWord *>(ptr);
-    size = fromBigEndian<DWord>(size);
+    size = flx::fromBigEndian<DWord>(size);
     ptr += sizeof(size);
     path = reinterpret_cast<const char *>(ptr);
     ptr += size;
 
-    count = *reinterpret_cast<const DWord *>(ptr);
-    count = fromBigEndian<DWord>(count);
+    auto count = *reinterpret_cast<const DWord *>(ptr);
+    count = flx::fromBigEndian<DWord>(count);
     ptr += sizeof(count);
 
-    for (index = 0; index < count; ++index)
+    for (DWord index = 0; index < count; ++index)
     {
         FlexFileBuffer fileBuffer;
-        auto &fileHeader = *reinterpret_cast<const tFlexFileHeader *>(ptr);
+        const auto &fileHeader =
+            *reinterpret_cast<const tFlexFileHeader *>(ptr);
         fileBuffer.CopyHeaderBigEndianFrom(fileHeader);
         ptr += sizeof(tFlexFileHeader);
         fileBuffer.CopyFrom(ptr, fileBuffer.GetFileSize());
@@ -106,9 +97,9 @@ DWord FlexDnDFiles::GetFileSize() const
     fileSize += static_cast<DWord>(path.size()) + 1U;
     fileSize += static_cast<DWord>(dnsHostName.size()) + 1U;
 
-    for (auto iter = fileBuffers.cbegin(); iter != fileBuffers.cend(); ++iter)
+    for (const auto &fileBuffer : fileBuffers)
     {
-        fileSize += iter->GetFileSize(); // Add byte size of each file
+        fileSize += fileBuffer.GetFileSize(); // Add byte size of each file
     }
 
     // Add size of header of each file
@@ -121,44 +112,41 @@ DWord FlexDnDFiles::GetFileSize() const
 void FlexDnDFiles::WriteDataTo(Byte *buffer) const
 {
     Byte *ptr = buffer;
-    DWord count;
-    DWord size, reversed;
-    BDate date;
 
     if (buffer == nullptr)
     {
         return;
     }
 
-    size = static_cast<DWord>(dnsHostName.size() + 1);
+    auto size = static_cast<DWord>(dnsHostName.size() + 1);
     // Independent of the cpu architecture the
     // clipboard format uses big endian byte order.
-    reversed = toBigEndian<DWord>(size);
-    memcpy(ptr, &reversed, sizeof(reversed));
+    auto reversed = flx::toBigEndian<DWord>(size);
+    std::memcpy(ptr, &reversed, sizeof(reversed));
     ptr += sizeof(reversed);
-    memcpy(ptr, dnsHostName.c_str(), size);
+    std::memcpy(ptr, dnsHostName.c_str(), size);
     ptr += size;
 
     size = static_cast<DWord>(path.size() + 1);
-    reversed = toBigEndian<DWord>(size);
-    memcpy(ptr, &reversed, sizeof(reversed));
+    reversed = flx::toBigEndian<DWord>(size);
+    std::memcpy(ptr, &reversed, sizeof(reversed));
     ptr += sizeof(reversed);
-    memcpy(ptr, path.c_str(), size);
+    std::memcpy(ptr, path.c_str(), size);
     ptr += size;
 
-    count = static_cast<DWord>(fileBuffers.size());
-    count = toBigEndian<DWord>(count);
-    memcpy(ptr, &count, sizeof(count));
+    auto count = static_cast<DWord>(fileBuffers.size());
+    count = flx::toBigEndian<DWord>(count);
+    std::memcpy(ptr, &count, sizeof(count));
     ptr += sizeof(count);
 
-    for (auto iter = fileBuffers.cbegin(); iter != fileBuffers.cend(); ++iter)
+    for (const auto &fileBuffer : fileBuffers)
     {
-        auto header = iter->GetHeaderBigEndian();
+        auto header = fileBuffer.GetHeaderBigEndian();
 
-        memcpy(ptr, &header, sizeof(tFlexFileHeader));
+        std::memcpy(ptr, &header, sizeof(tFlexFileHeader));
         ptr += sizeof(tFlexFileHeader);
-        iter->CopyTo(ptr, iter->GetFileSize());
-        ptr += iter->GetFileSize();
+        fileBuffer.CopyTo(ptr, fileBuffer.GetFileSize());
+        ptr += fileBuffer.GetFileSize();
     }
 }
 

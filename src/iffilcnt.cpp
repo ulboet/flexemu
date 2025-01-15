@@ -2,7 +2,7 @@
     iffilcnt.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,34 +21,32 @@
 
 #include "iffilcnt.h"
 #include "ffilecnt.h"
+#include "flexerr.h"
 #include <string>
 #include <sstream>
 #include <algorithm>
 #include <iterator>
+#include <array>
+#include <cstring>
 
-FlexFileContainerIteratorImp::FlexFileContainerIteratorImp(
-    FlexFileContainer *aBase)
-    : base(aBase), dirIndex(-1), dirTrackSector{0, 0}
+FlexDiskIteratorImp::FlexDiskIteratorImp(FlexDisk *p_base)
+    : base(p_base), dirIndex(-1), dirTrackSector{0, 0}
 {
     dirSector.next = first_dir_trk_sec;
 }
 
-FlexFileContainerIteratorImp::~FlexFileContainerIteratorImp()
+bool FlexDiskIteratorImp::operator==(const IFlexDiskByFile *rhs) const
 {
+    return (base == nullptr && rhs == nullptr) ||
+           ((base == rhs) && (dirIndex == -1));
 }
 
-bool FlexFileContainerIteratorImp::operator==(const FileContainerIf *src) const
-{
-    return (base == nullptr && src == nullptr) ||
-           (((const FileContainerIf *)base == src) && (dirIndex == -1));
-}
-
-void FlexFileContainerIteratorImp::AtEnd()
+void FlexDiskIteratorImp::AtEnd()
 {
     base = nullptr;
 }
 
-bool FlexFileContainerIteratorImp::NextDirEntry(const char *filePattern)
+bool FlexDiskIteratorImp::NextDirEntry(const std::string &wildcard)
 {
     dirEntry.SetEmpty();
 
@@ -65,7 +63,7 @@ bool FlexFileContainerIteratorImp::NextDirEntry(const char *filePattern)
 
             dirTrackSector = dirSector.next;
 
-            if (!base->ReadSector((Byte *)&dirSector,
+            if (!base->ReadSector(reinterpret_cast<Byte *>(&dirSector),
                                   dirTrackSector.trk, dirTrackSector.sec))
             {
                 std::stringstream stream;
@@ -73,39 +71,29 @@ bool FlexFileContainerIteratorImp::NextDirEntry(const char *filePattern)
                 stream << dirTrackSector;
                 throw FlexException(FERR_READING_TRKSEC,
                                     stream.str(),
-                                    base->GetPath().c_str());
+                                    base->GetPath());
             }
         }
 
-        s_dir_entry *pd = &dirSector.dir_entry[dirIndex % DIRENTRIES];
+        const auto &dir_entry = dirSector.dir_entries[dirIndex % DIRENTRIES];
 
         // an empty entry aborts the search
-        if (pd->filename[0] == DE_EMPTY)
+        if (dir_entry.filename[0] == DE_EMPTY)
         {
             return false;
         }
 
         // look for the next used directory entry
-        if (pd->filename[0] != DE_DELETED)
+        if (dir_entry.filename[0] != DE_DELETED)
         {
             // ok, found a valid directory entry
-            std::string fileName(pd->filename, 0U, FLEX_BASEFILENAME_LENGTH);
-            std::string fileExtension(pd->file_ext, 0U, FLEX_FILEEXT_LENGTH);
+            std::string fileName(flx::getstr<>(dir_entry.filename));
+            std::string fileExtension(flx::getstr<>(dir_entry.file_ext));
             fileName += '.' + fileExtension;
 
-            if (multimatches(fileName.c_str(), filePattern, ';', true))
+            if (flx::multimatches(fileName, wildcard, ';', true))
             {
-                dirEntry.SetDate(BDate(pd->day, pd->month, pd->year));
-                dirEntry.SetTime(BTime(pd->hour & 0x7F, pd->minute, 0U));
-                dirEntry.SetTotalFileName(fileName.c_str());
-                dirEntry.SetAttributes(pd->file_attr);
-                dirEntry.SetSectorMap(pd->sector_map);
-                dirEntry.SetStartTrkSec(pd->start.trk, pd->start.sec);
-                dirEntry.SetEndTrkSec(pd->end.trk, pd->end.sec);
-                dirEntry.SetFileSize(
-                    getValueBigEndian<Word>(&pd->records[0]) * base->GetBytesPerSector());
-                dirEntry.SetSectorMap(pd->sector_map);
-                dirEntry.ClearEmpty();
+                dirEntry = FlexDisk::CreateDirEntryFrom(dir_entry, fileName);
             }
         }
     }
@@ -116,20 +104,15 @@ bool FlexFileContainerIteratorImp::NextDirEntry(const char *filePattern)
 // deletes the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool FlexFileContainerIteratorImp::DeleteCurrent()
+bool FlexDiskIteratorImp::DeleteCurrent()
 {
-    st_t start, end;
-    st_t fc_end;
-    Byte buffer[SECTOR_SIZE];
-    s_dir_entry *pd;
-
     if (base == nullptr)
     {
         return false;
     }
 
     // reread directory sector to get current content
-    if (!base->ReadSector((Byte *)&dirSector,
+    if (!base->ReadSector(reinterpret_cast<Byte *>(&dirSector),
                           dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -137,19 +120,18 @@ bool FlexFileContainerIteratorImp::DeleteCurrent()
         stream << dirTrackSector;
         throw FlexException(FERR_READING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    pd = &dirSector.dir_entry[dirIndex % DIRENTRIES];
-    start = pd->start;
-    end = pd->end;
-    auto records = getValueBigEndian<Word>(&pd->records[0]);
-    auto &sis = *reinterpret_cast<s_sys_info_sector *>(buffer);
+    auto &dir_entry = dirSector.dir_entries[dirIndex % DIRENTRIES];
+    auto start = dir_entry.start;
+    auto end = dir_entry.end;
+    auto records = flx::getValueBigEndian<Word>(&dir_entry.records[0]);
 
     // deleted file is signed by 0xFF as first byte of filename
-    pd->filename[0] = DE_DELETED;
+    dir_entry.filename[0] = DE_DELETED;
 
-    if (!base->WriteSector((const Byte *)&dirSector,
+    if (!base->WriteSector(reinterpret_cast<const Byte *>(&dirSector),
                            dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -157,57 +139,63 @@ bool FlexFileContainerIteratorImp::DeleteCurrent()
         stream << dirTrackSector;
         throw FlexException(FERR_WRITING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    /* read sysstem info sector (SIS) */
-    if (!base->ReadSector(&buffer[0], sis_trk_sec.trk, sis_trk_sec.sec))
+    base->SetNextDirectoryPosition(st_t{});
+    base->DeleteFromFilenames(dirEntry.GetTotalFileName());
+
+    /* read system info sector (SIS) */
+    s_sys_info_sector sis{};
+    if (!base->ReadSector(reinterpret_cast<Byte *>(&sis),
+                          sis_trk_sec.trk, sis_trk_sec.sec))
     {
         std::stringstream stream;
 
         stream << sis_trk_sec;
         throw FlexException(FERR_READING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    fc_end = sis.sir.fc_end;
+    auto fc_end = sis.sir.fc_end;
 
     if (fc_end.sec != 0 || fc_end.trk != 0)
     {
         // add deleted file to free chain if free chain not empty
-        if (!base->ReadSector(&buffer[0], fc_end.trk, fc_end.sec))
+        SectorBuffer_t sectorBuffer{};
+        if (!base->ReadSector(sectorBuffer.data(), fc_end.trk, fc_end.sec))
         {
             std::stringstream stream;
 
             stream << fc_end;
             throw FlexException(FERR_READING_TRKSEC,
                                 stream.str(),
-                                base->GetPath().c_str());
+                                base->GetPath());
         }
 
-        buffer[0] = start.trk;
-        buffer[1] = start.sec;
+        sectorBuffer[0] = start.trk;
+        sectorBuffer[1] = start.sec;
 
-        if (!base->WriteSector(&buffer[0], fc_end.trk, fc_end.sec))
+        if (!base->WriteSector(sectorBuffer.data(), fc_end.trk, fc_end.sec))
         {
             std::stringstream stream;
 
             stream << fc_end;
             throw FlexException(FERR_WRITING_TRKSEC,
                                 stream.str(),
-                                base->GetPath().c_str());
+                                base->GetPath());
         }
 
-        if (!base->ReadSector(&buffer[0], sis_trk_sec.trk,
-                              sis_trk_sec.sec))
+        if (!base->ReadSector(reinterpret_cast<Byte *>(&sis),
+                              sis_trk_sec.trk, sis_trk_sec.sec))
         {
             std::stringstream stream;
 
             stream << sis_trk_sec;
             throw FlexException(FERR_READING_TRKSEC,
                                 stream.str(),
-                                base->GetPath().c_str());
+                                base->GetPath());
         }
 
         sis.sir.fc_end = end;
@@ -215,15 +203,15 @@ bool FlexFileContainerIteratorImp::DeleteCurrent()
     else
     {
         // create a new free chain if free chain is empty
-        if (!base->ReadSector(&buffer[0], sis_trk_sec.trk,
-                              sis_trk_sec.sec))
-        {
+        if (!base->ReadSector(reinterpret_cast<Byte *>(&sis),
+                              sis_trk_sec.trk, sis_trk_sec.sec))
+         {
             std::stringstream stream;
 
             stream << sis_trk_sec;
             throw FlexException(FERR_READING_TRKSEC,
                                 stream.str(),
-                                base->GetPath().c_str());
+                                base->GetPath());
         }
 
         sis.sir.fc_start = start;
@@ -233,19 +221,19 @@ bool FlexFileContainerIteratorImp::DeleteCurrent()
     // update sys info sector
     // update number of free sectors
     // and end of free chain trk/sec
-    Word free = getValueBigEndian<Word>(&sis.sir.free[0]);
+    Word free = flx::getValueBigEndian<Word>(&sis.sir.free[0]);
     free += records;
-    setValueBigEndian<Word>(&sis.sir.free[0], free);
+    flx::setValueBigEndian<Word>(&sis.sir.free[0], free);
 
-    if (!base->WriteSector(&buffer[0], sis_trk_sec.trk,
-                          sis_trk_sec.sec))
+    if (!base->WriteSector(reinterpret_cast<const Byte *>(&sis),
+                           sis_trk_sec.trk, sis_trk_sec.sec))
     {
         std::stringstream stream;
 
         stream << sis_trk_sec;
         throw FlexException(FERR_WRITING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
     return true;
@@ -254,10 +242,10 @@ bool FlexFileContainerIteratorImp::DeleteCurrent()
 // Renames the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
+bool FlexDiskIteratorImp::RenameCurrent(const std::string &newName)
 {
-    s_dir_entry *pd;
-    std::string name, ext;
+    std::string name;
+    std::string ext;
 
     if (base == nullptr)
     {
@@ -265,7 +253,7 @@ bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
     }
 
     // reread directory sector to get current content
-    if (!base->ReadSector((Byte *)&dirSector,
+    if (!base->ReadSector(reinterpret_cast<Byte *>(&dirSector),
                           dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -273,10 +261,11 @@ bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
         stream << dirTrackSector;
         throw FlexException(FERR_READING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    pd = &dirSector.dir_entry[dirIndex % DIRENTRIES];
+    const auto idx = static_cast<Byte>(dirIndex % DIRENTRIES);
+    auto &dir_entry = dirSector.dir_entries[idx];
 
     std::string totalName(newName);
 
@@ -310,12 +299,12 @@ bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
     }
 
     /* update directory entry */
-    memset(&pd->filename[0], 0, FLEX_BASEFILENAME_LENGTH);
-    strncpy(&pd->filename[0], name.c_str(), FLEX_BASEFILENAME_LENGTH);
-    memset(&pd->file_ext[0], 0, FLEX_FILEEXT_LENGTH);
-    strncpy(&pd->file_ext[0], ext.c_str(), FLEX_FILEEXT_LENGTH);
+    std::memset(dir_entry.filename, 0, FLEX_BASEFILENAME_LENGTH);
+    strncpy(dir_entry.filename, name.c_str(), FLEX_BASEFILENAME_LENGTH);
+    std::memset(dir_entry.file_ext, 0, FLEX_FILEEXT_LENGTH);
+    strncpy(dir_entry.file_ext, ext.c_str(), FLEX_FILEEXT_LENGTH);
 
-    if (!base->WriteSector((const Byte *)&dirSector,
+    if (!base->WriteSector(reinterpret_cast<const Byte *>(&dirSector),
                            dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -323,8 +312,10 @@ bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
         stream << dirTrackSector;
         throw FlexException(FERR_WRITING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
+    base->DeleteFromFilenames(dirEntry.GetTotalFileName());
+    base->AddToFilenames(newName, FlexDisk::s_dir_pos{dirTrackSector, idx});
 
     return true;
 }
@@ -332,17 +323,15 @@ bool FlexFileContainerIteratorImp::RenameCurrent(const char *newName)
 // Set date for the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool FlexFileContainerIteratorImp::SetDateCurrent(const BDate &date)
+bool FlexDiskIteratorImp::SetDateCurrent(const BDate &date)
 {
-    s_dir_entry *pd;
-
     if (base == nullptr)
     {
         return false;
     }
 
     // reread directory sector to get current content
-    if (!base->ReadSector((Byte *)&dirSector,
+    if (!base->ReadSector(reinterpret_cast<Byte *>(&dirSector),
                           dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -350,15 +339,15 @@ bool FlexFileContainerIteratorImp::SetDateCurrent(const BDate &date)
         stream << dirTrackSector;
         throw FlexException(FERR_READING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    pd = &dirSector.dir_entry[dirIndex % DIRENTRIES];
-    pd->day = static_cast<Byte>(date.GetDay());
-    pd->month = static_cast<Byte>(date.GetMonth());
-    pd->year = static_cast<Byte>(date.GetYear() % 100);
+    auto &dir_entry = dirSector.dir_entries[dirIndex % DIRENTRIES];
+    dir_entry.day = static_cast<Byte>(date.GetDay());
+    dir_entry.month = static_cast<Byte>(date.GetMonth());
+    dir_entry.year = static_cast<Byte>(date.GetYear() % 100);
 
-    if (!base->WriteSector((const Byte *)&dirSector,
+    if (!base->WriteSector(reinterpret_cast<const Byte *>(&dirSector),
                            dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -366,7 +355,7 @@ bool FlexFileContainerIteratorImp::SetDateCurrent(const BDate &date)
         stream << dirTrackSector;
         throw FlexException(FERR_WRITING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
     return true;
@@ -375,17 +364,15 @@ bool FlexFileContainerIteratorImp::SetDateCurrent(const BDate &date)
 // set the date in the actual selected directory entry
 // should only be used after an successful
 // Only valid if the iterator has a valid directory entry
-bool FlexFileContainerIteratorImp::SetAttributesCurrent(Byte attributes)
+bool FlexDiskIteratorImp::SetAttributesCurrent(Byte attributes)
 {
-    s_dir_entry *pd;
-
     if (base == nullptr)
     {
         return false;
     }
 
     // reread directory sector to get current content
-    if (!base->ReadSector((Byte *)&dirSector,
+    if (!base->ReadSector(reinterpret_cast<Byte *>(&dirSector),
                           dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -393,13 +380,12 @@ bool FlexFileContainerIteratorImp::SetAttributesCurrent(Byte attributes)
         stream << dirTrackSector;
         throw FlexException(FERR_READING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
-    pd = &dirSector.dir_entry[dirIndex % DIRENTRIES];
-    pd->file_attr = attributes;
+    dirSector.dir_entries[dirIndex % DIRENTRIES].file_attr = attributes;
 
-    if (!base->WriteSector((const Byte *)&dirSector,
+    if (!base->WriteSector(reinterpret_cast<const Byte *>(&dirSector),
                            dirTrackSector.trk, dirTrackSector.sec))
     {
         std::stringstream stream;
@@ -407,7 +393,7 @@ bool FlexFileContainerIteratorImp::SetAttributesCurrent(Byte attributes)
         stream << dirTrackSector;
         throw FlexException(FERR_WRITING_TRKSEC,
                             stream.str(),
-                            base->GetPath().c_str());
+                            base->GetPath());
     }
 
     return true;

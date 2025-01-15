@@ -2,8 +2,8 @@
     mdcrtape.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2018-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,24 +27,20 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+#include <memory>
 
 
 const std::array<char, 4> MiniDcrTape::magic_bytes { 'M', 'D', 'C', 'R' };
 
-MiniDcrTape::MiniDcrTape(const char *path, Mode mode) :
+MiniDcrTape::MiniDcrTape(const std::string &path, Mode mode) :
     is_write_protected(false)
 {
-    struct stat sbuf;
-
-    if (path == nullptr)
-    {
-        throw FlexException(FERR_WRONG_PARAMETER);
-    }
+    struct stat sbuf{};
 
     switch (mode)
     {
         case Mode::Open:
-            if (stat(path, &sbuf) || !S_ISREG(sbuf.st_mode))
+            if (stat(path.c_str(), &sbuf) || !S_ISREG(sbuf.st_mode))
             {
                 throw FlexException(FERR_UNABLE_TO_OPEN, path);
             }
@@ -66,12 +62,12 @@ MiniDcrTape::MiniDcrTape(const char *path, Mode mode) :
 
             if (!VerifyTape())
             {
-                throw FlexException(FERR_INVALID_FORMAT, path);
+                throw FlexException(FERR_IS_NO_MDCRFORMAT, path);
             }
             break;
 
         case Mode::Create:
-            if (!stat(path, &sbuf))
+            if (!stat(path.c_str(), &sbuf))
             {
                 throw FlexException(FERR_FILE_ALREADY_EXISTS, path);
             }
@@ -111,14 +107,14 @@ MiniDcrTape::MiniDcrTape::~MiniDcrTape()
     }
 }
 
-MiniDcrTapePtr MiniDcrTape::Create(const char *path)
+MiniDcrTapePtr MiniDcrTape::Create(const std::string &path)
 {
-    return MiniDcrTapePtr(new MiniDcrTape(path, Mode::Create));
+    return std::make_unique<MiniDcrTape>(path, Mode::Create);
 }
 
-MiniDcrTapePtr MiniDcrTape::Open(const char *path)
+MiniDcrTapePtr MiniDcrTape::Open(const std::string &path)
 {
-    return MiniDcrTapePtr(new MiniDcrTape(path, Mode::Open));
+    return std::make_unique<MiniDcrTape>(path, Mode::Open);
 }
 
 bool MiniDcrTape::Close()
@@ -170,8 +166,8 @@ bool MiniDcrTape::ReadRecord(std::vector<Byte> &buffer)
     if (IsOpen())
     {
         stream.seekg(record_positions[record_index]);
-        Word size = (stream.get() & 0xFF) << 8;
-        size |= stream.get() & 0xFF;
+        Word size = (stream.get() * 256U) & 0xFF00U;
+        size |= static_cast<Byte>(stream.get());
 
         if (size == 0)
         {
@@ -180,9 +176,9 @@ bool MiniDcrTape::ReadRecord(std::vector<Byte> &buffer)
 
         buffer.clear();
         buffer.resize(size, 0);
-        auto pbuffer = reinterpret_cast<char *>(buffer.data());
+        auto *pbuffer = reinterpret_cast<char *>(buffer.data());
         // Read the buffer contents
-        stream.read(pbuffer, buffer.size());
+        stream.read(pbuffer, static_cast<uint32_t>(buffer.size()));
         record_index++;
 
         return stream.good();
@@ -199,11 +195,11 @@ bool MiniDcrTape::WriteRecord(const std::vector<Byte> &buffer)
         // Write two bytes containing the buffer size
         // Write most significant byte first
         Word size = static_cast<Word>(buffer.size());
-        stream.put(static_cast<char>(size >> 8));
-        stream.put(static_cast<char>(size & 0xFF));
-        auto pbuffer = reinterpret_cast<const char *>(buffer.data());
+        stream.put(static_cast<char>(size >> 8U));
+        stream.put(static_cast<char>(size & 0xFFU));
+        const auto *pbuffer = reinterpret_cast<const char *>(buffer.data());
         // Write the buffer contents
-        stream.write(pbuffer, buffer.size());
+        stream.write(pbuffer, static_cast<uint32_t>(buffer.size()));
         std::ios::pos_type record_position = stream.tellp();
         stream.put(0);
         stream.put(0);
@@ -269,8 +265,8 @@ bool MiniDcrTape::VerifyTape()
         while (size != 0)
         {
             record_position = stream.tellg();
-            size = (static_cast<Byte>(stream.get()) << 8);
-            size |= (static_cast<Byte>(stream.get()) & 0xFF);
+            size = (static_cast<Byte>(stream.get()) << 8U);
+            size |= (static_cast<Byte>(stream.get()) & 0xFFU);
             if (stream.eof() || stream.fail())
             {
                 size = 0xFFFF;

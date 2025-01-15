@@ -1,9 +1,9 @@
 /*
-    e2screen.h  A QWidget subclass implementing the Eurocom II screen. 
+    e2screen.h  A QWidget subclass implementing the Eurocom II screen.
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #define E2SCREEN_INCLUDED
 
 #include "soptions.h"
-#include <misc1.h>
+#include "misc1.h"
 #include <memory>
 #include "warnoff.h"
 #include <QVector>
@@ -33,6 +33,8 @@
 #include <QWidget>
 #include <QPixmap>
 #include "warnon.h"
+#include "blinxsys.h"
+#include "bobservd.h"
 
 class VideoControl2;
 class QPaintEvent;
@@ -50,23 +52,23 @@ class KeyboardIO;
 class Pia1;
 
 
-class E2Screen : public QWidget
+class E2Screen : public QWidget, public BObserved
 {
     Q_OBJECT
 
 public:
-    enum
+    enum class CursorType : uint8_t
     {
-        FLX_INVISIBLE_CURSOR = 10,
-        FLX_DEFAULT_CURSOR   = 11
+        Invisible,
+        Default,
     };
 
     E2Screen() = delete;
-    E2Screen(Scheduler &x_scheduler, JoystickIO &x_joystickIO,
-             KeyboardIO &x_keyboardIO, Pia1 &x_pia1,
-             sOptions &x_options,
-             const QColor &backgroundColor, QWidget *parent = nullptr);
-    virtual ~E2Screen() = default;
+    E2Screen(Scheduler &p_scheduler, JoystickIO &p_joystickIO,
+             KeyboardIO &p_keyboardIO, Pia1 &p_pia1,
+             sOptions &p_options,
+             QColor backgroundColor, QWidget *parent = nullptr);
+    ~E2Screen() override = default;
 
     QSize GetScaledSize() const;
     void UpdateBlock(Byte firstRasterLine, int displayBlock,
@@ -104,12 +106,12 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
-    static int ConvertMouseButtonState(Qt::MouseButtons mouseButtons);
-    static int GetKeyModifiersState();
-    int TranslateToAscii(QKeyEvent *event);
+    static uint32_t ConvertMouseButtonState(Qt::MouseButtons mouseButtons);
+    static uint32_t GetKeyModifiersState();
+    int TranslateToPAT09Key(QKeyEvent *event);
     void MouseWarp(int dx, int dy);
     void SetMouseCoordinatesAndButtons(QMouseEvent *event);
-    void SetCursorType(int type = FLX_DEFAULT_CURSOR);
+    void SetCursorType(CursorType p_cursorType);
     void SetCursorPosition(int x, int y);
     void InitializeNumLockIndicatorMask();
     bool IsNumLockOn() const;
@@ -127,18 +129,21 @@ private:
     int mouseY;
     int previousMouseX;
     int previousMouseY;
-    int warpDx;
-    int warpDy;
+    int warpDx{};
+    int warpDy{};
     int warpHomeX;
     int warpHomeY;
-    int mouseButtonState;
+    unsigned mouseButtonState;
     int pixelSize;
-    int cursorType;
+    CursorType cursorType;
     bool doScaledScreenUpdate;
     QSize preferredScreenSize;
     QSize scaledScreenSize;
     QPoint origin;
     unsigned int numLockIndicatorMask;
+#ifdef __linux__
+    BLinuxSysInfo sysInfo;
+#endif
 };
 #endif
 

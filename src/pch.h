@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2021-2022  W. Schwotzer
+    Copyright (C) 2021-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,10 +25,6 @@
 #define PCH_INCLUDED
 
 #include "misc1.h"
-
-#include <ctype.h>
-#include <stdio.h>
-
 #include <limits>
 #include <memory>
 #include <mutex>

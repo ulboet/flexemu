@@ -31,7 +31,9 @@ are not available with Fastflex.
 <p>
 They have been found empirically so they may not be reliable, incomplete or may
 work on some MC6809 chips but not on others. Motorola never published any
-information about undefined opcodes.
+information about undefined opcodes. Undocumented 6809 opcodes are also well
+documented
+ <a href="http://dragon32.info/info/undocops.html" target="_blank">here</a>.
 <p>
 The following undocumented instructions are supported by flexemu:
 </div>
@@ -79,10 +81,10 @@ The following undocumented instructions are supported by flexemu:
   <td>Same Op 40 (NEGA)</td>
  </tr>
  <tr>
-  <td>coma</td>
+  <td>negcoma</td>
   <td>42</td>
   <td>Inherent</td>
-  <td>Same Op 43 (COMA)</td>
+  <td>If cc.c = 0 then NEGA else COMA</td>
  </tr>
  <tr>
   <td>lsra</td>
@@ -109,10 +111,10 @@ The following undocumented instructions are supported by flexemu:
   <td>Same Op 50 (NEGB)</td>
  </tr>
  <tr>
-  <td>comb</td>
+  <td>negcomb</td>
   <td>52</td>
   <td>Inherent</td>
-  <td>Same Op 53 (COMB)</td>
+  <td>If cc.c = 0 then NEGB else COMB</td>
  </tr>
  <tr>
   <td>lsrb</td>
@@ -139,10 +141,10 @@ The following undocumented instructions are supported by flexemu:
   <td>Same Op 60 (NEG)</td>
  </tr>
  <tr>
-  <td>com</td>
+  <td>negcom</td>
   <td>62</td>
   <td>Indexed</td>
-  <td>Same Op 63 (COM)</td>
+  <td>If cc.c = 0 then NEG else COM</td>
  </tr>
  <tr>
   <td>lsr</td>
@@ -153,7 +155,7 @@ The following undocumented instructions are supported by flexemu:
  <tr>
   <td>dec</td>
   <td>6B</td>
-  <td>Indexed</td>                                                              
+  <td>Indexed</td>
   <td>Same Op 6A (DEC)</td>
  </tr>
  <tr>
@@ -163,10 +165,10 @@ The following undocumented instructions are supported by flexemu:
   <td>Same Op 70 (NEG)</td>
  </tr>
  <tr>
-  <td>com</td>
+  <td>negcom</td>
   <td>72</td>
   <td>Extended</td>
-  <td>Same Op 73 (COM)</td>
+  <td>If cc.c = 0 then NEG else COM</td>
  </tr>
  <tr>
   <td>lsr</td>
@@ -216,6 +218,8 @@ The following undocumented instructions are supported by flexemu:
  <li><a href="flexfcb.htm"> FLEX File Control Block (FCB)</a>
  <li><a href="flexmem.htm"> FLEX Memory Map</a>
  <li><a href="neumon54.htm"> Monitor program neumon54.hex</a>
+ <li><a href="mon53_54.htm"> Monitor program mon53.s19 and mon54.s19</a>
+ <li><a href="monu54.htm"> Monitor program monu54-6.s19</a>
  <li><a href="mon24.htm"> Monitor program mon24.s19</a>
  <li><a href="e2hwdesc.htm"> Eurocom II hardware description</a>
 </ul>
@@ -238,6 +242,14 @@ The following undocumented instructions are supported by flexemu:
  <li><a href="basprec.pdf" target="_blank">BASIC Precompiler User's Manual</a>
  <li><a href="f77.pdf" target="_blank">Fortan 77</a>
  <li><a href="util_man.pdf" target="_blank">Windrush FLEX Utilities Package</a>
+</ul>
+<h2 id="OtherLinks">Other Documents</h2>
+
+<ul>
+ <li><a href=cedric.pdf target=_blank>Cedric screen editor</a>
+ <li><a href="dynastar.pdf" target="_blank">Dynastar screen editor and text processor</a>
+ <li><a href="just.pdf" target="_blank">Just text processor</a>
+ <li><a href="TSC_Text_Processor.pdf" target="_blank">TSC Text Processor</a>
 </ul>
 <h2>Related Links</h2>
 <ul>

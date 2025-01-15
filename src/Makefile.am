@@ -1,12 +1,16 @@
 pkgdata_DATA = boot
 
-sysconf_DATA = flexemu.conf
+sysconf_DATA = \
+	flexemu.conf \
+	flexlabl.conf
 
 desktop_DATA = \
 	flexemu.desktop \
 	flexemu-flexplorer.desktop
 
 mimetype_DATA = flexemu.xml
+
+libjsoncpp_top = jsoncpp/src/lib_json
 
 SUFFIXES = .rc .o .ui _ui.h .qrc _qrc.cpp .h _moc.cpp .h.gch
 
@@ -24,8 +28,7 @@ EXTRA_DIST = \
 	$(sysconf_DATA) \
 	confignt.h \
 	dsktool.vcxproj \
-	engine.cpp \
-	fdtest.cpp \
+	engine.cpi \
 	flex2hex.vcxproj \
 	flexdisk.rc \
 	flexemu.astyle \
@@ -33,11 +36,12 @@ EXTRA_DIST = \
 	flexemu.vcxproj \
 	flexplorer.vcxproj \
 	JoystickTable.gnumeric \
-	mc6809ex.cpp \
+	mc6809ex.cpi \
 	mdcrtool.vcxproj \
 	msvcQtPath.props.in \
 	pch.h \
-	pch.cpp
+	pch.cpp \
+	options.txt
 
 SUBDIRS = bitmaps tools
 
@@ -48,14 +52,18 @@ desktopdir = $(datadir)/applications
 mimetypebasedir = $(datadir)/mime
 mimetypedir = $(mimetypebasedir)/packages
 
-noinst_LIBRARIES = libflex.a
+noinst_LIBRARIES = libflex.a libfmt.a libjsoncpp.a
 
 bin_PROGRAMS = \
-	@FLEXPLORER@ \
+	$(FLEXPLORER) \
 	dsktool \
 	flex2hex \
 	flexemu \
 	mdcrtool
+
+noinst_PROGRAMS = updatemd
+
+noinst_DATA = metadata.json
 
 EXTRA_PROGRAMS = \
 	dsktool \
@@ -63,43 +71,60 @@ EXTRA_PROGRAMS = \
 	flexplorer \
 	mdcrtool
 
-noinst_PROGRAMS = test
+DIRFLAGS = -DF_DATADIR=\"$(pkgdatadir)\" -DF_SYSCONFDIR=\"$(sysconfdir)\"
 
 AM_CXXFLAGS = \
-	--std=c++14 \
-	-DF_DATADIR=\"$(pkgdatadir)\" \
-	-DF_SYSCONFDIR=\"$(sysconfdir)\"
+	--std=c++17 \
+	$(DIRFLAGS)
 
 # To use precompiled headers all targets have to use the same CXXFLAGS
 # (especially preprocessor directives).
 ALL_TARGETS_CXXFLAGS = \
-	$(AM_CXXFLAGS) @CXXSPEED@ @OS_TYPE@ @X_CFLAGS@ @QT_CXXFLAGS@
+	-pipe -D_REENTRANT -pthread -fPIC \
+	$(CXXSPEED) $(OS_TYPE) $(X_CFLAGS) $(AM_CXXFLAGS) \
+	$(CXXWARNINGS) $(MACOSX_VERSION_MIN)
 
-libflex_a_CXXFLAGS  = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-flexemu_CXXFLAGS    = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-flexplorer_CXXFLAGS = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-mdcrtool_CXXFLAGS   = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-flex2hex_CXXFLAGS   = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-dsktool_CXXFLAGS    = $(ALL_TARGETS_CXXFLAGS) -include pch.h
-test_CXXFLAGS       = $(ALL_TARGETS_CXXFLAGS) -include pch.h
+libjsoncpp_a_CXXFLAGS= --std=c++11 $(MACOSX_VERSION_MIN) \
+			-I$(top_srcdir)/jsoncpp/include
+libfmt_a_CXXFLAGS   = --std=c++11 $(MACOSX_VERSION_MIN) \
+			-I$(top_srcdir)/fmt/include
+libflex_a_CXXFLAGS  = -I$(top_srcdir)/fmt/include \
+			$(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
+# Avoid using @CURSES_CFLAGS@. It causes warnings about redefining
+# _XOPEN_SOURCE when compiling with clang. Instead use _DEFAULT_SOURCE.
+flexemu_CXXFLAGS    = -I$(top_srcdir)/fmt/include \
+			$(QT_CXXFLAGS) $(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH) \
+			-D_DEFAULT_SOURCE -DADD_NCURSES_VERSION
+flexplorer_CXXFLAGS = -I$(top_srcdir)/fmt/include \
+			$(QT_CXXFLAGS) $(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
+mdcrtool_CXXFLAGS   = -I$(top_srcdir)/fmt/include \
+			$(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
+flex2hex_CXXFLAGS   = -I$(top_srcdir)/fmt/include \
+			$(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
+dsktool_CXXFLAGS    = -I$(top_srcdir)/fmt/include \
+			$(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
+updatemd_CXXFLAGS   = --std=c++17 $(OS_TYPE) -DADD_JSONCPP_VERSION \
+			-isystem $(top_srcdir)/jsoncpp/include \
+			-I$(top_srcdir)/fmt/include
 
 libflex_a_LIBADD = $(LIBOBJS)
 
-flexplorer_LDADD = @QT_LIBS@ @PTHREAD_LD@ libflex.a
-mdcrtool_LDADD   = @PTHREAD_LD@ libflex.a
-flex2hex_LDADD   = @PTHREAD_LD@ libflex.a
-dsktool_LDADD    = @PTHREAD_LD@ libflex.a
+flexplorer_LDADD = $(QT_LIBS) $(PTHREAD_LD) libflex.a libfmt.a
+mdcrtool_LDADD   = $(PTHREAD_LD) libflex.a libfmt.a
+flex2hex_LDADD   = $(PTHREAD_LD) libflex.a libfmt.a
+dsktool_LDADD    = $(PTHREAD_LD) libflex.a libfmt.a
 flexemu_LDADD    = \
-	@FLEX_RC@ @FLEXEMU_LDADD@ \
-	@WIN32_LIBS@ @PTHREAD_LD@ @QT_LIBS@ @X_LIBS@ libflex.a -latomic
-test_LDADD       = @PTHREAD_LD@ libflex.a -latomic
+	$(WIN32_LIBS) $(PTHREAD_LD) $(QT_LIBS) $(X_LIBS) \
+	libflex.a libfmt.a @CURSES_LIBS@
+updatemd_LDADD    = $(PTHREAD_LD) libflex.a libfmt.a libjsoncpp.a
 
-flexemu_DEPENDENCIES    = @FLEX_RC@ libflex.a
-flexplorer_DEPENDENCIES = libflex.a
-flex2hex_DEPENDENCIES   = libflex.a
-dsktool_DEPENDENCIES    = libflex.a
-mdcrtool_DEPENDENCIES   = libflex.a
-test_DEPENDENCIES       = libflex.a
+libflex_a_DEPENDENCIES  = libfmt.a
+flexemu_DEPENDENCIES    = libflex.a libfmt.a
+flexplorer_DEPENDENCIES = libflex.a libfmt.a
+flex2hex_DEPENDENCIES   = libflex.a libfmt.a
+dsktool_DEPENDENCIES    = libflex.a libfmt.a
+mdcrtool_DEPENDENCIES   = libflex.a libfmt.a
+updatemd_DEPENDENCIES   = libflex.a libfmt.a libjsoncpp.a
 
 # Rule for precompiled header:
 # Build a pch.h.gch file from pch.h
@@ -119,7 +144,9 @@ flexemu_ui = \
 	brkpt.ui \
 	cpustat.ui \
 	logfil.ui \
-	fsetup.ui
+	fsetup.ui \
+	pprev.ui \
+	about.ui
 flexemu_ui_hdr = $(flexemu_ui:.ui=_ui.h)
 flexplorer_ui = \
 	fpnew.ui \
@@ -136,9 +163,11 @@ flexemu_moc_hdr = \
 	efslctle.h \
 	fsetupui.h \
 	logfilui.h \
-	qtgui.h
+	qtgui.h \
+	poutwin.h
 flexemu_moc_src = $(flexemu_moc_hdr:.h=_moc.cpp)
 flexplorer_moc_hdr = \
+	drawnwid.h \
 	fpedit.h \
 	fpmdich.h \
 	fpnewui.h \
@@ -148,30 +177,27 @@ flexplorer_moc_hdr = \
 flexplorer_moc_src = $(flexplorer_moc_hdr:.h=_moc.cpp)
 
 nodist_flexemu_SOURCES = \
-	$(flexemu_ui_hdr) $(flexemu_qrc_src) $(flexemu_moc_src) $(pch_h_gch)
+	$(flexemu_ui_hdr) $(flexemu_qrc_src) $(flexemu_moc_src)
 
 nodist_flexplorer_SOURCES = \
-	$(flexplorer_ui_hdr) $(flexplorer_qrc_src) $(flexplorer_moc_src) \
-	$(pch_h_gch)
-
-nodist_flex2hex_SOURCES = $(pch_h_gch)
-nodist_dsktool_SOURCES = $(pch_h_gch)
-nodist_mdcrtool_SOURCES = $(pch_h_gch)
-nodist_test_SOURCES = $(pch_h_gch)
+	$(flexplorer_ui_hdr) $(flexplorer_qrc_src) $(flexplorer_moc_src)
 
 BUILT_SOURCES = \
+	$(PCH_H_GCH) \
 	$(nodist_flexemu_SOURCES) \
 	$(nodist_flexplorer_SOURCES)
 
 CLEANFILES = \
 	$(nodist_flexemu_SOURCES) \
-	$(nodist_flexplorer_SOURCES)
+	$(nodist_flexplorer_SOURCES) \
+	pch.h.gch
 
 flexemu_SOURCES = \
 	absgui.cpp \
 	acia1.cpp \
 	apprun.cpp \
 	bjoystck.cpp \
+	blinxsys.cpp \
 	brkptui.cpp \
 	bui.cpp \
 	bytereg.cpp \
@@ -186,8 +212,11 @@ flexemu_SOURCES = \
 	e2floppy.cpp \
 	e2screen.cpp \
 	efslctle.cpp \
+	fdoptman.cpp \
+	flblfile.cpp \
 	foptman.cpp \
 	fsetupui.cpp \
+	fversion.cpp \
 	inout.cpp \
 	iodevdbg.cpp \
 	joystick.cpp \
@@ -197,24 +226,36 @@ flexemu_SOURCES = \
 	mc146818.cpp \
 	mc6809.cpp \
 	mc6809in.cpp \
+	mc6809lg.cpp \
 	mc6809st.cpp \
 	mc6821.cpp \
 	mc6522.cpp \
 	mc6850.cpp \
 	mmu.cpp \
 	ndircont.cpp \
+	pagedet.cpp \
+	pagedetd.cpp \
 	pia1.cpp \
 	via1.cpp \
 	pia2.cpp \
 	pia2v5.cpp \
+	poutwin.cpp \
+	poverhlp.cpp \
+	qtfree.cpp \
 	qtgui.cpp \
 	schedule.cpp \
 	sodiff.cpp \
+	soptions.cpp \
+	termimpc.cpp \
+	termimpd.cpp \
+	termimpf.cpp \
+	termimps.cpp \
 	terminal.cpp \
 	vico1.cpp \
 	vico2.cpp \
 	wd1793.cpp \
 	winmain.cpp \
+	asciictl.h \
 	absdisas.h \
 	absgui.h \
 	acia1.h \
@@ -223,9 +264,9 @@ flexemu_SOURCES = \
 	bdate.h \
 	bdir.h \
 	benv.h \
-	bfileptr.h \
 	binifile.h \
 	bintervl.h \
+	blinxsys.h \
 	bjoystck.h \
 	bmembuf.h \
 	bmp.h \
@@ -236,11 +277,14 @@ flexemu_SOURCES = \
 	bregistr.h \
 	brkptui.h \
 	breltime.h \
+	bscopeex.h \
 	btime.h \
 	bui.h \
 	bytereg.h \
 	cacttrns.h \
+	cistring.h \
 	clogfile.h \
+	colors.h \
 	command.h \
 	config.h \
 	cpustate.h \
@@ -257,24 +301,27 @@ flexemu_SOURCES = \
 	efiletim.h \
 	efslctle.h \
 	engine.h \
+	fattrib.h \
 	fcinfo.h \
 	fcnffile.h \
 	fcopyman.h \
 	fdirent.h \
+	fdoptman.h \
 	ffilebuf.h \
 	ffilecnt.h \
 	filecntb.h \
 	filecnts.h \
 	fileread.h \
+	flblfile.h \
 	flexemu.h \
 	flexerr.h \
 	foptman.h \
 	fsetupui.h \
+	fversion.h \
 	iffilcnt.h \
 	ifilcnti.h \
 	ifilecnt.h \
 	inout.h \
-	ioaccess.h \
 	iodevdbg.h \
 	iodevice.h \
 	joystick.h \
@@ -282,6 +329,7 @@ flexemu_SOURCES = \
 	logfilui.h \
 	mc146818.h \
 	mc6809.h \
+	mc6809lg.h \
 	mc6809st.h \
 	mc6821.h \
 	mc6522.h \
@@ -293,24 +341,30 @@ flexemu_SOURCES = \
 	misc1.h \
 	mmu.h \
 	ndircont.h \
+	pagedet.h \
+	pagedetd.h \
 	pia1.h \
 	via1.h \
 	pia2.h \
 	pia2v5.h \
+	poutwin.h \
+	poverhlp.h \
 	propsui.h \
+	qtfree.h \
 	qtgui.h \
 	rfilecnt.h \
+	rndcheck.h \
 	schedcpu.h \
 	schedule.h \
 	scpulog.h \
 	sodiff.h \
 	soptions.h \
-	sprinter.h \
+	termimpc.h \
+	termimpd.h \
+	termimpf.h \
+	termimpi.h \
+	termimps.h \
 	terminal.h \
-	tsl/robin_growth_policy.h \
-	tsl/robin_hash.h \
-	tsl/robin_map.h \
-	tsl/robin_set.h \
 	typedefs.h \
 	vico1.h \
 	vico2.h \
@@ -321,6 +375,8 @@ flexemu_SOURCES = \
 	winmain.h
 
 flexplorer_SOURCES = \
+	drawnwid.cpp \
+	fpattrui.cpp \
 	fpcnvui.cpp \
 	fpdnd.cpp \
 	fpedit.cpp \
@@ -331,20 +387,25 @@ flexplorer_SOURCES = \
 	fpoptman.cpp \
 	fpoptui.cpp \
 	fpwin.cpp \
+	fversion.cpp \
+	qtfree.cpp \
 	bdate.h \
 	bdir.h \
 	benv.h \
-	bfileptr.h \
 	bintervl.h \
 	bmembuf.h \
 	bprocess.h \
 	brcfile.h \
 	bregistr.h \
 	btime.h \
+	cistring.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
+	drawnwid.h \
+	efilesiz.h \
 	efiletim.h \
+	fattrib.h \
 	fcinfo.h \
 	fcopyman.h \
 	fdirent.h \
@@ -365,6 +426,7 @@ flexplorer_SOURCES = \
 	fpoptman.h \
 	fpoptui.h \
 	fpwin.h \
+	fversion.h \
 	idircnt.h \
 	iffilcnt.h \
 	ifilcnti.h \
@@ -373,22 +435,25 @@ flexplorer_SOURCES = \
 	memsrc.h \
 	memtgt.h \
 	misc1.h \
+	propsui.h \
+	qtfree.h \
+	rndcheck.h \
 	rfilecnt.h \
 	sfpopts.h \
-	sprinter.h \
 	warnoff.h \
 	warnon.h
 
 mdcrtool_SOURCES = \
+	fversion.cpp \
 	mdcrfs.cpp \
 	mdcrtool.cpp \
 	bdir.h \
-	bfileptr.h \
 	bintervl.h \
 	bmembuf.h \
 	config.h \
 	fileread.h \
 	flexerr.h \
+	fversion.h \
 	mdcrfs.h \
 	mdcrtape.h \
 	memsrc.h \
@@ -398,13 +463,14 @@ mdcrtool_SOURCES = \
 
 flex2hex_SOURCES = \
 	flex2hex.cpp \
-	bfileptr.h \
+	fversion.cpp \
 	bintervl.h \
 	bmembuf.h \
 	config.h \
 	cvtwchar.h \
 	fileread.h \
 	flexerr.h \
+	fversion.h \
 	memsrc.h \
 	memtgt.h \
 	misc1.h \
@@ -412,10 +478,11 @@ flex2hex_SOURCES = \
 
 dsktool_SOURCES = \
 	dsktool.cpp \
+	fversion.cpp \
 	bdate.h \
 	bdir.h \
-	bfileptr.h \
 	btime.h \
+	cistring.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
@@ -431,6 +498,7 @@ dsktool_SOURCES = \
 	filfschk.h \
 	flexemu.h \
 	flexerr.h \
+	fversion.h \
 	idircnt.h \
 	iffilcnt.h \
 	ifilcnti.h \
@@ -439,56 +507,10 @@ dsktool_SOURCES = \
 	rfilecnt.h \
 	typedefs.h
 
-test_SOURCES = \
-	clogfile.cpp  \
-	colors.cpp \
-	command.cpp \
-	da6809.cpp \
-	inout.cpp \
-	mc6809.cpp \
-	mc6809in.cpp \
-	mc6809st.cpp \
-	schedule.cpp \
-	test_gccasm.cpp \
-	testmain.cpp \
-	bdate.h \
-	bfileptr.h \
-	bobserv.h \
-	bobservd.h \
-	bobshelp.h \
-	breltime.h \
-	btime.h \
-	clogfile.h \
-	command.h \
-	config.h \
-	cpustate.h \
-	csetfreq.h \
-	da6809.h \
-	debug.h \
-	e2.h \
-	engine.h \
-	fcinfo.h \
-	flexerr.h \
-	inout.h \
-	ioaccess.h \
-	mc6809.h \
-	mc6809st.h \
-	memory.h \
-	misc1.h \
-	schedcpu.h \
-	schedule.h \
-	sprinter.h \
-	test_gccasm.h \
-	typedefs.h \
-	warnoff.h \
-	warnon.h
-
 libflex_a_SOURCES = \
-	bcommand.cpp \
 	bdate.cpp \
 	bdir.cpp \
 	benv.cpp \
-	bfileptr.cpp \
 	binifile.cpp \
 	bmembuf.cpp \
 	bobservd.cpp \
@@ -499,6 +521,7 @@ libflex_a_SOURCES = \
 	btime.cpp \
 	cvtwchar.cpp \
 	dircont.cpp \
+	fattrib.cpp \
 	fcinfo.cpp \
 	fcnffile.cpp \
 	fcopyman.cpp \
@@ -516,24 +539,27 @@ libflex_a_SOURCES = \
 	memory.cpp \
 	misc1.cpp \
 	rfilecnt.cpp \
+	rndcheck.cpp \
 	bcommand.h \
 	bdate.h \
 	bdir.h \
 	benv.h \
-	bfileptr.h \
 	binifile.h \
 	bmembuf.h \
 	bobserv.h \
 	bobservd.h \
 	bobshelp.h \
+	bprocess.h \
 	brcfile.h \
 	bregistr.h \
 	breltime.h \
 	btime.h \
+	cistring.h \
 	config.h \
 	cvtwchar.h \
 	dircont.h \
 	efiletim.h \
+	fattrib.h \
 	fcinfo.h \
 	fcnffile.h \
 	fcopyman.h \
@@ -547,6 +573,7 @@ libflex_a_SOURCES = \
 	filfschk.h \
 	flexemu.h \
 	flexerr.h \
+	fversion.h \
 	idircnt.h \
 	iffilcnt.h \
 	ifilcnti.h \
@@ -555,16 +582,49 @@ libflex_a_SOURCES = \
 	memory.h \
 	misc1.h \
 	rfilecnt.h \
+	rndcheck.h \
 	typedefs.h
+
+libfmt_a_SOURCES = \
+	../fmt/src/format.cc \
+	../fmt/src/os.cc
+
+libjsoncpp_a_SOURCES = \
+	$(top_srcdir)/$(libjsoncpp_top)/json_reader.cpp \
+	$(top_srcdir)/$(libjsoncpp_top)/json_value.cpp \
+	$(top_srcdir)/$(libjsoncpp_top)/json_writer.cpp
+
+updatemd_SOURCES = \
+	fversion.cpp \
+	updatemd.cpp \
+	benv.h \
+	bprocess.h \
+	fversion.h \
+	misc1.h
+
+# Execute updatemd to update file metadata.json.
+# It has all c++ and c-header files as dependent to be able to update the
+# lines of code for any source code change. Generated files are filtered
+# out. See options.txt
+metadata.json: updatemd $(libflex_a_SOURCES) \
+	$(flexemu_SOURCES) $(flexplorer_SOURCES) $(dsktool_SOURCES) \
+	$(flex2hex_SOURCES) $(mdcrtool_SOURCES) $(updatemd_SOURCES)
+	@set +x; \
+	cd $(srcdir) > /dev/null; \
+	if $(AM_V_P); then set -x; else echo "  GENMD    $@"; fi; \
+	$(abs_builddir)/updatemd -l -k src -f $@; \
+	cd - > /dev/null
 
 ################################################################################
 # Use traditional-style suffix rules for precompiled header support.
 # Also define dependencies of precompiled header file.
 .h.h.gch:
+	@set +x; \
+	if $(AM_V_P); then set -x; else echo "  CXXPCH   $@"; fi; \
 	$(CXX) $(DEFS) $(ALL_TARGETS_CXXFLAGS) $(CXXFLAGS) \
 	-o $@ -x c++-header -c $<
 
-pch.h.gcp: pch.h misc1.h
+pch.h.gch: pch.h misc1.h
 
 ################################################################################
 # Use traditional-style suffix rules for generic Qt support.
@@ -573,15 +633,31 @@ pch.h.gcp: pch.h misc1.h
 # To see which *.h files are used to create *_moc.cpp files see
 # variables flexemu_moc_hdr and flexplorer_moc_hdr.
 .h_moc.cpp:
+	@set +x; \
+	if $(AM_V_P); then set -x; else echo "  QTMOC    $@"; fi; \
 	${QT_MOC} $< -o $@
 
 # Create a *_qrc.cpp file from a *.qrc file
+# Use file stem as resource name.
 .qrc_qrc.cpp:
-	${QT_RCC} $< --name $(@F) -o $@
+	@set +x; \
+	if $(AM_V_P); then set -x; else echo "  QTRCC    $@"; fi; \
+	${QT_RCC} $< --name $* -o $@
 
 # Create a *_ui.h file from a *.ui file
 .ui_ui.h:
+	@set +x; \
+	if $(AM_V_P); then set -x; else echo "  QTUIC    $@"; fi; \
 	${QT_UIC} $< -o $@
+
+# Static code analysis using clang-tidy. By default it reads the configuration
+# from the file .clang-tidy in the current directory or nearest parent dir.
+# Generated *_moc.cpp and *_qrc.cpp files are excluded from the check.
+clang-tidy-check:
+	$(CLANG_TIDY) `ls -1 *.cpp | sed "/.*_\(moc\|qrc\).cpp/d"` \
+	-- @OS_TYPE@ $(DIRFLAGS) @CLANG_TIDY_OPTS@ \
+	-isystem $(top_srcdir)/fmt/include \
+	-isystem $(top_srcdir)/jsoncpp/include
 
 ################################################################################
 # Post (un)installation hook:

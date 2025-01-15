@@ -2,7 +2,7 @@
     efiletim.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2022  W. Schwotzer
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,6 +23,9 @@
 #define EFILETIM_INCLUDED
 
 
+#include <cstdint>
+#include <type_traits>
+
 // There is a FLEX extension to support file creation time (hour, minute) when
 // creating a file on a FLEX file system.
 enum class FileTimeAccess : uint8_t
@@ -34,7 +37,7 @@ enum class FileTimeAccess : uint8_t
 
 inline FileTimeAccess operator& (FileTimeAccess lhs, FileTimeAccess rhs)
 {
-    using T1 = std::underlying_type<FileTimeAccess>::type;
+    using T1 = std::underlying_type_t<FileTimeAccess>;
 
     return static_cast<FileTimeAccess>(static_cast<T1>(lhs) &
                                        static_cast<T1>(rhs));
@@ -42,7 +45,7 @@ inline FileTimeAccess operator& (FileTimeAccess lhs, FileTimeAccess rhs)
 
 inline FileTimeAccess operator| (FileTimeAccess lhs, FileTimeAccess rhs)
 {
-    using T1 = std::underlying_type<FileTimeAccess>::type;
+    using T1 = std::underlying_type_t<FileTimeAccess>;
 
     return static_cast<FileTimeAccess>(static_cast<T1>(lhs) |
                                        static_cast<T1>(rhs));

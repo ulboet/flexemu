@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@
 #include "keyboard.h"
 #include "pia1.h"
 #include "cacttrns.h"
+#include "bobservd.h"
 #include "warnoff.h"
 #include <QtGlobal>
 #include <QPainter>
@@ -37,26 +38,30 @@
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QApplication>
+#include <QGuiApplication>
 #include "warnon.h"
-#ifdef UNIX
+#if defined(UNIX) && !defined(X_DISPLAY_MISSING)
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
 #include <QX11Info>
-#include <X11/XKBlib.h>
 #endif
+    // Qt < 6.0.0
+#include <X11/XKBlib.h>
+#endif // #if defined(UNIX) && !defined(X_DISPLAY_MISSING)
 
 class JoystickIO;
 
 
-E2Screen::E2Screen(Scheduler &x_scheduler,
-                   JoystickIO &x_joystickIO, KeyboardIO &x_keyboardIO,
-                   Pia1 &x_pia1, sOptions &x_options,
-                   const QColor &x_backgroundColor,
+E2Screen::E2Screen(Scheduler &p_scheduler,
+                   JoystickIO &p_joystickIO, KeyboardIO &p_keyboardIO,
+                   Pia1 &p_pia1, sOptions &p_options,
+                   QColor p_backgroundColor,
                    QWidget *parent)
     : QWidget(parent)
-    , scheduler(x_scheduler)
-    , joystickIO(x_joystickIO)
-    , keyboardIO(x_keyboardIO)
-    , pia1(x_pia1)
-    , backgroundColor(x_backgroundColor)
+    , scheduler(p_scheduler)
+    , joystickIO(p_joystickIO)
+    , keyboardIO(p_keyboardIO)
+    , pia1(p_pia1)
+    , backgroundColor(std::move(p_backgroundColor))
     , screen(QPixmap(WINDOWWIDTH, WINDOWHEIGHT))
     , transformationMode(Qt::FastTransformation)
     , firstRasterLine(0)
@@ -66,20 +71,20 @@ E2Screen::E2Screen(Scheduler &x_scheduler,
     , previousMouseY(-1)
     , warpHomeX(0)
     , warpHomeY(0)
-    , mouseButtonState(-1)
-    , pixelSize(x_options.pixelSize)
-    , cursorType(FLX_DEFAULT_CURSOR)
+    , mouseButtonState(0)
+    , pixelSize(p_options.pixelSize)
+    , cursorType(CursorType::Default)
     , doScaledScreenUpdate(true)
-    , preferredScreenSize(WINDOWWIDTH * x_options.pixelSize,
-                          WINDOWHEIGHT * x_options.pixelSize)
+    , preferredScreenSize(WINDOWWIDTH * p_options.pixelSize,
+                          WINDOWHEIGHT * p_options.pixelSize)
     , numLockIndicatorMask(0U)
 {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setBaseSize({WINDOWWIDTH, WINDOWHEIGHT});
     setMinimumSize({WINDOWWIDTH, WINDOWHEIGHT});
     setMouseTracking(true);
-    warpHomeX = (pixelSize * WINDOWWIDTH) >> 1;
-    warpHomeY = (pixelSize * WINDOWHEIGHT) >> 1;
+    warpHomeX = static_cast<int>((pixelSize * WINDOWWIDTH) / 2U);
+    warpHomeY = static_cast<int>((pixelSize * WINDOWHEIGHT) / 2U);
     InitializeNumLockIndicatorMask();
 }
 
@@ -121,7 +126,7 @@ void E2Screen::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
-void E2Screen::leaveEvent(QEvent *)
+void E2Screen::leaveEvent(QEvent * /* event */)
 {
     mouseX = previousMouseX = -1;
     mouseY = previousMouseY = -1;
@@ -129,9 +134,9 @@ void E2Screen::leaveEvent(QEvent *)
 }
 
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-void E2Screen::enterEvent(QEnterEvent *)
+void E2Screen::enterEvent(QEnterEvent * /* event */)
 #else
-void E2Screen::enterEvent(QEvent *)
+void E2Screen::enterEvent(QEvent * /*event*/)
 #endif
 {
     mouseX = previousMouseX = -1;
@@ -141,21 +146,22 @@ void E2Screen::enterEvent(QEvent *)
 
 void E2Screen::keyPressEvent(QKeyEvent *event)
 {
-    int key;
-
     assert(event != nullptr);
 
-    if ((key = TranslateToAscii(event)) >= 0)
+    const auto key = TranslateToPAT09Key(event);
+    if (key >= 0)
     {
         bool do_notify = false;
+        auto bKey = static_cast<Byte>(key);
 
-        keyboardIO.put_char_parallel((Byte)key, do_notify);
+        keyboardIO.put_char_parallel(bKey, do_notify);
         if (do_notify)
         {
             auto command = BCommandPtr(
                 new CActiveTransition(pia1, Mc6821::ControlLine::CA1));
             scheduler.sync_exec(std::move(command));
         }
+        Notify(NotifyId::KeyPressed, &bKey);
         event->accept();
     }
     else
@@ -216,7 +222,7 @@ int E2Screen::heightForWidth(int width) const
     return width / 2;
 }
 
-void E2Screen::paintEvent(QPaintEvent *)
+void E2Screen::paintEvent(QPaintEvent * /*event*/)
 {
     QPainter painter(this);
 
@@ -226,7 +232,7 @@ void E2Screen::paintEvent(QPaintEvent *)
 
     if (firstRasterLine != 0U)
     {
-        auto scaledFirstRasterLine = 0U;
+        auto scaledFirstRasterLine = 0;
 
         if (doScaledScreenUpdate)
         {
@@ -265,14 +271,20 @@ void E2Screen::paintEvent(QPaintEvent *)
 
 void E2Screen::SetMouseCoordinatesAndButtons(QMouseEvent *event)
 {
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    auto pos = event->position();
+    mouseX = static_cast<int>(pos.x());
+    mouseY = static_cast<int>(pos.y());
+#else
     mouseX = event->x();
     mouseY = event->y();
+#endif
     mouseButtonState = ConvertMouseButtonState(event->buttons());
 }
 
 void E2Screen::ReleaseMouseCapture()
 {
-    if (cursorType == FLX_INVISIBLE_CURSOR)
+    if (cursorType == CursorType::Invisible)
     {
         ToggleMouseCapture();
     }
@@ -280,12 +292,12 @@ void E2Screen::ReleaseMouseCapture()
 
 void E2Screen::ToggleMouseCapture()
 {
-    cursorType = (cursorType == FLX_DEFAULT_CURSOR) ?
-                 FLX_INVISIBLE_CURSOR : FLX_DEFAULT_CURSOR;
+    cursorType = (cursorType == CursorType::Default) ?
+                 CursorType::Invisible : CursorType::Default;
 
     window()->setWindowTitle(GetTitle());
 
-    if (cursorType == FLX_DEFAULT_CURSOR)
+    if (cursorType == CursorType::Default)
     {
         releaseMouse();
     }
@@ -297,15 +309,17 @@ void E2Screen::ToggleMouseCapture()
     SetCursorType(cursorType);
 }
 
-void E2Screen::SetCursorType(int type /* = FLX_DEFAULT_CURSOR */)
+void E2Screen::SetCursorType(CursorType p_cursorType)
 {
-    if(type == FLX_DEFAULT_CURSOR)
+    switch (p_cursorType)
     {
-        unsetCursor();
-    }
-    else if(type == FLX_INVISIBLE_CURSOR)
-    {
-        setCursor(Qt::BlankCursor);
+        case CursorType::Default:
+            unsetCursor();
+            break;
+
+        case CursorType::Invisible:
+            setCursor(Qt::BlankCursor);
+            break;
     }
 }
 
@@ -339,16 +353,14 @@ bool E2Screen::IsSmoothDisplay() const
 
 QString E2Screen::GetTitle()
 {
-    if (cursorType == FLX_DEFAULT_CURSOR)
+    if (cursorType == CursorType::Default)
     {
         return QString(PROGRAMNAME " V" PROGRAM_VERSION " - ") +
                tr("Press CTRL F10 to capture mouse");
     }
-    else
-    {
-        return QString(PROGRAMNAME " V" PROGRAM_VERSION " - ") +
-               tr("Press CTRL F10 to release mouse");
-    }
+
+    return QString(PROGRAMNAME " V" PROGRAM_VERSION " - ") +
+           tr("Press CTRL F10 to release mouse");
 }
 
 void E2Screen::UpdateBlock(Byte p_firstRasterLine, int displayBlock,
@@ -372,13 +384,13 @@ void E2Screen::RepaintScreen()
 
 void E2Screen::UpdateMouse()
 {
-    int dx  = 0;
-    int dy  = 0;
+    int dx = 0;
+    int dy = 0;
 
     if ((previousMouseX != -1) && (mouseX != -1) &&
         (previousMouseY != -1) && (mouseY != -1))
     {
-        if (cursorType == FLX_INVISIBLE_CURSOR)
+        if (cursorType == CursorType::Invisible)
         {
             dx = mouseX - previousMouseX - warpDx;
             dy = mouseY - previousMouseY - warpDy;
@@ -405,9 +417,9 @@ void E2Screen::UpdateMouse()
     keyboardIO.put_value(keyModifiers);
 }
 
-int E2Screen::GetKeyModifiersState()
+uint32_t E2Screen::GetKeyModifiersState()
 {
-    int state = 0;
+    uint32_t state = 0;
 
     // Get modifier state of shift and control key.
     if (QApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier))
@@ -422,19 +434,19 @@ int E2Screen::GetKeyModifiersState()
     return state;
 }
 
-int E2Screen::ConvertMouseButtonState(Qt::MouseButtons mouseButtonState)
+uint32_t E2Screen::ConvertMouseButtonState(Qt::MouseButtons mouseButtons)
 {
-    int state = 0;
+    uint32_t state = 0;
 
-    if (mouseButtonState & Qt::LeftButton)
+    if (mouseButtons & Qt::LeftButton)
     {
         state |= L_MB;
     }
-    if (mouseButtonState & Qt::MiddleButton)
+    if (mouseButtons & Qt::MiddleButton)
     {
         state |= M_MB;
     }
-    if (mouseButtonState & Qt::RightButton)
+    if (mouseButtons & Qt::RightButton)
     {
         state |= R_MB;
     }
@@ -449,26 +461,57 @@ bool E2Screen::IsNumLockOn() const
 #ifdef _WIN32
     return (0x0001U & GetKeyState(VK_NUMLOCK)) != 0U;
 #else
-#ifdef UNIX
-    Display *display = QX11Info::display();
-    unsigned int state;
+#if defined(UNIX) && !defined(X_DISPLAY_MISSING)
+    Display *display = nullptr;
 
-    if (Success != XkbGetIndicatorState(display, XkbUseCoreKbd, &state))
+    if (qApp->platformName() == "xcb")
     {
-        return false;
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 2, 0))
+        auto *x11App =
+            qApp->nativeInterface<QNativeInterface::QX11Application>();
+        if (x11App != nullptr)
+        {
+            display = x11App->display();
+        }
+#else
+    // 6.0.0 <= Qt < 6.2.0
+#error Only Qt6 versions 6.2.0 or higher are supported
+#endif // Qt >= 6.2.0
+#else
+        // Qt < 6.0.0
+        display = QX11Info::display();
+#endif // Qt >= 6.0.0
     }
 
-    return (state & numLockIndicatorMask) != 0;
-#else
-# error Platform not supported
-#endif
-#endif
+    if (display != nullptr)
+    {
+        unsigned int state;
+
+        if (Success != XkbGetIndicatorState(display, XkbUseCoreKbd, &state))
+        {
+            return false;
+        }
+
+        return (state & numLockIndicatorMask) != 0;
+    }
+
+#endif // #if defined(UNIX) && !defined(X_DISPLAY_MISSING)
+#ifdef __linux__
+    // If Linux kernel present read Num Lock LED status from /sys filesystem
+    auto status = sysInfo.Read(BLinuxSysInfoType::LED, "numlock");
+    return std::stoi(status) != 0;
+#endif // #ifdef __linux__
+    return false;
+#endif // #ifdef __WIN32
 }
 
-int E2Screen::TranslateToAscii(QKeyEvent *event)
+int E2Screen::TranslateToPAT09Key(QKeyEvent *event)
 {
     static const auto modifiers =
         Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier;
+    static constexpr int NR = 11; // Number of rows in following table.
+    static constexpr int NC = 4; // Number of columns in following table.
     // On Eurocom II PAT09 keyboard the following keys are mapped:
     //
     // keyboard input           | Eurocom II mapped key
@@ -511,22 +554,33 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
     //     |     |     +--------- Ctrl+key
     //     |     |     |     +--- Shift+Ctrl+key
     //     |     |     |     |
-    static int cursorCtrlCode[11][4] = {
-        { 0xFA, 0xEA, 0xFA, 0xEA }, // Key_Insert
-        { 0xF9, 0xE9, 0xB9, 0xA9 }, // Key_End
-        { 0xF2, 0xE2, 0xB2, 0xA2 }, // Key_Down
-        { 0xF3, 0xE3, 0xB3, 0xA3 }, // Key_PageDown
-        { 0xF4, 0xE4, 0xB4, 0xA4 }, // Key_Left
-        { 0xF5, 0xE5, 0xB5, 0xA5 }, // Key_Clear
-        { 0xF6, 0xE6, 0xB6, 0xA6 }, // Key_Right
-        { 0xF1, 0xE1, 0xB1, 0xA1 }, // Key_Home
-        { 0xF8, 0xE8, 0xB8, 0xA8 }, // Key_Up
-        { 0xF7, 0xE7, 0xB7, 0xA7 }, // Key_PageUp
-        { 0x91, 0x81, 0x91, 0x81 }, // Key_Delete
+    static constexpr std::array <int, NR * NC> cursorCtrlCode = {
+        0xFA, 0xEA, 0xFA, 0xEA, // Key_Insert
+        0xF9, 0xE9, 0xB9, 0xA9, // Key_End
+        0xF2, 0xE2, 0xB2, 0xA2, // Key_Down
+        0xF3, 0xE3, 0xB3, 0xA3, // Key_PageDown
+        0xF4, 0xE4, 0xB4, 0xA4, // Key_Left
+        0xF5, 0xE5, 0xB5, 0xA5, // Key_Clear
+        0xF6, 0xE6, 0xB6, 0xA6, // Key_Right
+        0xF1, 0xE1, 0xB1, 0xA1, // Key_Home
+        0xF8, 0xE8, 0xB8, 0xA8, // Key_Up
+        0xF7, 0xE7, 0xB7, 0xA7, // Key_PageUp
+        0x91, 0x81, 0x91, 0x81, // Key_Delete
     };
-    static int deleteKeyCode[4] = { 0x7F, 0x7F, 0x1F, 0x7F }; // Key_Delete
+    // Define key_code for Delete
+    static constexpr std::array<int, 4> deleteKeyCode{
+        0x7F, 0x7F, 0x1F, 0x7F
+    };
     Word index = event->modifiers() & Qt::ShiftModifier ? 1U : 0U;
     index |= event->modifiers() & Qt::ControlModifier ? 2U : 0U;
+    assert(index < NC);
+
+    // Process keys which behave the same for any modifier set.
+    switch (event->key())
+    {
+        case Qt::Key_Backspace:
+            return 0x08;
+    }
 
     // Process Keypad keys. It depends on the Num Lock indicator.
     if (event->modifiers() & Qt::KeypadModifier)
@@ -535,49 +589,49 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
         {
             case Qt::Key_0:
             case Qt::Key_Insert:
-                return IsNumLockOn() ? 0x30 : cursorCtrlCode[0][index];
+                return IsNumLockOn() ? 0x30 : cursorCtrlCode[0 * NC + index];
 
             case Qt::Key_1:
             case Qt::Key_End:
-                return IsNumLockOn() ? 0x31 : cursorCtrlCode[1][index];
+                return IsNumLockOn() ? 0x31 : cursorCtrlCode[1 * NC + index];
 
             case Qt::Key_2:
             case Qt::Key_Down:
-                return IsNumLockOn() ? 0x32 : cursorCtrlCode[2][index];
+                return IsNumLockOn() ? 0x32 : cursorCtrlCode[2 * NC + index];
 
             case Qt::Key_3:
             case Qt::Key_PageDown:
-                return IsNumLockOn() ? 0x33 : cursorCtrlCode[3][index];
+                return IsNumLockOn() ? 0x33 : cursorCtrlCode[3 * NC + index];
 
             case Qt::Key_4:
             case Qt::Key_Left:
-                return IsNumLockOn() ? 0x34 : cursorCtrlCode[4][index];
+                return IsNumLockOn() ? 0x34 : cursorCtrlCode[4 * NC + index];
 
             case Qt::Key_5:
             case Qt::Key_Clear:
-                return IsNumLockOn() ? 0x35 : cursorCtrlCode[5][index];
+                return IsNumLockOn() ? 0x35 : cursorCtrlCode[5 * NC + index];
 
             case Qt::Key_6:
             case Qt::Key_Right:
-                return IsNumLockOn() ? 0x36 : cursorCtrlCode[6][index];
+                return IsNumLockOn() ? 0x36 : cursorCtrlCode[6 * NC + index];
 
             case Qt::Key_7:
             case Qt::Key_Home:
-                return IsNumLockOn() ? 0x37 : cursorCtrlCode[7][index];
+                return IsNumLockOn() ? 0x37 : cursorCtrlCode[7 * NC + index];
 
             case Qt::Key_8:
             case Qt::Key_Up:
-                return IsNumLockOn() ? 0x38 : cursorCtrlCode[8][index];
+                return IsNumLockOn() ? 0x38 : cursorCtrlCode[8 * NC + index];
 
             case Qt::Key_9:
             case Qt::Key_PageUp:
-                return IsNumLockOn() ? 0x39 : cursorCtrlCode[9][index];
+                return IsNumLockOn() ? 0x39 : cursorCtrlCode[9 * NC + index];
 
             case Qt::Key_Comma:
             case Qt::Key_Period:
             case Qt::Key_Delete:
                 return
-                    IsNumLockOn() ? 0x2E : cursorCtrlCode[10][index];
+                    IsNumLockOn() ? 0x2E : cursorCtrlCode[10 * NC + index];
         }
     }
 
@@ -644,8 +698,6 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
     switch (event->key())
     {
         case Qt::Key_Insert:
-            return -1;
-
         case Qt::Key_degree:
             return -1;
 
@@ -654,31 +706,31 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
             return 0x09;
 
         case Qt::Key_End:
-            return cursorCtrlCode[1][index];
+            return cursorCtrlCode[1 * NC + index];
 
         case Qt::Key_Down:
-            return cursorCtrlCode[2][index];
+            return cursorCtrlCode[2 * NC + index];
 
         case Qt::Key_PageDown:
-            return cursorCtrlCode[3][index];
+            return cursorCtrlCode[3 * NC + index];
 
         case Qt::Key_Left:
-            return cursorCtrlCode[4][index];
+            return cursorCtrlCode[4 * NC + index];
 
         case Qt::Key_Clear:
-            return cursorCtrlCode[5][index];
+            return cursorCtrlCode[5 * NC + index];
 
         case Qt::Key_Right:
-            return cursorCtrlCode[6][index];
+            return cursorCtrlCode[6 * NC + index];
 
         case Qt::Key_Home:
-            return cursorCtrlCode[7][index];
+            return cursorCtrlCode[7 * NC + index];
 
         case Qt::Key_Up:
-            return cursorCtrlCode[8][index];
+            return cursorCtrlCode[8 * NC + index];
 
         case Qt::Key_PageUp:
-            return cursorCtrlCode[9][index];
+            return cursorCtrlCode[9 * NC + index];
 
         case Qt::Key_Delete:
             return deleteKeyCode[index];
@@ -766,7 +818,7 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
             break;
     }
 
-    if (event->text().size() == 1 && !(event->text()[0].unicode() & 0xFF80))
+    if (event->text().size() == 1 && !(event->text()[0].unicode() & 0xFF80U))
     {
         return event->text()[0].unicode();
     }
@@ -776,32 +828,63 @@ int E2Screen::TranslateToAscii(QKeyEvent *event)
 
 void E2Screen::InitializeNumLockIndicatorMask()
 {
-#ifdef UNIX
-    Display *display = QX11Info::display();
-    XkbDescRec* kbDesc = XkbAllocKeyboard();
-    int index;
+#if defined(UNIX) && !defined(X_DISPLAY_MISSING)
+    Display *display = nullptr;
 
-    if (display == nullptr || kbDesc == nullptr ||
-        (Success != XkbGetNames(display, XkbIndicatorNamesMask, kbDesc)))
+    if (qApp->platformName() == "xcb")
     {
-        return;
-    }
-
-    for (index = 0; index < XkbNumIndicators; ++index)
-    {
-        if (kbDesc->names->indicators[index])
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 2, 0))
+        auto *x11App =
+            qApp->nativeInterface<QNativeInterface::QX11Application>();
+        if (x11App != nullptr)
         {
-           char *name = XGetAtomName(display, kbDesc->names->indicators[index]);
-           if (0 == strcmp(name, "Num Lock"))
-           {
-               numLockIndicatorMask = 1 << index;
-               break;
-           }
-           XFree(name);
+            display = x11App->display();
         }
+#else
+    // 6.0.0 <= Qt < 6.2.0
+#error Only Qt6 versions 6.2.0 or higher are supported
+#endif // Qt >= 6.2.0
+#else
+        // Qt < 6.0.0
+        display = QX11Info::display();
+#endif // Qt >= 6.0.0
     }
 
-    XkbFreeKeyboard(kbDesc, 0, True);
-#endif
+    if (display != nullptr)
+    {
+        XkbDescRec* kbDesc = XkbAllocKeyboard();
+        uint32_t index;
+
+        if (display == nullptr || kbDesc == nullptr ||
+            (Success != XkbGetNames(display, XkbIndicatorNamesMask, kbDesc)))
+        {
+            return;
+        }
+
+        for (index = 0; index < XkbNumIndicators; ++index)
+        {
+            static const std::string strNumLock{"Num Lock"};
+
+            if (!kbDesc->names->indicators[index])
+            {
+                continue;
+            }
+
+            char *atomName =
+                XGetAtomName(display, kbDesc->names->indicators[index]);
+
+            if (0 == strNumLock.compare(atomName))
+            {
+                numLockIndicatorMask = 1U << index;
+                XFree(atomName);
+                break;
+            }
+            XFree(atomName);
+        }
+
+        XkbFreeKeyboard(kbDesc, 0, True);
+    }
+#endif // #if defined(UNIX) && !defined(X_DISPLAY_MISSING)
 }
 

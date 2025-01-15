@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,34 +43,40 @@ class Inout : public BObserver
 private:
     Memory &memory;
     const struct sOptions &options;
-    Mc146818 *rtc; // RTC is an optional device
-    AbstractGui *gui;
-    int local_serpar_address;
+    Mc146818 *rtc{nullptr}; // RTC is an optional device
+    AbstractGui *gui{nullptr};
+    int local_serpar_address{-1};
 
 public:
-    void    update_1_second();
-    void    set_rtc(Mc146818 *x_rtc);
-    void    set_gui(AbstractGui *x_gui);
+    void update_1_second();
+    void set_rtc(Mc146818 *p_rtc);
+    void set_gui(AbstractGui *p_gui);
 
     // Communication with GUI
 public:
-    bool    output_to_terminal();
-    bool    output_to_graphic();
-    bool    is_gui_present();
+    bool output_to_terminal();
+    bool output_to_graphic();
+    bool is_gui_present();
+    void write_char_serial(Byte value);
 
     // local interface
 public:
     bool is_serpar_address_valid() const;
     Word serpar_address() const;
     void serpar_address(int value);
+    int read_serpar() const;
 
     // BObserver interface
 public:
     void UpdateFrom(NotifyId id, void *param = nullptr) override;
 
 public:
-    Inout(const struct sOptions &x_options, Memory &x_memory);
-    ~Inout();
+    Inout(const struct sOptions &p_options, Memory &p_memory);
+    ~Inout() override = default;
+    Inout(const Inout &src) = delete;
+    Inout(Inout &&src) = delete;
+    Inout &operator=(const Inout &src) = delete;
+    Inout &operator=(Inout &&src) = delete;
 };
 
 #endif // INOUT_INCLUDED

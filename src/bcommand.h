@@ -5,7 +5,7 @@
     Basic class providing base class for a command pattern
     (See the book Go4)
 
-    Copyright (C) 2003-2022  W. Schwotzer
+    Copyright (C) 2003-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -31,11 +31,11 @@ class BCommand
 {
 
 public:
-    virtual ~BCommand();
+    virtual ~BCommand() = default;
     virtual void Execute() = 0;
 
 protected:
-    BCommand();
+    BCommand() = default;
 };
 
 using BCommandPtr = std::unique_ptr<BCommand>;

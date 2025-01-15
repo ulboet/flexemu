@@ -4,20 +4,29 @@
 <meta charset="UTF-8">
 <link href='https://fonts.googleapis.com/css?family=Courier%20Prime' rel='stylesheet'>
 <link rel="stylesheet" href="flexemu.css">
-<title>Flexemu Monitor program neumon54.hex</title>
+<title>Flexemu Monitor program V5.4 spec</title>
 </head>
 <body>
-<h1 id="neumon54">Flexemu Monitor program neumon54.hex</h1>
+<h1 id="neumon54">Flexemu Monitor program V5.4 spec</h1>
 <hr>
 
 <div class="justify">
-The monitor program provides basic I/O functions to the operating system. It
-is comparable to the BIOS on a PC.
+ The monitor program provides basic I/O
+ functions to the operating system. It is comparable to the BIOS on a PC.
 <p>
-But in addition it provides a simple user
-interface to display or change memory contents or boot FLEX operating system.
+But in addition it provides a simple command line interface to display or
+change memory contents, or set, display or clear breakpoints.
 From within FLEX the monitor program can be entered by entering MON on the
-FLEX prompt.
+FLEX prompt. From the monitor program FLEX can be reentered with X or G CD03.
+<p>
+This documentation describes the monitor programs V5.4 spec, also called
+neumon54 as deployed with flexemu as file neumon54.hex. It is designed to
+support Eurocom II/V7 with or without memory extension board. It has a FLEX
+boot loader and automatically boots FLEX if a disk is inserted in drive #0.
+The command input is case insensitive.
+<p>
+This <a href="flexemu.htm#monitor">monitor program overview</a> shows
+which monitor program is best suited for which hardware configuration.
 <p>
 The following table gives an overview of the available commands:
 <p>
@@ -36,20 +45,38 @@ The following table gives an overview of the available commands:
  </tr>
  <tr>
   <td>G XXXX</td>
-  <td>Start a user program located at address XXXX</td>
+  <td>Jump to address XXXX</td>
  </tr>
  <tr>
   <td>K</td>
-  <td>Boot from disk #0</td>
+  <td>Boot from disk in drive #0</td>
  </tr>
  <tr>
   <td>M XXXX</td>
-  <td>Display or modify memory beginning from address XXXX. Additional keys
-  can be entered: . redisplay same address (try with address FD00, it
-  displays the actual seconds of the real time clock). CTRL-J or / displays
-  the next memory location. ^ displays the previous memory location. Entering
-  a two digit hex number changes the memory. Pressing Enter leaves the M
-  command.</td>
+  <td>Display and modify memory at address XXXX.
+  <BR><BR>
+  .
+  <BR>
+  Redisplay contents of current address (Try with address FD00, it displays
+  the actual seconds of the real time clock).
+  <BR><BR>
+  CTRL-J or /
+  <BR>
+  Display contents of next address.
+  <BR><BR>
+  ^
+  <BR>
+  Display contents of previous address.
+  <BR><BR>
+  ZZ
+  <BR>
+  Entering a two digit hex number changes the memory at current address.
+  <BR><BR>
+  ENTER or CTRL-X
+  <BR>
+  Leaving M command.
+  <BR>
+  </td>
  </tr>
  <tr>
   <td style="min-width: 9em">P XXXX YYYY ZZ</td>
@@ -61,11 +88,12 @@ The following table gives an overview of the available commands:
  </tr>
  <tr>
   <td>V</td>
-  <td>Switch to video terminal mode (not supported on the emulator)</td>
+  <td>Terminal mode: Any input and output is sent or received from or to
+   serial port.</td>
  </tr>
  <tr>
   <td>X</td>
-  <td>Go back to FLEX (Warm start)</td>
+  <td>Jump back to FLEX (Warm start)</td>
  </tr>
  <tr>
   <td>Z</td>
@@ -89,7 +117,7 @@ the following Control- and Escape-sequences:
 <p>
 <table>
  <tr>
-  <th>Input</th>
+  <th>Control<br>character</th>
   <th>Description</th>
  </tr>
  <tr>
@@ -118,15 +146,11 @@ the following Control- and Escape-sequences:
  </tr>
  <tr>
   <td>CTRL-N</td>
-  <td>Scroll up one line</td>
+  <td>Scroll up one line, keep cursor position</td>
  </tr>
  <tr>
   <td>CTRL-O</td>
-  <td>Scroll down one line</td>
- </tr>
- <tr>
-  <td>CTRL-O</td>
-  <td>Scroll down one line</td>
+  <td>Scroll down one line, keep cursor position</td>
  </tr>
  <tr>
   <td>CTRL-Q</td>
@@ -149,10 +173,6 @@ the following Control- and Escape-sequences:
   <td>Switch cursor on</td>
  </tr>
  <tr>
-  <td>CTRL-S</td>
-  <td>Cursor right one character</td>
- </tr>
- <tr>
   <td>ESC or CTRL-[</td>
   <td>Start ESCAPE sequence</td>
  </tr>
@@ -170,28 +190,32 @@ The following Escape sequences are available:
 <p>
 <table>
  <tr>
-  <th>Input</th>
+  <th>ESC sequence</th>
   <th>Description</th>
  </tr>
  <tr>
+  <td>ESC = X Y</td>
+  <td>Set cursor to line Y and column X. X and Y have an offset of $20</td>
+ </tr>
+ <tr>
   <td>ESC A XX YY</td>
-  <td>Plot a Dot</td>
+  <td>Plot a dot</td>
  </tr>
  <tr>
   <td>ESC B</td>
-  <td>Delete line</td>
+  <td>Delete line, scroll lines beyond the cursor line one line up</td>
  </tr>
  <tr>
   <td>ESC C</td>
-  <td>Insert line</td>
+  <td>Insert line, scroll lines on and beyond the cursor line one line down</td>
  </tr>
  <tr>
   <td>ESC D</td>
   <td>Switch to german character set</td>
  </tr>
  <tr>
-  <td>ESC E YY XX</td>
-  <td>Set Cursor to line YY and Column XX. XX, YY have an offset of $20</td>
+  <td>ESC E Y X</td>
+  <td>Set cursor to line Y and column X. X and Y have an offset of $20</td>
  </tr>
  <tr>
   <td>ESC F</td>
@@ -206,35 +230,45 @@ The following Escape sequences are available:
   <td>Switch to ASCII character set</td>
  </tr>
  <tr>
-  <td>ESC = XX YY</td>
-  <td>Set Cursor to line YY and Column XX. XX, YY have an offset of $20</td>
- </tr>
- <tr>
-  <td>ESC P or ESC p</td>
-  <td>Switch inverse video on</td>
- </tr>
- <tr>
-  <td>ESC Q or ESC q</td>
-  <td>Switch inverse video off</td>
- </tr>
- <tr>
   <td>ESC K or ESC L</td>
   <td>Erase to end of line</td>
  </tr>
  <tr>
-  <td>ESC Z or ESC k or ESC S</td>
+  <td>ESC P or ESC p</td>
+  <td>Switch inverse character output on</td>
+ </tr>
+ <tr>
+  <td>ESC Q or ESC q</td>
+  <td>Switch inverse character output off</td>
+ </tr>
+ <tr>
+  <td style="min-width: 14em">ESC Z, ESC k or ESC S</td>
   <td>Erase to end of screen</td>
  </tr>
 </table>
 <p>
-On Linux there is a mode to use flexemu in terminal only mode. No special
-version of Monitor program is needed any more. It simply can be started by:
+<table class="invisible compact">
+ <tr>
+  <td>X or Y:</td>
+  <td>Any charcter.</td>
+ </tr>
+ <tr>
+  <td>XX or YY:</td>
+  <td>Any two characters.</td>
+ </tr>
+</table>
+<p>
+<p>
+On Unix like OS there is a mode to use flexemu in terminal only mode.
+No special version of Monitor program is needed any more. It simply can be
+started by:
 <b>flexemu -t</b>.
 <p>
 Flexemu can also be used with other monitor programs as long as they support
 the special hardware needs of the Eurocom II/V7.
 <p>
-Flexemu ships with complete source code of neumon54.
+The source code of neumon54 is part of flexemu deployment, see file
+neumon54.asm or neumon54.lst.
 </div>
 
 <h2>SEE ALSO</h2>
@@ -248,6 +282,8 @@ Flexemu ships with complete source code of neumon54.
  <li><a href="flexerr.htm"> FLEX Error Messages</a>
  <li><a href="flexfcb.htm"> FLEX File Control Block (FCB)</a>
  <li><a href="flexmem.htm"> FLEX Memory Map</a>
+ <li><a href="mon53_54.htm"> Monitor program mon53.s19 and mon54.s19</a>
+ <li><a href="monu54.htm"> Monitor program monu54-6.s19</a>
  <li><a href="mon24.htm"> Monitor program mon24.s19</a>
  <li><a href="e2hwdesc.htm"> Eurocom II hardware description</a>
  <li><a href="mc6809.htm"> Motorola MC6809</a>
@@ -271,7 +307,15 @@ Flexemu ships with complete source code of neumon54.
  <li><a href="ba2bqs.pdf" target="_blank">BASIC Answers to BASIC Questions</a>
  <li><a href="basprec.pdf" target="_blank">BASIC Precompiler User's Manual</a>
  <li><a href="f77.pdf" target="_blank">Fortan 77</a>
-     <li><a href="util_man.pdf" target="_blank">Windrush FLEX Utilities Package</a>
+ <li><a href="util_man.pdf" target="_blank">Windrush FLEX Utilities Package</a>
+</ul>
+<h2 id="OtherLinks">Other Documents</h2>
+
+<ul>
+ <li><a href=cedric.pdf target=_blank>Cedric screen editor</a>
+ <li><a href="dynastar.pdf" target="_blank">Dynastar screen editor and text processor</a>
+ <li><a href="just.pdf" target="_blank">Just text processor</a>
+ <li><a href="TSC_Text_Processor.pdf" target="_blank">TSC Text Processor</a>
 </ul>
 
 <h2>Related Links</h2>

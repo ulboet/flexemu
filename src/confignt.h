@@ -4,7 +4,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,9 +24,6 @@
 #ifndef CONFIG_INCLUDED
 #define CONFIG_INCLUDED
 
-/* Uncomment the following if You want native file system support */
-
-#define NAFS
 
 /* uncomment the following if the Disassembler should display FLEX entry
    addresses by symbolic names */
@@ -143,7 +140,7 @@
 #define PACKAGE_NAME "Flexemu"
 
 /* Version number of package */
-#define VERSION "3.12"
+#define VERSION "3.28"
 
 #endif /* CONFIG_INCLUDED */
 

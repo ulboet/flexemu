@@ -3,7 +3,7 @@
 
 
     Basic class used for directory functions
-    Copyright (C) 1999-2022  W. Schwotzer
+    Copyright (C) 1999-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -31,39 +31,39 @@
 #include <string>
 
 
-typedef std::vector<std::string> tPathList;
+using PathList_t = std::vector<std::string>;
 
 class BDirectory
 {
 private:
-    std::string m_path;
+    std::string path;
 
 public:
-    static bool Exists(const std::string &aPath);
-    static bool Remove(const std::string &aPath);
-    static bool Create(const std::string &aPath, int mode = 0755);
-    static bool RemoveRecursive(const std::string &aPath);
-    static tPathList GetSubDirectories(const std::string &aPath);
-    static tPathList GetFiles(const std::string &aPath);
+    static bool Exists(const std::string &p_path);
+    static bool Remove(const std::string &p_path);
+    static bool Create(const std::string &p_path, int mode = 0755);
+    static bool RemoveRecursive(const std::string &p_path);
+    static PathList_t GetSubDirectories(const std::string &p_path);
+    static PathList_t GetFiles(const std::string &p_path);
 
-    BDirectory();
-    BDirectory(std::string &path) : m_path(path) { };
-    ~BDirectory();
+    BDirectory() = default;
+    explicit BDirectory(std::string &p_path) : path(p_path) { };
+    ~BDirectory() = default;
 
-    inline void SetPath(std::string &path)
+    inline void SetPath(std::string &p_path)
     {
-        m_path = path;
+        path = p_path;
     };
     inline const std::string &GetPath() const
     {
-        return m_path;
+        return path;
     };
     bool Exists() const;
     bool Remove() const;
     bool Create(int mode = 0755) const;
     bool RemoveRecursive() const;
-    tPathList GetSubDirectories() const;
-    tPathList GetFiles() const;
+    PathList_t GetSubDirectories() const;
+    PathList_t GetFiles() const;
 };
 
 #endif // BDIR_INCLUDED

@@ -2,8 +2,8 @@
     fpmdich.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -41,9 +41,13 @@
 #include <QItemSelectionModel>
 #include <QClipboard>
 #include <QApplication>
+#include <QDir>
+#include <QProgressDialog>
 #include "warnon.h"
 #include <cassert>
 #include <string>
+#include <limits>
+#include <memory>
 #include "fcopyman.h"
 #include "fpdnd.h"
 #include "fpmodel.h"
@@ -51,9 +55,15 @@
 #include "fpmdich.h"
 #include "sfpopts.h"
 #include "fpcnvui.h"
+#include "qtfree.h"
 
-const QString FlexplorerMdiChild::mimeTypeFlexDiskImageFile =
-                                      "application/x-flexdiskimagefile";
+const QString &FlexplorerMdiChild::GetMimeTypeFlexDiskImageFile()
+{
+    static const QString mimeTypeFlexDiskImageFile
+        {"application/x-flexdiskimagefile"};
+
+    return mimeTypeFlexDiskImageFile;
+}
 
 FlexplorerMdiChild::FlexplorerMdiChild(const QString &path,
                                        struct sFPOptions &p_options) :
@@ -71,25 +81,26 @@ FlexplorerMdiChild::FlexplorerMdiChild(const QString &path,
     // Set column for unique Id hidden.
     setColumnHidden(FlexplorerTableModel::COL_ID, true);
 
-    dateDelegate.reset(new FlexDateDelegate(options.ft_access, this));
-    dateTimeDelegate.reset(new FlexDateTimeDelegate(options.ft_access, this));
+    dateDelegate = std::make_unique<FlexDateDelegate>(options.ft_access, this);
+    dateTimeDelegate =
+        std::make_unique<FlexDateTimeDelegate>(options.ft_access, this);
     UpdateDateDelegate();
-    filenameDelegate.reset(new FlexFilenameDelegate(this));
+    filenameDelegate = std::make_unique<FlexFilenameDelegate>(this);
     setItemDelegateForColumn(FlexplorerTableModel::COL_FILENAME,
                              filenameDelegate.get());
-    attributesDelegate.reset(
-            new FlexAttributesDelegate(GetSupportedAttributes(), this));
+    attributesDelegate = std::make_unique<FlexAttributesDelegate>(
+                             GetSupportedAttributes(), this);
     setItemDelegateForColumn(FlexplorerTableModel::COL_ATTRIBUTES,
                              attributesDelegate.get());
     setSelectionBehavior(QAbstractItemView::SelectRows);
     setEditTriggers(QAbstractItemView::DoubleClicked |
                     QAbstractItemView::EditKeyPressed);
-    setSortingEnabled(true);
-    model->sort(FlexplorerTableModel::COL_FILENAME, Qt::AscendingOrder);
-}
 
-FlexplorerMdiChild::~FlexplorerMdiChild()
-{
+    // Although sorting not yet enabled this initiates a first sorting.
+    horizontalHeader()->setSortIndicator(FlexplorerTableModel::COL_FILENAME,
+                                         Qt::AscendingOrder);
+    setSortingEnabled(true);
+    model->UpdateFileSizeHeaderName();
 }
 
 QString FlexplorerMdiChild::GetPath() const
@@ -110,16 +121,16 @@ bool FlexplorerMdiChild::IsWriteProtected() const
     return model->IsWriteProtected();
 }
 
-int FlexplorerMdiChild::GetContainerType() const
+DiskType FlexplorerMdiChild::GetFlexDiskType() const
 {
     assert(model);
-    return model->GetContainerType();
+    return model->GetFlexDiskType();
 }
 
 QString FlexplorerMdiChild::GetSupportedAttributes() const
 {
     assert(model);
-    return QString(model->GetSupportedAttributes().c_str());
+    return {model->GetSupportedAttributes().c_str()};
 }
 
 int FlexplorerMdiChild::GetSelectedFilesCount() const
@@ -127,7 +138,7 @@ int FlexplorerMdiChild::GetSelectedFilesCount() const
     return selectedFilesCount;
 }
 
-int FlexplorerMdiChild::GetSelectedFilesByteSize() const
+unsigned FlexplorerMdiChild::GetSelectedFilesByteSize() const
 {
     return selectedFilesByteSize;
 }
@@ -144,24 +155,36 @@ void FlexplorerMdiChild::DeselectAll()
     selectedFilesByteSize = 0;
 }
 
-int FlexplorerMdiChild::FindFiles(const QString &pattern)
+QVector<int>::size_type FlexplorerMdiChild::FindFiles(const QString &pattern)
 {
     assert(model);
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     auto rowIndices = model->FindFiles(pattern);
     MultiSelect(rowIndices);
+    QApplication::restoreOverrideCursor();
 
     return rowIndices.count();
 }
 
-int FlexplorerMdiChild::DeleteSelected()
+QVector<int>::size_type FlexplorerMdiChild::DeleteSelected()
 {
     auto selectedRows = selectionModel()->selectedRows();
+    QProgressDialog progress(tr("Delete files ..."), tr("&Cancel"), 0,
+                             cast_from_qsizetype(selectedRows.size() - 1), this);
     int count = 0;
 
+    progress.show();
     std::reverse(selectedRows.begin(), selectedRows.end());
 
     for (auto &index : selectedRows)
     {
+        QApplication::processEvents();
+        progress.setValue(count);
+        if (progress.wasCanceled())
+        {
+            break;
+        }
+
         try
         {
             model->DeleteFile(index);
@@ -186,15 +209,29 @@ int FlexplorerMdiChild::DeleteSelected()
     return count;
 }
 
-int FlexplorerMdiChild::InjectFiles(const QStringList &filePaths)
+QVector<int>::size_type FlexplorerMdiChild::InjectFiles(
+                        const QStringList &filePaths)
 {
+    QProgressDialog progress(tr("Inject files ..."), tr("&Cancel"), 0,
+                             cast_from_qsizetype(filePaths.size() - 1), this);
     QVector<int> rowIndices;
+    auto index = 0;
 
-    for (const auto &filePath : filePaths)
+    progress.show();
+    for (const auto &path : filePaths)
     {
         FlexFileBuffer buffer;
 
-        if (!buffer.ReadFromFile(filePath.toUtf8().data()))
+        QApplication::processEvents();
+        progress.setValue(index++);
+        if (progress.wasCanceled())
+        {
+            break;
+        }
+
+        const auto filePath = QDir::toNativeSeparators(path);
+        if (!buffer.ReadFromFile(filePath.toStdString(), options.ft_access,
+                    true))
         {
             auto msg = tr("Error reading from\n%1\nInjection aborted.");
             msg = msg.arg(filePath);
@@ -237,12 +274,13 @@ int FlexplorerMdiChild::InjectFiles(const QStringList &filePaths)
 
         try
         {
-            auto rowIndicesFound = model->FindFiles(buffer.GetFilename());
+            auto rowIndicesFound =
+                model->FindFiles(buffer.GetFilename().c_str());
             if (!rowIndicesFound.isEmpty())
             {
                 auto msg = tr("%1\nalready exists. Overwrite?");
 
-                msg = msg.arg(buffer.GetFilename());
+                msg = msg.arg(buffer.GetFilename().c_str());
                 auto answer = QMessageBox::question(this, "FLEXplorer", msg,
                               QMessageBox::Yes | QMessageBox::No,
                               QMessageBox::Yes);
@@ -282,13 +320,24 @@ int FlexplorerMdiChild::InjectFiles(const QStringList &filePaths)
     return rowIndices.count();
 }
 
-int FlexplorerMdiChild::ExtractSelected(const QString &targetDirectory)
+QVector<int>::size_type FlexplorerMdiChild::ExtractSelected(
+                        const QString &targetDirectory)
 {
     auto selectedRows = selectionModel()->selectedRows();
-    int count = 0;
+    QProgressDialog progress(tr("Extract files ..."), tr("&Cancel"), 0,
+                             cast_from_qsizetype(selectedRows.size() - 1), this);
+    QVector<int>::size_type count = 0;
 
+    progress.show();
     for (auto &index : selectedRows)
     {
+        QApplication::processEvents();
+        progress.setValue(cast_from_qsizetype(count));
+        if (progress.wasCanceled())
+        {
+            break;
+        }
+
         try
         {
             QString filename = model->GetFilename(index);
@@ -327,7 +376,10 @@ int FlexplorerMdiChild::ExtractSelected(const QString &targetDirectory)
                 }
             }
 
-            auto targetFilename = filename.toLower();
+            auto targetFilename = filename;
+#ifdef UNIX
+            targetFilename = targetFilename.toLower();
+#endif
             auto targetPath = targetDirectory + PATHSEPARATORSTRING +
                               targetFilename;
 
@@ -352,10 +404,11 @@ int FlexplorerMdiChild::ExtractSelected(const QString &targetDirectory)
                 }
             }
 
-            if (!buffer.WriteToFile(targetPath.toUtf8().data()))
+            if (!buffer.WriteToFile(targetPath.toStdString(),
+                        options.ft_access, true))
             {
                 throw FlexException(FERR_UNABLE_TO_CREATE,
-                                    targetFilename.toUtf8().data());
+                                    targetFilename.toStdString());
             }
 
             ++count;
@@ -380,15 +433,14 @@ int FlexplorerMdiChild::ExtractSelected(const QString &targetDirectory)
     return count;
 }
 
-int FlexplorerMdiChild::ViewSelected()
+QVector<int>::size_type FlexplorerMdiChild::ViewSelected()
 {
     auto selectedRows = selectionModel()->selectedRows();
-    int count = 0;
+    QVector<int>::size_type count = 0;
 
     for (auto &index : selectedRows)
     {
-        auto filename = model->GetFilename(index).toStdString();
-        strlower(filename);
+        auto filename(flx::tolower(model->GetFilename(index).toStdString()));
 
         try
         {
@@ -406,13 +458,14 @@ int FlexplorerMdiChild::ViewSelected()
 #ifdef _WIN32
             // Windows ShellExtensions works best with a
             // well known file extension.
-            if (getFileExtension(filename.c_str()) != ".txt")
+            if (flx::getFileExtension(filename.c_str()) != ".txt")
             {
                 filename += ".txt";
             }
 #endif
 
-            auto tempPath = getTempPath() + PATHSEPARATORSTRING "flexplorer";
+            auto tempPath = flx::getTempPath() + PATHSEPARATORSTRING +
+                "flexplorer";
 
             if (!BDirectory::Exists(tempPath))
             {
@@ -423,7 +476,7 @@ int FlexplorerMdiChild::ViewSelected()
             }
 
             tempPath += PATHSEPARATORSTRING +
-                        getFileName(GetPath().toUtf8().data());
+                        flx::getFileName(GetPath().toStdString());
             if (!BDirectory::Exists(tempPath))
             {
                 if (!BDirectory::Create(tempPath))
@@ -432,10 +485,10 @@ int FlexplorerMdiChild::ViewSelected()
                 }
             }
 
-            const std::string tempFile =
-                tempPath + PATHSEPARATORSTRING + filename;
+            std::string tempFile(tempPath);
+            tempFile.append(PATHSEPARATORSTRING).append(filename);
 
-            if (buffer.WriteToFile(tempFile.c_str()))
+            if (buffer.WriteToFile(tempFile, options.ft_access))
             {
 #ifdef _WIN32
                 SHELLEXECUTEINFO execInfo;
@@ -494,7 +547,7 @@ QVector<Byte> FlexplorerMdiChild::GetSelectedAttributes() const
     return model->GetAttributes(selectionModel()->selectedRows());
 }
 
-QVector<QString> FlexplorerMdiChild::GetSelectedFilenames() const
+QStringList FlexplorerMdiChild::GetSelectedFilenames() const
 {
     return model->GetFilenames(selectionModel()->selectedRows());
 }
@@ -507,7 +560,7 @@ int FlexplorerMdiChild::SetSelectedAttributes(Byte setMask, Byte clearMask)
     {
         Byte oldAttributes;
         auto filename = model->GetFilename(index);
-        
+
         if (model->GetAttributes(index, oldAttributes))
         {
             FlexDirEntry dirEntry;
@@ -520,7 +573,7 @@ int FlexplorerMdiChild::SetSelectedAttributes(Byte setMask, Byte clearMask)
                 continue;
             }
 
-            QString attributesString = 
+            QString attributesString =
                 dirEntry.GetAttributesString().c_str();
             auto attribIndex = model->index(index.row(),
                                       FlexplorerTableModel::COL_ATTRIBUTES);
@@ -551,11 +604,11 @@ int FlexplorerMdiChild::SetSelectedAttributes(Byte setMask, Byte clearMask)
 
 void FlexplorerMdiChild::Info()
 {
-    FlexContainerInfo info;
+    FlexDiskAttributes diskAttributes;
 
     try
     {
-        info = model->GetContainerInfo();
+        diskAttributes = model->GetFlexDiskAttributes();
     }
     catch (FlexException &ex)
     {
@@ -565,68 +618,20 @@ void FlexplorerMdiChild::Info()
 
     int tracks;
     int sectors;
-    info.GetTrackSector(tracks, sectors);
+    diskAttributes.GetTrackSector(tracks, sectors);
 
-    auto title = 
-        QString::asprintf(
-                "Container %s #%u", info.GetName().c_str(), info.GetNumber());
+    auto title = tr("Disk image %1 #%2")
+        .arg(diskAttributes.GetName().c_str())
+        .arg(diskAttributes.GetNumber());
 
-    QString str = tr("Path: ");
-    str += QString(info.GetPath().c_str()).append("\n");
-    str += tr("Type: ");
-    str += QString(info.GetTypeString().c_str()).append("\n");
-    str += tr("Date: ");
-    auto &date = info.GetDate();
-    QDate qdate(date.GetYear(), date.GetMonth(), date.GetDay());
-    str += qdate.toString().append("\n");
-    if (tracks != 0 && sectors != 0)
-    {
-        str += tr("Tracks: ");
-        str += QString::number(tracks).append("\n");
-        str += tr("Sectors: ");
-        str += QString::number(sectors).append("\n");
-    }
-    str += tr("Size: ");
-    str += QString::number(info.GetTotalSize() / 1024);
-    str += tr(" KByte").append("\n");
-    str += tr("Free: ");
-    str += QString::number(info.GetFree() / 1024);
-    str += tr(" KByte").append("\n");
-
-    if (info.GetAttributes() & FLX_READONLY)
-    {
-        str += tr("Attributes: read-only").append("\n");
-    }
-    if (info.GetType() & TYPE_DSK_CONTAINER)
-    {
-        auto header = info.GetJvcFileHeader();
-
-        str += tr("JVC header: ");
-        if (header.empty())
-        {
-            str += tr("none");
-        }
-        else
-        {
-            for (Word index = 0; index < header.size(); ++index)
-            {
-                if (index != 0)
-                {
-                    str += ",";
-                }
-                str += QString::number((Word)header[index]);
-            }
-        }
-    }
-
-    QMessageBox::information(this, title, str);
+    OpenDiskStatusDialog(this, title, diskAttributes);
 }
 
 void FlexplorerMdiChild::SetupModel(const QString &path)
 {
-    model.reset(
-        new FlexplorerTableModel(path.toUtf8().data(),
-                                 options.ft_access, this));
+    model = std::make_unique<FlexplorerTableModel>(
+                path.toStdString().c_str(), options, this);
+    model->Initialize();
     setModel(model.get());
 }
 
@@ -639,13 +644,24 @@ void FlexplorerMdiChild::SetupView()
     connect(this, &FlexplorerMdiChild::activated,
             this, &FlexplorerMdiChild::IsActivated);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
-    setAcceptDrops(true);
-    horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
 
-    resize(QSize(400, size().height()));
+    // QHeaderView::ResizeToContents would always optimize the column size
+    // based on it's contents but for large tables it is much too slow.
+    // Instead the column width is set by a simple heuristic and also can be
+    // adapted by the user.
+    ResizeColumns();
+    horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+
+    // For vertical headers the minimum size (=height) is sufficient.
+    auto size = verticalHeader()->minimumSectionSize();
+    verticalHeader()->setDefaultSectionSize(size);
+    verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+
+    setAcceptDrops(true);
 }
 
+// Intentionally do not override QAbstractItemView::selectionChanged().
+// NOLINTNEXTLINE(bugprone-virtual-near-miss)
 void FlexplorerMdiChild::SelectionChanged(
         const QItemSelection &selected,
         const QItemSelection &deselected)
@@ -655,12 +671,8 @@ void FlexplorerMdiChild::SelectionChanged(
         if (index.column() == FlexplorerTableModel::COL_SIZE)
         {
             selectedFilesCount += pmOne;
-            auto itemData = model->itemData(index);
-            if (itemData.contains(Qt::DisplayRole))
-            {
-                selectedFilesByteSize +=
-                    (pmOne * itemData[Qt::DisplayRole].toInt());
-            }
+            auto variant = model->data(index, Qt::DisplayRole);
+            selectedFilesByteSize += pmOne * static_cast<int>(variant.toUInt());
         }
     };
 
@@ -701,7 +713,7 @@ void FlexplorerMdiChild::mouseMoveEvent(QMouseEvent *event)
 
 void FlexplorerMdiChild::dragEnterEvent(QDragEnterEvent *event)
 {
-    if (event->mimeData()->hasFormat(mimeTypeFlexDiskImageFile) &&
+    if (event->mimeData()->hasFormat(GetMimeTypeFlexDiskImageFile()) &&
        !IsWriteProtected())
     {
         if (event->source() != this)
@@ -716,7 +728,7 @@ void FlexplorerMdiChild::dragEnterEvent(QDragEnterEvent *event)
 
 void FlexplorerMdiChild::dragMoveEvent(QDragMoveEvent *event)
 {
-    if (event->mimeData()->hasFormat(mimeTypeFlexDiskImageFile) &&
+    if (event->mimeData()->hasFormat(GetMimeTypeFlexDiskImageFile()) &&
        !IsWriteProtected())
     {
         if (event->source() != this)
@@ -731,7 +743,7 @@ void FlexplorerMdiChild::dragMoveEvent(QDragMoveEvent *event)
 
 void FlexplorerMdiChild::dropEvent(QDropEvent *event)
 {
-    if (event->mimeData()->hasFormat(mimeTypeFlexDiskImageFile) &&
+    if (event->mimeData()->hasFormat(GetMimeTypeFlexDiskImageFile()) &&
        !IsWriteProtected())
     {
         if (event->source() != this)
@@ -758,7 +770,7 @@ QMimeData *FlexplorerMdiChild::GetMimeDataForSelected(int *count)
         return nullptr;
     }
 
-    FlexDnDFiles files(GetPath().toUtf8().data(), getHostName());
+    FlexDnDFiles files(GetPath().toStdString(), flx::getHostName());
 
     for (const auto &index : selectedRows)
     {
@@ -785,14 +797,24 @@ QMimeData *FlexplorerMdiChild::GetMimeDataForSelected(int *count)
         }
     }
 
-    QMimeData *mimeData = new QMimeData;
+    auto *mimeData = new QMimeData;
 
     if (files.GetFileCount() != 0)
     {
         QByteArray itemData;
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
+        static const int int_max = std::numeric_limits<int>::max();
+        if (files.GetFileSize() > static_cast<size_t>(int_max))
+        {
+            delete mimeData;
+            return nullptr;
+        }
+        itemData.resize(static_cast<int>(files.GetFileSize()));
+#else
         itemData.resize(files.GetFileSize());
+#endif
         files.WriteDataTo(reinterpret_cast<Byte *>(itemData.data()));
-        mimeData->setData(mimeTypeFlexDiskImageFile, itemData);
+        mimeData->setData(GetMimeTypeFlexDiskImageFile(), itemData);
     }
 
     QStringList mimeTypes { "text/plain", "text/csv", "text/html" };
@@ -807,7 +829,7 @@ QMimeData *FlexplorerMdiChild::GetMimeDataForSelected(int *count)
 
 void FlexplorerMdiChild::BeginDrag()
 {
-    auto mimeData = GetMimeDataForSelected();
+    auto *mimeData = GetMimeDataForSelected();
 
     if (mimeData != nullptr)
     {
@@ -846,18 +868,18 @@ int FlexplorerMdiChild::PasteFrom(const QMimeData &mimeData)
 {
     int count = 0;
     FlexDnDFiles files;
-    
-    if (!mimeData.hasFormat(mimeTypeFlexDiskImageFile))
+
+    if (!mimeData.hasFormat(GetMimeTypeFlexDiskImageFile()))
     {
         return count;
     }
 
-    QByteArray itemData = mimeData.data(mimeTypeFlexDiskImageFile);
+    QByteArray itemData = mimeData.data(GetMimeTypeFlexDiskImageFile());
 
     files.ReadDataFrom(reinterpret_cast<Byte *>(itemData.data()));
 
-    if (getHostName() == files.GetDnsHostName() &&
-            isPathsEqual(GetPath().toUtf8().data(), files.GetPath()))
+    if (flx::getHostName() == files.GetDnsHostName() &&
+            flx::isPathsEqual(GetPath().toStdString(), files.GetPath()))
     {
         return count;
     }
@@ -885,11 +907,9 @@ int FlexplorerMdiChild::PasteFrom(const QMimeData &mimeData)
 
                 return count;
             }
-            else
-            {
-                QMessageBox::warning(this, tr("FLEXPlorer Error"),
-                                     ex.what(), QMessageBox::Ok);
-            }
+
+            QMessageBox::warning(this, tr("FLEXPlorer Error"),
+                                 ex.what(), QMessageBox::Ok);
         }
     }
     setSortingEnabled(true);
@@ -904,10 +924,10 @@ int FlexplorerMdiChild::PasteFromClipboard()
 
     if (clipboard != nullptr)
     {
-        auto *mimeData = clipboard->mimeData();
+        const auto *mimeData = clipboard->mimeData();
 
         if (mimeData != nullptr &&
-            mimeData->hasFormat(mimeTypeFlexDiskImageFile))
+            mimeData->hasFormat(GetMimeTypeFlexDiskImageFile()))
         {
             return PasteFrom(*mimeData);
         }
@@ -930,7 +950,8 @@ void FlexplorerMdiChild::OnFileTimeAccessChanged()
     {
         update(model->index(row, FlexplorerTableModel::COL_DATE));
     }
-    horizontalHeader()->resizeSections(QHeaderView::ResizeToContents);
+    ResizeColumn(FlexplorerTableModel::COL_DATE,
+                 model->GetColumnMaxStrings()[FlexplorerTableModel::COL_DATE]);
 }
 
 void FlexplorerMdiChild::UpdateDateDelegate()
@@ -947,16 +968,71 @@ void FlexplorerMdiChild::UpdateDateDelegate()
     }
 }
 
+void FlexplorerMdiChild::OnFileSizeTypeHasChanged()
+{
+    static const int ssm4 = SECTOR_SIZE - 4;
+
+    model->UpdateFileSizeColumn();
+    model->UpdateFileSizeHeaderName();
+
+    if (options.fileSizeType == FileSizeType::FileSize)
+    {
+        selectedFilesByteSize = selectedFilesByteSize / ssm4 * SECTOR_SIZE;
+    }
+    else if (options.fileSizeType == FileSizeType::DataSize)
+    {
+        selectedFilesByteSize = selectedFilesByteSize / SECTOR_SIZE * ssm4;
+    }
+}
+
 void FlexplorerMdiChild::MultiSelect(const QVector<int> &rowIndices)
 {
+    // Multi selection with iterating selectRow(rowIndex) is much too slow.
+    // Instead using QItemSelection works.
+    QItemSelection allSelections;
     clearSelection();
     auto selection = selectionMode();
     setSelectionMode(QAbstractItemView::MultiSelection);
 
     for (auto rowIndex : rowIndices)
     {
-        selectRow(rowIndex);
+        auto from = model->index(rowIndex, FlexplorerTableModel::COL_ID);
+        auto to = model->index(rowIndex, FlexplorerTableModel::COL_ATTRIBUTES);
+        QItemSelection singleRowSelection(from, to);
+        allSelections.merge(singleRowSelection, QItemSelectionModel::Select);
     }
+
+    selectionModel()->select(allSelections, QItemSelectionModel::Select);
+
     setSelectionMode(selection);
+}
+
+void FlexplorerMdiChild::ResizeColumn(int column, const QString &text) const
+{
+    QStyleOptionViewItem style;
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    initViewItemOption(&style);
+    auto fontMetrics = QFontMetrics(style.font);
+#else
+    style = viewOptions();
+    auto fontMetrics = QFontMetrics(style.font);
+#endif
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
+    int size = fontMetrics.horizontalAdvance(text);
+#else
+    int size = fontMetrics.width(text);
+#endif
+    horizontalHeader()->resizeSection(column, size);
+}
+
+void FlexplorerMdiChild::ResizeColumns() const
+{
+    int column = 0;
+
+    for (const auto &maxString : model->GetColumnMaxStrings())
+    {
+        ResizeColumn(column++, maxString);
+    }
 }
 

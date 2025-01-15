@@ -2,8 +2,8 @@
     fpnewui.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 
-#include "misc1.h"
 #include "fpnewui.h"
 #include "mdcrtape.h"
 #include "filecnts.h"
@@ -33,11 +32,7 @@
 #include "warnon.h"
 
 FlexplorerNewUi::FlexplorerNewUi() :
-    Ui_FlexplorerNew(), dialog(nullptr), format(TYPE_DSK_CONTAINER)
-{
-}
-
-FlexplorerNewUi::~FlexplorerNewUi()
+    Ui_FlexplorerNew()
 {
 }
 
@@ -47,8 +42,6 @@ void FlexplorerNewUi::setupUi(QDialog &p_dialog)
     Ui_FlexplorerNew::setupUi(dialog);
 
     InitializeWidgets();
-    AddTracksValidator(*e_tracks);
-    AddSectorsValidator(*e_sectors);
     ConnectSignalsWithSlots();
 }
 
@@ -66,7 +59,7 @@ void FlexplorerNewUi::InitializeWidgets()
     cb_diskFormat->setCurrentIndex(0);
 }
 
-void FlexplorerNewUi::TransferDataToDialog(int p_format,
+void FlexplorerNewUi::TransferDataToDialog(DiskType p_disk_type,
                                            int tracks, int sectors,
                                            const QString &path)
 {
@@ -75,84 +68,127 @@ void FlexplorerNewUi::TransferDataToDialog(int p_format,
         throw std::logic_error("setupUi(dialog) has to be called before.");
     }
 
-    format = p_format;
-    switch (format)
+    disk_type = p_disk_type;
+    is_disk_type_valid = true;
+
+    switch (disk_type)
     {
-        case TYPE_FLX_CONTAINER:
+        case DiskType::FLX:
             r_flxFile->setChecked(true);
             break;
-        case TYPE_MDCR_CONTAINER:
-            r_mdcrFile->setChecked(true);
-            break;
+        case DiskType::DSK:
+        case DiskType::Directory:
         default:
-            format = TYPE_DSK_CONTAINER;
+            disk_type = DiskType::DSK;
             r_dskFile->setChecked(true);
             break;
     }
 
-    auto text = QString::asprintf("%d", tracks);
-    e_tracks->setText(text);
-    text = QString::asprintf("%d", sectors);
-    e_sectors->setText(text);
-    e_path->setText(path);
+    e_tracks->setValue(tracks);
+    e_sectors->setValue(sectors);
+
+    if (path.isEmpty())
+    {
+        e_path->setText(defaultPath + PATHSEPARATORSTRING +
+            "new." + GetCurrentFileExtension());
+    }
+    else
+    {
+        e_path->setText(path);
+    }
+    UpdateFilename();
 }
 
 void FlexplorerNewUi::ConnectSignalsWithSlots()
 {
-    QObject::connect(r_dskFile, &QAbstractButton::toggled,
-        this, &FlexplorerNewUi::OnDskFileFormat);
-    QObject::connect(r_flxFile, &QAbstractButton::toggled,
-        this, &FlexplorerNewUi::OnFlxFileFormat);
-    QObject::connect(r_mdcrFile, &QAbstractButton::toggled,
-        this, &FlexplorerNewUi::OnMdcrFileFormat);
-    QObject::connect(e_tracks, &QLineEdit::textChanged,
-        this, &FlexplorerNewUi::OnTrkSecChanged);
-    QObject::connect(e_sectors, &QLineEdit::textChanged,
-        this, &FlexplorerNewUi::OnTrkSecChanged);
-    QObject::connect(cb_diskFormat,
+    connect(r_dskFile, &QAbstractButton::toggled,
+            this, &FlexplorerNewUi::OnDskFileFormat);
+    connect(r_flxFile, &QAbstractButton::toggled,
+            this, &FlexplorerNewUi::OnFlxFileFormat);
+    connect(r_mdcrFile, &QAbstractButton::toggled,
+            this, &FlexplorerNewUi::OnMdcrFileFormat);
+    connect(e_tracks,
 #if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
-                     static_cast<void (QComboBox::*)(int)>(                     
-                         &QComboBox::currentIndexChanged),
+            static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
 #else
-                     QOverload<int>::of(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QSpinBox::valueChanged),
 #endif
-        this, &FlexplorerNewUi::OnFormatChanged);
-    QObject::connect(b_path, &QAbstractButton::clicked,
-        this, &FlexplorerNewUi::OnSelectPath);
+            this, &FlexplorerNewUi::OnTrackChanged);
+    connect(e_sectors,
+#if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
+            static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+#else
+            QOverload<int>::of(&QSpinBox::valueChanged),
+#endif
+            this, &FlexplorerNewUi::OnSectorChanged);
+    connect(cb_diskFormat,
+#if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
+            static_cast<void (QComboBox::*)(int)>(
+                &QComboBox::currentIndexChanged),
+#else
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+#endif
+            this, &FlexplorerNewUi::OnFormatChanged);
+    connect(b_path, &QAbstractButton::clicked,
+            this, &FlexplorerNewUi::OnSelectPath);
 
-    QObject::connect(c_buttonBox, &QDialogButtonBox::accepted,
-        this, &FlexplorerNewUi::OnAccepted);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::rejected,
+    connect(c_buttonBox, &QDialogButtonBox::accepted,
+            this, &FlexplorerNewUi::OnAccepted);
+    connect(c_buttonBox, &QDialogButtonBox::rejected,
             this, &FlexplorerNewUi::OnRejected);
 }
 
 int FlexplorerNewUi::GetTracks() const
 {
-    return e_tracks->text().toInt();
+    return e_tracks->value();
 }
 
 int FlexplorerNewUi::GetSectors() const
 {
-    return e_sectors->text().toInt();
+    return e_sectors->value();
 }
 
 QString FlexplorerNewUi::GetPath() const
 {
-    return e_path->text();
+    auto path = QDir::toNativeSeparators(e_path->text());
+
+    auto pIdx = path.lastIndexOf(PATHSEPARATOR);
+    if (pIdx < 0)
+    {
+        path = defaultPath + PATHSEPARATORSTRING + path;
+    }
+    auto index = path.lastIndexOf('.');
+    if (index < 0 || index < pIdx)
+    {
+        path += "." + GetCurrentFileExtension();
+    }
+
+    return path;
 }
 
-int FlexplorerNewUi::GetFormat() const
+DiskType FlexplorerNewUi::GetDiskType() const
 {
-    return format;
+    return disk_type;
 }
 
+bool FlexplorerNewUi::IsDiskTypeValid() const
+{
+    return is_disk_type_valid;
+}
+
+bool FlexplorerNewUi::IsMDCRDiskActive() const
+{
+    return !is_disk_type_valid;
+}
 
 void FlexplorerNewUi::OnDskFileFormat(bool value)
 {
     if (value)
     {
-        format = TYPE_DSK_CONTAINER;
+        disk_type = DiskType::DSK;
+        is_disk_type_valid = true;
         UpdateFormatTrkSecEnable(false);
+        UpdateFilename();
     }
 }
 
@@ -160,8 +196,10 @@ void FlexplorerNewUi::OnFlxFileFormat(bool value)
 {
     if (value)
     {
-        format = TYPE_FLX_CONTAINER;
+        disk_type = DiskType::FLX;
+        is_disk_type_valid = true;
         UpdateFormatTrkSecEnable(false);
+        UpdateFilename();
     }
 }
 
@@ -169,8 +207,9 @@ void FlexplorerNewUi::OnMdcrFileFormat(bool value)
 {
     if (value)
     {
-        format = TYPE_MDCR_CONTAINER;
+        is_disk_type_valid = false;
         UpdateFormatTrkSecEnable(true);
+        UpdateFilename();
     }
 
 }
@@ -191,26 +230,31 @@ void FlexplorerNewUi::OnFormatChanged(int index)
 
     if (!isFreeDiskFormat)
     {
-        auto trk_sec = flex_formats[index - 1];                             
-        auto text = QString::asprintf("%d", static_cast<int>(trk_sec.trk));
-        e_tracks->setText(text);
-        text = QString::asprintf("%d", static_cast<int>(trk_sec.sec));
-        e_sectors->setText(text);
+        auto trk_sec = flex_formats[index - 1];
+        e_tracks->setValue(trk_sec.trk + 1);
+        e_sectors->setValue(trk_sec.sec);
     }
 
     e_tracks->setEnabled(!isMdcrFormat && isFreeDiskFormat);
     e_sectors->setEnabled(!isMdcrFormat && isFreeDiskFormat);
 }
 
-void FlexplorerNewUi::OnTrkSecChanged()
+void FlexplorerNewUi::OnSectorChanged(int sectors)
 {
-    auto tracks = GetTracks();
-    auto sectors = GetSectors();
+    OnTrkSecChanged(GetTracks(), sectors);
+}
 
+void FlexplorerNewUi::OnTrackChanged(int tracks)
+{
+    OnTrkSecChanged(tracks, GetSectors());
+}
+
+void FlexplorerNewUi::OnTrkSecChanged(int tracks, int sectors)
+{
     bool isWarning = true;
     for (const auto &st : flex_formats)
     {
-        if (st.trk == tracks && st.sec == sectors)
+        if ((st.trk + 1) == tracks && st.sec == sectors)
         {
             isWarning = false;
             break;
@@ -219,92 +263,62 @@ void FlexplorerNewUi::OnTrkSecChanged()
 
     auto msg = tr("Uncommon FLEX disk format. "
                   "This may cause compatibility issues!");
-    auto richText = QString::asprintf("<p style=\"color:orange\">%s</p>",
-                        msg.toUtf8().data());
+    auto richText = QString("<p style=\"color:orange\">%1</p>").arg(msg);
     l_formatWarning->setText(isWarning ? richText : "");
 }
 
 void FlexplorerNewUi::OnSelectPath()
 {
-    QString path(e_path->text());
+    QString caption = tr("Save disk file");
+    QString filter =
+                tr("FLEX disk image files (*.dsk *.flx *.wta);;All files (*.*)");
 
-    if (format == TYPE_MDCR_CONTAINER)
+    if (IsMDCRDiskActive())
     {
-        path = QFileDialog::getSaveFileName(
-            dialog, tr("Select a MDCR file"), path,
-            tr("MDCR containers (*.mdcr);;All files (*.*)"));
-    }
-    else
-    {
-        path = QFileDialog::getSaveFileName(
-            dialog, tr("Select a Disk file"), path,
-            tr("FLEX file containers (*.dsk *.flx *.wta);;All files (*.*)"));
+        caption = tr("Save MDCR file");
+        filter = tr("MDCR containers (*.mdcr);;All files (*.*)");
     }
 
-    if (!path.isEmpty())
+    QFileDialog fileDialog(dialog, caption, defaultPath, filter);
+
+    fileDialog.setFileMode(QFileDialog::AnyFile);
+    fileDialog.setAcceptMode(QFileDialog::AcceptSave);
+    fileDialog.selectFile(e_path->text());
+    fileDialog.setDefaultSuffix(GetCurrentFileExtension());
+
+    if (fileDialog.exec() == QDialog::Accepted)
     {
-        e_path->setText(path);
+        defaultPath =
+            QDir::toNativeSeparators(fileDialog.directory().absolutePath());
+        auto files = fileDialog.selectedFiles();
+        if (!files.empty())
+        {
+            e_path->setText(QDir::toNativeSeparators(files[0]));
+        }
     }
-}
-
-void FlexplorerNewUi::AddTracksValidator(QLineEdit &lineEdit)
-{
-    e_tracks->setValidator(new QIntValidator(2, 255, &lineEdit));
-
-}
-
-void FlexplorerNewUi::AddSectorsValidator(QLineEdit &lineEdit)
-{
-    e_sectors->setValidator(new QIntValidator(6, 255, &lineEdit));
 }
 
 bool FlexplorerNewUi::Validate()
 {
-    if (e_tracks->isEnabled() && !e_tracks->hasAcceptableInput())
-    {
-        auto validator =
-            static_cast<const QIntValidator *>(e_tracks->validator());
-
-        e_tracks->setFocus(Qt::OtherFocusReason);
-        auto message = QString::asprintf(
-                              "Track count is not in the valid\n"
-                              "range of %d ... %d.",
-                              validator->bottom(), validator->top());
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), message);
-
-        return false;
-    }
-
-    if (e_sectors->isEnabled() && !e_sectors->hasAcceptableInput())
-    {
-        auto validator =
-            static_cast<const QIntValidator *>(e_sectors->validator());
-
-        e_sectors->setFocus(Qt::OtherFocusReason);
-        auto message = QString::asprintf(
-                              "Sector count is not in the valid\n"
-                              "range of %d ... %d.",
-                              validator->bottom(), validator->top());
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), message);
-
-        return false;
-    }
-
     if (e_path->text().isEmpty())
     {
         e_path->setFocus(Qt::OtherFocusReason);
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), 
+        QMessageBox::critical(dialog, tr("Flexplorer Error"),
                 tr("File path is invalid"));
 
         return false;
     }
-    else if (QFileInfo::exists(e_path->text()))
+
+    if (QFileInfo::exists(e_path->text()))
     {
         e_path->setFocus(Qt::OtherFocusReason);
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), 
-                tr("File already exists"));
+        auto path = QDir::toNativeSeparators(e_path->text());
+        auto fileName = flx::getFileName(path.toStdString());
+        auto result = QMessageBox::question(dialog, tr("Confirm Save"),
+            QString(fileName.c_str()) +
+            tr(" already exists.\nDo You want to replace it?"));
 
-        return false;
+        return result == QMessageBox::Yes;
     }
 
     return true;
@@ -321,5 +335,64 @@ void FlexplorerNewUi::OnAccepted()
 void FlexplorerNewUi::OnRejected()
 {
     dialog->done(QDialog::Rejected);
+}
+
+QString FlexplorerNewUi::GetDefaultPath() const
+{
+    return defaultPath;
+}
+
+void FlexplorerNewUi::SetDefaultPath(const QString &path)
+{
+    defaultPath = QDir::toNativeSeparators(path);
+}
+
+void FlexplorerNewUi::UpdateFilename()
+{
+    auto fileExtension = QString(".") + GetCurrentFileExtension();
+
+    auto path = QDir::toNativeSeparators(e_path->text());
+    if (path.isEmpty())
+    {
+        path = "new" + fileExtension;
+    }
+    if (path.lastIndexOf(PATHSEPARATOR) < 0)
+    {
+        path = defaultPath + PATHSEPARATORSTRING + path;
+    }
+    auto pIdx = path.lastIndexOf(PATHSEPARATOR);
+    auto index = path.lastIndexOf('.');
+    if (index >= 0 && index > pIdx)
+    {
+        path = path.left(index) + fileExtension;
+    }
+    else if (pIdx >= 0 && pIdx < path.size() - 1)
+    {
+        path = path + fileExtension;
+    }
+    else if (pIdx >= 0 && pIdx == path.size() - 1)
+    {
+        path = path + "new" + fileExtension;
+    }
+    e_path->setText(path);
+}
+
+QString FlexplorerNewUi::GetCurrentFileExtension() const
+{
+    if (IsMDCRDiskActive())
+    {
+        return "mdcr";
+    }
+
+    switch (disk_type)
+    {
+        case DiskType::DSK:
+        case DiskType::Directory:
+            return "dsk";
+        case DiskType::FLX:
+            return "flx";
+    }
+
+    return "";
 }
 

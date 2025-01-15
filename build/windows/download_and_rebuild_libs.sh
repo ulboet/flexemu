@@ -4,7 +4,7 @@
 #
 # syntax:
 #    download_and_rebuild_libs.sh [-d][-V <vs_version][-T <vs_type>]
-#                                 -v <qt_version>
+#                                 [-s][-m <mirror>]-v <qt_version>
 # parameters:
 #   -d:             Delete packages and directories before downloading
 #                   and building them.
@@ -19,6 +19,10 @@
 #                   Syntax: <major>.<minor>.<patch>
 #                   Supported major version is 5 or 6.
 #                   See https://download.qt.io/archive/qt/ for available versions.
+#   -s              Suppress progress bar when downloading files.
+#   -m <mirror>     Use mirror site base url for download. It should contain
+#                   an 'archive' folder. Default is the Qt download site:
+#                   https://download.qt.io.
 #
 # Qt5
 #=====
@@ -58,7 +62,7 @@ function usage() {
     echo ""
     echo "Syntax:"
     echo "   download_and_rebuild_libs.sh [-d][-V <vs_version][-T <vs_type>]"
-    echo "                                -v <qt_version>"
+    echo "                                [-s][-m <mirror>]-v <qt_version>"
     echo "Options:"
     echo "   -d:             Delete Qt downloads and build directories before downloading"
     echo "                   and building them"
@@ -73,12 +77,19 @@ function usage() {
     echo "                   Syntax: <major>.<minor>.<patch>"
     echo "                   Supported major version is 5 or 6. See"
     echo "                   https://download.qt.io/archive/qt/ for available versions."
+    echo "   -s              Suppress progress bar when downloading files."
+    echo "   -m <mirror>     Use mirror site base url for download. It should contain"
+    echo "                   an 'archive' folder. Default is the Qt download site:"
+    echo "                   https://download.qt.io"
 }
 
 qtversion=
 delete=
 vsversion=
 vstype=
+curl_progress=""
+baseurl="https://download.qt.io"
+
 while :
 do
     case "$1" in
@@ -106,6 +117,17 @@ do
         -T)
             if [ -n "$2" ]; then
                 vstype=$2
+                shift
+            else
+                echo "**** Error: Argument for $1 is missing" >&2
+                usage
+                exit 1
+            fi;;
+        -s)
+            curl_progress="-sS";;
+        -m)
+            if [ -n "$2" ]; then
+                baseurl=$2
                 shift
             else
                 echo "**** Error: Argument for $1 is missing" >&2
@@ -220,6 +242,7 @@ else
     fi
 fi
 
+baseurl=`echo $baseurl | sed "s|/$||"`
 vsversion_file="vsversion.ini"
 echo "VS_VERSION=$vsversion" > $vsversion_file
 echo "VS_TYPE=$vstype" >> $vsversion_file
@@ -238,7 +261,9 @@ qtos=""
 if [ "$qtmamiversion" == "5.15" ] && [ $qtpatch -ge 3 ]; then
     qtos="-opensource"
 fi
-qturl=`echo "https://download.qt.io/archive/qt/${qtmamiversion}/${qtversion}/submodules/qtbase-everywhere${qtos}-src-${qtversion}.zip"`
+qtfile=`echo "qtbase-everywhere${qtos}-src-${qtversion}.zip"`
+qturl=`echo "${baseurl}/archive/qt/${qtmamiversion}/${qtversion}/submodules/${qtfile}"`
+md5sums=`echo "${baseurl}/archive/qt/${qtmamiversion}/${qtversion}/submodules/md5sums.txt"`
 
 MSBUILDDISABLENODEREUSE=1
 export MSBUILDDISABLENODEREUSE
@@ -281,25 +306,26 @@ as_doublebslash_windows_path() {
 # $6: Path of the generated batch script
 create_qt_build_script() {
     echo CALL \"$1\" $2 >$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
+    echo IF %ERRORLEVEL% neq 0 GOTO :end >>$6
     echo SET _ROOT=$3 >>$6
     echo SET PATH=\%_ROOT\%\\bin\;\%PATH\% >>$6
     echo SET _ROOT= >>$6
-    echo >>$6
     echo cd \"$4\" >>$6
     echo CALL \"$3\\configure.bat\" -redo >>$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
+    echo IF %ERRORLEVEL% neq 0 GOTO :end >>$6
 if [ "$5" = "5" ]; then
     echo jom.exe >>$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
+    echo IF %ERRORLEVEL% neq 0 GOTO :end >>$6
     echo jom.exe install >>$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
 else
     echo cmake --build . --parallel >>$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
+    echo IF %ERRORLEVEL% neq 0 GOTO :end >>$6
     echo ninja.exe install >>$6
-    echo IF %ERRORLEVEL% neq 0 EXIT /b %ERRORLEVEL% >>$6
 fi
+    echo :end >>$6
+    echo echo ERRORLEVEL=\%ERRORLEVEL\% >>$6
+    echo EXIT /b %ERRORLEVEL% >>$6
+    chmod +x $6
 }
 
 # Create the Qt build config file.
@@ -334,7 +360,10 @@ if [ "$2" = "5" ]; then
 else
     echo "c++17" >>$3
 fi
+if [ "$2" = "5" ]; then
+    # Option to use multiple cores is only supported on Qt5
     echo "-mp" >>$3
+fi
     echo "-confirm-license" >>$3
     echo "-opensource" >>$3
 }
@@ -404,19 +433,41 @@ if [ "$delete" = "yes" ]; then
  fi
 
 # Download files (Only if package not already downloaded or deleted before)
+# Execute a checksum valitation.
 for url in $urls
 do
     file=$(basename "$url")
     if [ ! -r $qtdir/$file ]; then
+        echo download site: $baseurl
         echo downloading $file...
-        curl -# -L $url > "$qtdir/$file"
+        curl $curl_progress -# -L $url > "$qtdir/$file"
+        ret1="$?"
+        if [ ! "$?" == "0" ]; then
+            echo "**** Error: Download of $file failed. Aborted." >&2
+            rm -f $qtdir/$file
+            exit 1
+        fi
+        file=$(basename "$md5sums")
+        echo downloading $file...
+        curl $curl_progress -# -L $md5sums > $file
+        if [ ! "$?" == "0" ]; then
+            echo "**** Error: Download of $file failed. Aborted." >&2
+            rm -f $file
+            exit 1
+        fi
+        md5sum=`cat $file | sed -n "s/\([0-9a-z]\+\) \+${qtfile}$/\1/p"`
+        expected=`md5sum ${qtdir}/${qtfile} | sed "s/ .*//"`
+        if [ "$md5sum" != "$expected" ]; then
+            echo "Checksum error:"
+            echo "  md5sum=  $md5sum"
+            echo "  expected=$expected"
+            exit 1
+        else
+            echo "Checksum verification passed."
+        fi
+        rm $file
     fi
 done
-if [ ! "$?" == "0" ]; then
-    echo "**** Error: Download failed. Aborted." >&2
-    rm -f $qtdir/$file
-    exit 1
-fi
 
 # Unpacking files
 # Supported extensions: tar.gz or zip
@@ -485,11 +536,14 @@ do
     create_config_file $absqttgtdir\\$platform $qtmaversion $configoptpath
     absqtsrcdir=$( as_absolute_windows_path $qtsrcdir )
     absqtbuilddir=$( as_absolute_windows_path $qtdir/$directory )
-    batchscript=$qtdir/$directory/build_qt.bat
+    batchscript=$qtdir/$directory/build_qt.cmd
     create_qt_build_script "$msvcscript" $arch "$absqtsrcdir" "$absqtbuilddir" $qtmaversion $batchscript
+    echo ========== START Contents of build batch file ==========
+    cat $batchscript
+    echo ========== END Contents of build batch file ==========
 
     echo building $platform Qt $qtversion libraries...
-    cmd < $batchscript
+    ./$batchscript
     if [ ! "$?" == "0" ]; then
         echo "**** Error: Building Qt libraries. Aborted." >&2
         exit 1
@@ -500,6 +554,10 @@ file=../../src/msvcQtPath.props
 cp -f ${file}.in $file
 path=$( as_doublebslash_windows_path $absqttgtdir )
 expr="s/QTDIRPLACEHOLDER/$path/"
+sed -i -e $expr $file
+expr="s/QTVERSIONPLACEHOLDER/$qtversion/"
+sed -i -e $expr $file
+expr="s/QTMAJORPLACEHOLDER/$qtmaversion/"
 sed -i -e $expr $file
 
 echo ""

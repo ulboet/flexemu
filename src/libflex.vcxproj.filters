@@ -23,9 +23,6 @@
     <ClInclude Include="benv.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="bfileptr.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="binifile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -53,6 +50,9 @@
     <ClInclude Include="btime.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cistring.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="confignt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -63,6 +63,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="efiletim.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fattrib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fcinfo.h">
@@ -104,6 +107,9 @@
     <ClInclude Include="flexerr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fversion.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="idircnt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -128,6 +134,9 @@
     <ClInclude Include="rfilecnt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="rndcheck.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="typefefs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -139,9 +148,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="bcommand.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="bdate.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -149,9 +155,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="benv.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="bfileptr.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="binifile.cpp">
@@ -179,6 +182,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dircont.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fattrib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="fcinfo.cpp">
@@ -230,6 +236,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="rfilecnt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rndcheck.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">

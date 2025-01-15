@@ -1,9 +1,9 @@
-/*                                                                              
+/*
     fpattrui.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +25,9 @@
 #define FPATTRUI_H
 
 #include "misc1.h"
+#include "fattrib.h"
 #include "filecntb.h"
+#include "warnoff.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QDialog>
@@ -35,38 +37,40 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QString>
+#include <QStringList>
 #include <QVector>
+#include <QVarLengthArray>
+#include "warnon.h"
 #include <cassert>
 
 
 class FileAttributesUi
 {
 private:
-    QVBoxLayout *verticalLayout_1;
-    QLabel *l_filename;
-    QGroupBox *groupBox;
-    QVBoxLayout *verticalLayout_2;
-    QCheckBox *c_protect[4];
-    QDialogButtonBox *buttonBox;
-    QVector<Qt::CheckState> initialState;
-    Byte clearMask;
-    Byte setMask;
+    using AttributeLabels_t = QVarLengthArray<const char *, 4>;
 
-    static QString protectChars;
-    static QVector<const char *> protectText;
-    static const QVector<Byte> flags;
+    QVBoxLayout *verticalLayout_1{nullptr};
+    QLabel *l_filename{nullptr};
+    QGroupBox *groupBox{nullptr};
+    QVBoxLayout *verticalLayout_2{nullptr};
+    QVarLengthArray<QCheckBox *, 4> c_protect{nullptr, nullptr,
+                                              nullptr, nullptr};
+    QDialogButtonBox *buttonBox{nullptr};
+    QVector<Qt::CheckState> initialState;
+    Byte clearMask{0};
+    Byte setMask{0};
+
+    static const AttributeLabels_t &GetAttributeLabels();
 
 public:
-    FileAttributesUi() :
-        verticalLayout_1(nullptr), l_filename(nullptr), groupBox(nullptr),
-        verticalLayout_2(nullptr), c_protect{ },
-        buttonBox(nullptr), clearMask(0), setMask(0)
+    FileAttributesUi()
     {
-        assert(sizeof(c_protect) / sizeof(c_protect[0]) == flags.size());
-        assert(protectText.size() == flags.size());
+        assert(c_protect.size() ==
+                static_cast<int>(GetAttributeCharToFlag().size()));
+        assert(c_protect.size() == GetAttributeLabels().size());
     }
 
-    void TransferDataToDialog(const QVector<QString> &filenames,
+    void TransferDataToDialog(const QStringList &filenames,
                               const QVector<Byte> &attributes,
                               const QString &supportedAttributes,
                               bool isWriteProtected)
@@ -78,34 +82,42 @@ public:
 
         assert(filenames.size() == attributes.size());
 
+        initialState.clear();
         bool isMultiFile = (filenames.size() > 1);
         l_filename->setText(isMultiFile ? "multiple files" : filenames.first());
 
+        const auto &attributeCharToFlag = GetAttributeCharToFlag();
         for (auto attribute : attributes)
         {
-            for (int i = 0; i < flags.size(); ++i)
+            auto i = 0;
+            for (const auto &iter : attributeCharToFlag)
             {
-                auto state = (attribute & flags.at(i)) ?
+                auto state = (attribute & iter.second) ?
                     Qt::Checked : Qt::Unchecked;
 
-                if (initialState.size() < flags.size())
+                if (initialState.size() <
+                        static_cast<int>(attributeCharToFlag.size()))
                 {
+                    // Initially set checked or unchecked state.
                     initialState.append(state);
                 }
                 else if (initialState.at(i) != state)
                 {
+                    // Multiple states detected, set partially checked.
                     initialState.replace(i, Qt::PartiallyChecked);
                 }
+                ++i;
             }
         }
 
-        assert(sizeof(c_protect) / sizeof(c_protect[0]) == initialState.size());
+        assert(c_protect.size() == initialState.size());
 
-        for (Word i = 0; i < (sizeof(c_protect) / sizeof(c_protect[0])); ++i)
+        for (Word i = 0; i < static_cast<Word>(c_protect.size()); ++i)
         {
-            bool isEnabled = !isWriteProtected && i < protectChars.size() &&
-                             supportedAttributes.contains(protectChars[i]);
-                             
+            bool isEnabled =
+                !isWriteProtected && i < attributeCharToFlag.size() &&
+                supportedAttributes.contains(attributeCharToFlag[i].first);
+
             auto isTristate =
                      isMultiFile && initialState.at(i) == Qt::PartiallyChecked;
             c_protect[i]->setTristate(isTristate);
@@ -126,24 +138,27 @@ public:
 
     void CheckBoxStateChanged(int state, int index)
     {
+        const auto &attributeCharToFlag = GetAttributeCharToFlag();
         if (state == Qt::Unchecked)
         {
-            clearMask |= flags.at(index);
-            setMask &= ~flags.at(index);
+            clearMask |= attributeCharToFlag.at(index).second;
+            setMask &= static_cast<Byte>(~attributeCharToFlag.at(index).second);
         }
         else if (state == Qt::Checked)
         {
-            setMask |= flags.at(index);
-            clearMask &= ~flags.at(index);
+            setMask |= attributeCharToFlag.at(index).second;
+            clearMask &=
+                static_cast<Byte>(~attributeCharToFlag.at(index).second);
         }
         else if (state == Qt::PartiallyChecked)
         {
-            setMask &= ~flags.at(index);
-            clearMask &= ~flags.at(index);
+            setMask &= static_cast<Byte>(~attributeCharToFlag.at(index).second);
+            clearMask &=
+                static_cast<Byte>(~attributeCharToFlag.at(index).second);
         }
     }
 
-    QString GetObjectName(QString text)
+    static QString GetObjectName(QString text)
     {
         return text.remove(' ').remove('&').prepend("c_");
     }
@@ -171,11 +186,12 @@ public:
         verticalLayout_2->setSpacing(0);
         verticalLayout_2->setObjectName(QStringLiteral("verticalLayout_2"));
         verticalLayout_2->setContentsMargins(0, 0, 0, 0);
+        const auto &attributeLabels = GetAttributeLabels();
 
-        for (Word i = 0; i < (sizeof(c_protect) / sizeof(c_protect[0])); ++i)
+        for (Word i = 0; i < static_cast<Word>(c_protect.size()); ++i)
         {
             c_protect[i] = new QCheckBox(&dialog);
-            c_protect[i]->setObjectName(GetObjectName(protectText[i]));
+            c_protect[i]->setObjectName(GetObjectName(attributeLabels[i]));
             verticalLayout_2->addWidget(c_protect[i]);
         }
 
@@ -197,14 +213,14 @@ public:
                          &dialog, &QDialog::accept);
         QObject::connect(buttonBox, &QDialogButtonBox::rejected,
                          &dialog, &QDialog::reject);
-        for (Word i = 0; i < (sizeof(c_protect) / sizeof(c_protect[0])); ++i)
+        for (Word i = 0; i < static_cast<Word>(c_protect.size()); ++i)
         {
             QObject::connect(c_protect[i], &QCheckBox::stateChanged,
                 [&, i](int state){ CheckBoxStateChanged(state, i); });
         }
 
         QMetaObject::connectSlotsByName(&dialog);
-    } // setupUi
+    }
 
     void retranslateUi(QDialog &dialog)
     {
@@ -212,22 +228,14 @@ public:
                 QApplication::translate("Dialog", "File Attributes"));
         l_filename->setText(QString());
         groupBox->setTitle(QString());
-        for (int i = 0; i < protectText.size(); ++i)
+        const auto &attributeLabels = GetAttributeLabels();
+        for (int i = 0; i < attributeLabels.size(); ++i)
         {
             c_protect[i]->setText(
-                    QApplication::translate("Dialog", protectText[i]));
+                    QApplication::translate("Dialog", attributeLabels[i]));
         }
-    } // retranslateUi
+    }
 };
 
-QString FileAttributesUi::protectChars{"WDRC"};
-
-QVector<const char *> FileAttributesUi::protectText{
-    "&Write Protect", "&Delete Protect", "&Read Protect", "&Catalog Protect"
-};
-
-const QVector<Byte> FileAttributesUi::flags{
-    WRITE_PROTECT, DELETE_PROTECT, READ_PROTECT, CATALOG_PROTECT
-};
 #endif
 

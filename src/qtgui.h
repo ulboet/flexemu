@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,9 +29,12 @@
 #include "schedcpu.h"
 #include "scpulog.h"
 #include "soptions.h"
+#include "e2.h"
+#include "bobserv.h"
 #include <vector>
 #include <string>
 #include <memory>
+#include <mutex>
 #include "warnoff.h"
 #include "cpustat_ui.h"
 #include <QWidget>
@@ -40,10 +43,8 @@
 #include <QString>
 #include <QByteArray>
 #include <QMap>
+#include <optional>
 #include "warnon.h"
-
-#define SCREEN_SIZES (5)
-#define ICON_SIZES (3)
 
 class Mc6809;
 class Memory;
@@ -51,18 +52,21 @@ class Scheduler;
 class Inout;
 class VideoControl1;
 class VideoControl2;
-class Mc6809CpuStatus;
+struct Mc6809CpuStatus;
 class JoystickIO;
 class KeyboardIO;
 class TerminalIO;
 class Pia1;
 class E2floppy;
 class E2Screen;
-class FlexContainerInfo;
+class FlexDiskAttributes;
 class FlexemuOptionsDifference;
+class FlexemuToolBar;
+class PrintOutputWindow;
 class QAction;
 class QSize;
 class QString;
+class QLabel;
 class QWidget;
 class QEvent;
 class QKeyEvent;
@@ -80,43 +84,54 @@ class QComboBox;
 struct sOptions;
 
 using ColorTable = QVector<QRgb>;
-using ColorTablesCache = QHash<uint, QByteArray>;
 
-class QtGui : public QWidget, public AbstractGui
+// Cache containing color tables identified by a hash value.
+// The hash value is the key which depends on the Qt version.
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+using ColorTablesCache = QHash<std::size_t, QByteArray>;
+#else
+using ColorTablesCache = QHash<uint, QByteArray>;
+#endif
+
+class QtGui : public QWidget, public AbstractGui, public BObserver
 {
     Q_OBJECT
-
-protected:
-    enum
-    {
-        FLX_INVISIBLE_CURSOR = 10,
-        FLX_DEFAULT_CURSOR   = 11
-    };
 
 public:
     QtGui() = delete;
     QtGui(
-        Mc6809 &,
-        Memory &,
-        Scheduler &,
-        Inout &,
-        VideoControl1 &,
-        VideoControl2 &,
-        JoystickIO &,
-        KeyboardIO &,
-        TerminalIO &,
-        Pia1 &,
-        struct sOptions &);
-    virtual ~QtGui();
+        Mc6809 & p_cpu,
+        Memory & p_memory,
+        Scheduler & p_scheduler,
+        Inout & p_inout,
+        VideoControl1 & p_vico1,
+        VideoControl2 & p_vico2,
+        JoystickIO & p_joystickIO,
+        KeyboardIO & p_keyboardIO,
+        TerminalIO & p_terminalIO,
+        Pia1 & p_pia1,
+        struct sOptions & p_options);
+    ~QtGui() override;
+    QtGui(const QtGui &src) = delete;
+    QtGui(QtGui &&src) = delete;
+    QtGui &operator=(const QtGui &&src) = delete;
+    QtGui &operator=(QtGui &&src) = delete;
 
     void SetFloppy(E2floppy *fdc);
     bool HasFloppy() const;
-    void output_to_graphic() override;
+    bool output_to_graphic() override;
+    void write_char_serial(Byte value) override;
+    // BObserver interface
+    void UpdateFrom(NotifyId id, void *param) override;
+
+signals:
+    void CloseApplication();
 
 protected:
     void redraw_cpuview_impl(const Mc6809CpuStatus &status) override;
 
 private slots:
+    void OnPrinterOutput();
     void OnExit();
     void OnPreferences();
     void OnFullScreen();
@@ -136,8 +151,8 @@ private slots:
     void OnCpuOriginalFrequency();
     void OnCpuUndocumentedInstructions();
     void OnCpuInterruptStatus();
-    void OnIntroduction();
-    void OnDiskStatus(Word diskNumber);
+    void OnIntroduction() const;
+    void OnDiskStatus(Word driveNumber);
     void OnAbout();
     void OnTimer();
     void OnIconSize(int index);
@@ -147,29 +162,28 @@ private slots:
     void OnResize();
 
 private:
-    QToolBar *CreateToolBar(QWidget *parent, const QString &title,
-                            const QString &objectName);
+    FlexemuToolBar *CreateToolBar(QWidget *parent, const QString &title,
+            const QString &objectName, const QSize &iconSize) const;
     void CreateIcons();
-    void CreateActions(QLayout &layout);
-    void CreateFileActions(QLayout &layout);
-    void CreateEditActions(QLayout &layout);
-    void CreateViewActions(QLayout &layout);
-    void CreateCpuActions(QLayout &layout);
-    void CreateHelpActions(QLayout &layout);
-    void CreateHorizontalSpacer(QLayout &layout);
-    QAction *CreateScreenSizeAction(const QIcon &icon, QMenu &menu, int index);
-    QAction *CreateIconSizeAction(QMenu &menu, uint index);
-    void CreateStatusToolBar(QLayout &layout);
-    void CreateStatusBar(QLayout &layout);
+    void CreateActions(QLayout &layout, const QSize &iconSize);
+    void CreateFileActions(QToolBar &p_toolBar);
+    void CreateEditActions(QToolBar &p_toolBar);
+    void CreateViewActions(QToolBar &p_toolBar);
+    void CreateCpuActions(QToolBar &p_toolBar);
+    void CreateHelpActions(QToolBar &p_toolBar);
+    QAction *CreateScreenSizeAction(const QIcon &icon, QMenu &menu,
+                                    uint16_t index);
+    void CreateStatusToolBar(QLayout &layout, const QSize &iconSize);
+    void CreateStatusBar(QBoxLayout &layout);
     void AddDiskStatusButtons();
     void ConnectCpuUiSignalsWithSlots();
     void SetStatusMessage(const QString &message) const;
     bool IsClosingConfirmed();
-    void SetCursor(int type = FLX_DEFAULT_CURSOR);
     void PopupMessage(const QString &message);
-    void SetBell(int percent);
+    static void SetBell(int percent);
     void update_block(int blockNumber);
-    void UpdateDiskStatus(int floppyIndex, DiskStatus status);
+    void UpdateDiskStatus(Word floppyIndex, DiskStatus oldStatus,
+                          DiskStatus newStatus);
     void UpdateInterruptStatus(tIrqType irqType, bool status);
     void ToggleSmoothDisplay();
     void ToggleCpuFrequency();
@@ -177,6 +191,7 @@ private:
     void ToggleFullScreenMode();
     void ToggleStatusBarVisibility();
     void ToggleCpuRunStop();
+    void SetStatusBarVisibility(bool isVisible);
     void SetFullScreenMode(bool isFullScreen);
     bool IsFullScreenMode() const;
     void UpdateFullScreenCheck() const;
@@ -188,19 +203,23 @@ private:
     void UpdateScreenSizeCheck(int index) const;
     void UpdateScreenSizeValue(int index) const;
     void SetIconSize(const QSize &size);
-    QUrl CreateDocumentationUrl(const QString &docDir, const QString &htmlFile);
+    void SetIconSizeCheck(const QSize &size);
+    static QUrl CreateDocumentationUrl(const QString &docDir,
+                                       const QString &htmlFile);
     ColorTable CreateColorTable();
-    void CopyToBMPArray(DWord height, QByteArray& dest,
+    void CopyToBMPArray(Word height, QByteArray& dest,
                         Byte const *videoRam, const ColorTable& colorTable);
     int TranslateToAscii(QKeyEvent *event);
-    QFont GetMonospaceFont(int pointSize = -1);
+    static QFont GetMonospaceFont(int pointSize = -1);
     void SetCpuDialogMonospaceFont(int pointSize);
     void ConnectScreenSizeComboBoxSignalSlots() const;
-    QString GetScreenSizeStatusTip(int index) const;
-    static QString AsString(Word driveNumber, const FlexContainerInfo &info);
-    QIcon GetPreferencesIcon(bool isRestartNeeded) const;
+    static QString GetScreenSizeStatusTip(int index);
+    static QString AsString(Word driveNumber, const FlexDiskAttributes &info);
+    static QIcon GetPreferencesIcon(bool isRestartNeeded);
     void SetPreferencesStatusText(bool isRestartNeeded) const;
     void WriteOneOption(sOptions options, FlexemuOptionId optionId) const;
+    void SetCpuFrequency(float frequency);
+    std::string GetKeyString(Byte key);
 
     // QWidget Overrides
     bool event(QEvent *event) override;
@@ -212,42 +231,43 @@ private:
 
     std::vector<QIcon> icons;
     QTimer timer;
-    QVBoxLayout *mainLayout;
-    QHBoxLayout *toolBarLayout;
-    QHBoxLayout *e2screenLayout;
-    QStackedWidget *statusBarFrame;
-    E2Screen *e2screen;
-    QMenuBar *menuBar;
-    QToolBar *fileToolBar;
-    QToolBar *editToolBar;
-    QToolBar *viewToolBar;
-    QToolBar *cpuToolBar;
-    QToolBar *helpToolBar;
-    QToolBar *statusToolBar;
-    QStatusBar *statusBar;
-    QComboBox *screenSizeComboBox;
-    QDialog *cpuDialog;
-    Ui::CpuStatus cpuUi;
-    QAction *exitAction;
-    QAction *preferencesAction;
-    QAction *fullScreenAction;
-    QAction *smoothAction;
-    QAction *statusBarAction;
-    QAction *cpuRunAction;
-    QAction *cpuStopAction;
-    QAction *cpuResetAction;
-    QAction *cpuViewAction;
-    QAction *breakpointsAction;
-    QAction *loggingAction;
-    QAction *originalFrequencyAction;
-    QAction *undocumentedAction;
-    QAction *introductionAction;
-    QAction *aboutAction;
-    QAction *aboutQtAction;
-    QAction *diskStatusAction[4];
-    QAction *interruptStatusAction;
-    QAction *iconSizeAction[ICON_SIZES];
-    QAction *screenSizeAction[SCREEN_SIZES];
+    QVBoxLayout *mainLayout{};
+    QHBoxLayout *e2screenLayout{};
+    QHBoxLayout *statusBarLayout{};
+    QStackedWidget *statusBarFrame{};
+    QStackedWidget *newKeyFrame{};
+    E2Screen *e2screen{};
+    QMenuBar *menuBar{};
+    FlexemuToolBar *toolBar{};
+    FlexemuToolBar *statusToolBar{};
+    QLabel *newKeyLabel{};
+    QStatusBar *statusBar{};
+    QStatusBar *dummyStatusBar{};
+    QComboBox *screenSizeComboBox{};
+    QDialog *cpuDialog{};
+    Ui::CpuStatus cpuUi{};
+    QAction *printOutputAction{};
+    QAction *exitAction{};
+    QAction *preferencesAction{};
+    QAction *fullScreenAction{};
+    QAction *smoothAction{};
+    QAction *statusBarAction{};
+    QAction *cpuRunAction{};
+    QAction *cpuStopAction{};
+    QAction *cpuResetAction{};
+    QAction *cpuViewAction{};
+    QAction *breakpointsAction{};
+    QAction *loggingAction{};
+    QAction *originalFrequencyAction{};
+    QAction *undocumentedAction{};
+    QAction *introductionAction{};
+    QAction *aboutAction{};
+    QAction *aboutQtAction{};
+    std::array<QAction *, MAX_DRIVES> diskStatusAction{};
+    std::array<QAction *, ICON_SIZES> iconSizeAction{};
+    std::array<QAction *, SCREEN_SIZES> screenSizeAction{};
+    QAction *interruptStatusAction{};
+    PrintOutputWindow *printOutputWindow{};
     QIcon iconNoFloppy;
     QIcon iconInactiveFloppy;
     QIcon iconActiveFloppy;
@@ -260,24 +280,28 @@ private:
     ColorTablesCache colorTablesCache;
     QByteArray dataBuffer;
 
-    bool isOriginalFrequency;
-    bool isStatusBarVisible;
-    bool isRunning;
-    bool isConfirmClose;
-    bool isForceScreenUpdate;
-    bool isRestartNeeded;
-    int timerTicks;
-    Byte oldFirstRasterLine;
-    s_cpu_logfile logfileSettings;
+    bool isOriginalFrequency{};
+    bool isRunning{};
+    bool isConfirmClose{};
+    bool isForceScreenUpdate{};
+    bool isRestartNeeded{};
+    bool isTimerFirstTime{true};
+    int timerTicks{0};
+    Byte oldFirstRasterLine{0U};
+    std::optional<float> newFrequency;
+    std::mutex newFrequencyMutex;
+    std::vector<Byte> newKeys;
+    std::mutex newKeysMutex;
+    Mc6809LoggerConfig cpuLoggerConfig;
 
     Scheduler &scheduler;
     VideoControl1 &vico1;
     VideoControl2 &vico2;
     JoystickIO &joystickIO;
     KeyboardIO &keyboardIO;
-    E2floppy *fdc;
+    E2floppy *fdc{};
     sOptions &options;
-    sOptions oldOptions;
+    sOptions oldOptions{};
 
     static int preferencesTabIndex;
 };

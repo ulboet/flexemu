@@ -3,7 +3,7 @@
 
 
     Basic helper class used as notification identifier in an observer pattern
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,8 +20,10 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifndef _BOBSHELP_INCLUDED_
-#define _BOBSHELP_INCLUDED_
+#ifndef BOBSHELP_INCLUDED
+#define BOBSHELP_INCLUDED
+
+#include <cstdint>
 
 enum class NotifyId : uint8_t
 {
@@ -32,7 +34,10 @@ enum class NotifyId : uint8_t
     FirstKeyboardRequest,
     RequestScreenUpdate,
     VideoRamBankChanged,
+    SetFrequency,
+    KeyPressed, // key pressed in context of UI thread.
+    KeyPressedOnCPU, // key pressed in context of CPU thread.
 };
 
-#endif // #ifndef _BOBSHELP_INCLUDED_
+#endif // #ifndef BOBSHELP_INCLUDED
 

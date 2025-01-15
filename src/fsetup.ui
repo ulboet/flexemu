@@ -63,7 +63,7 @@
         <enum>QTabWidget::North</enum>
        </property>
        <property name="currentIndex">
-        <number>4</number>
+        <number>5</number>
        </property>
        <widget class="QWidget" name="t_emulatedHardware">
         <attribute name="title">
@@ -286,7 +286,14 @@
            </property>
           </widget>
          </item>
-         <item row="7" column="0">
+         <item row="7" column="0" colspan="2">
+          <widget class="QCheckBox" name="c_isConfirmExit">
+           <property name="text">
+            <string>Confirm exit</string>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="0">
           <spacer name="verticalSpacer_5">
            <property name="orientation">
             <enum>Qt::Vertical</enum>
@@ -748,11 +755,163 @@
          </item>
         </layout>
        </widget>
+       <widget class="QWidget" name="t_virtualDisk">
+        <attribute name="title">
+         <string>Virtual Disk</string>
+        </attribute>
+        <layout class="QVBoxLayout" name="verticalLayout_14">
+         <item>
+          <widget class="QCheckBox" name="c_isDirectoryDiskActive">
+           <property name="text">
+            <string>Active</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="g_defaultFormat">
+           <property name="title">
+            <string>Default Format</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_16">
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_15">
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="10">
+                <item>
+                 <widget class="QComboBox" name="cb_diskFormat"/>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_6">
+                <item>
+                 <widget class="QLabel" name="l_tracks">
+                  <property name="text">
+                   <string>Tracks</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="e_tracks">
+                  <property name="minimumSize">
+                   <size>
+                    <width>50</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="minimum">
+                   <number>2</number>
+                  </property>
+                  <property name="maximum">
+                   <number>256</number>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="l_sectors">
+                  <property name="text">
+                   <string>Sectors</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="e_sectors">
+                  <property name="minimumSize">
+                   <size>
+                    <width>50</width>
+                    <height>0</height>
+                   </size>
+                  </property>
+                  <property name="minimum">
+                   <number>6</number>
+                  </property>
+                  <property name="maximum">
+                   <number>255</number>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QLabel" name="l_formatWarning">
+                  <property name="text">
+                   <string/>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="s_tracksSectors">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <spacer name="verticalSpacer_8">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </widget>
        <widget class="QWidget" name="t_terminal">
         <attribute name="title">
          <string>Terminal</string>
         </attribute>
         <layout class="QVBoxLayout" name="verticalLayout_13">
+         <item>
+          <widget class="QGroupBox" name="g_terminalType">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="title">
+            <string>Terminal Type</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_17">
+            <item>
+             <widget class="QRadioButton" name="r_scrollingTerminal">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="text">
+               <string>Simple Scrolling Terminal</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QRadioButton" name="r_ncursesTerminal">
+              <property name="text">
+               <string>Enhanced Terminal Emulation</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
          <item>
           <widget class="QCheckBox" name="c_terminalIgnoreNUL">
            <property name="text">
@@ -981,6 +1140,7 @@
   <tabstop>c_multiColorScheme</tabstop>
   <tabstop>c_isInverse</tabstop>
   <tabstop>c_isDisplaySmooth</tabstop>
+  <tabstop>c_isConfirmExit</tabstop>
   <tabstop>r_ramExtNone</tabstop>
   <tabstop>r_ramExt2x96</tabstop>
   <tabstop>r_ramExt2x288</tabstop>
@@ -1000,12 +1160,21 @@
   <tabstop>b_mdcrDrive0</tabstop>
   <tabstop>e_mdcrDrive1</tabstop>
   <tabstop>b_mdcrDrive1</tabstop>
+  <tabstop>c_isDirectoryDiskActive</tabstop>
+  <tabstop>cb_diskFormat</tabstop>
+  <tabstop>e_tracks</tabstop>
+  <tabstop>e_sectors</tabstop>
+  <tabstop>r_scrollingTerminal</tabstop>
+  <tabstop>r_ncursesTerminal</tabstop>
+  <tabstop>c_terminalIgnoreNUL</tabstop>
+  <tabstop>c_terminalIgnoreESC</tabstop>
   <tabstop>c_undocumented</tabstop>
   <tabstop>c_flexibleMmu</tabstop>
   <tabstop>c_canFormatDrive0</tabstop>
   <tabstop>c_canFormatDrive1</tabstop>
   <tabstop>c_canFormatDrive2</tabstop>
   <tabstop>c_canFormatDrive3</tabstop>
+  <tabstop>c_fileTime</tabstop>
  </tabstops>
  <resources>
   <include location="flexemu.qrc"/>

@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,46 +32,87 @@
 #ifndef E2_INCLUDED
 #define E2_INCLUDED
 
-#define VIDEORAM_SIZE   0x4000
-#define RASTERLINE_SIZE 64
-#define YBLOCK_BASE 4   /* number of yblocks as a power of 2 */
-#define COLOR_PLANES    6   /* maximum number of color planes */
-#define MAX_COLORS (1U << COLOR_PLANES)   /* maximum number of color values */
-#define RED_HIGH 0x10 /* Color bitmask for green high */
-#define RED_LOW 0x02 /* Color bitmask for red low */
-#define GREEN_HIGH 0x20 /* Color bitmask for green high */
-#define GREEN_LOW 0x04 /* Color bitmask for green low */
-#define BLUE_HIGH 0x08 /* Color bitmask for blue low */
-#define BLUE_LOW 0x01 /* Color bitmask for blue low */
-#define MAXVIDEORAM_BANKS (48u)  /* max number of ram banks of size 16K   */
+#include <cstdint>
+
+
+const unsigned VIDEORAM_SIZE{0x4000U};
+
+enum : uint8_t {
+RASTERLINE_SIZE = 64, /* byte size of one raster-line */
+};
+
+enum : uint8_t {
+YBLOCK_BASE = 4, /* number of yblocks as a power of 2 */
+};
+
+enum : uint8_t {
+COLOR_PLANES = 6,   /* maximum number of color planes */
+};
+
+enum : uint8_t {
+MAX_COLORS = (1U << COLOR_PLANES),   /* maximum number of color values */
+};
+
+enum : uint8_t {
+SCREEN_SIZES = 5, /* maximum screen size factor */
+};
+
+enum : uint8_t {
+ICON_SIZES = 3, /* maximum icon size factor */
+};
+
+enum : uint8_t {
+RED_HIGH = 0x10, /* Color bitmask for green high */
+RED_LOW = 0x02, /* Color bitmask for red low */
+GREEN_HIGH = 0x20, /* Color bitmask for green high */
+GREEN_LOW = 0x04, /* Color bitmask for green low */
+BLUE_HIGH = 0x08, /* Color bitmask for blue low */
+BLUE_LOW = 0x01, /* Color bitmask for blue low */
+};
+
+const unsigned MAXVIDEORAM_BANKS{48U}; /* max number of ram banks of size 16K */
+
 /* possible values: 12, 48 */
 /* number of yblocks */
-#define YBLOCKS     (1 << YBLOCK_BASE) /* Nr. of blocks vertically */
+enum : uint8_t {
+YBLOCKS = (1U << YBLOCK_BASE), /* Nr. of blocks vertically */
+};
+
 /* bytesize of one yblock */
-#define YBLOCK_SIZE (VIDEORAM_SIZE / YBLOCKS)
+enum : uint16_t {
+YBLOCK_SIZE = (VIDEORAM_SIZE / YBLOCKS),
+};
 
 /* pixelsize of one block */
-#define BLOCKWIDTH  (RASTERLINE_SIZE << 3)
-#define BLOCKHEIGHT (YBLOCK_SIZE / RASTERLINE_SIZE)
+enum : uint16_t {
+BLOCKWIDTH = (RASTERLINE_SIZE << 3U),
+BLOCKHEIGHT = (YBLOCK_SIZE / RASTERLINE_SIZE),
+};
 
 /* pixelsize of whole video display represented by a window */
-#define WINDOWWIDTH (RASTERLINE_SIZE << 3)
-#define WINDOWHEIGHT    (VIDEORAM_SIZE / RASTERLINE_SIZE)
+enum : uint16_t {
+WINDOWWIDTH = (RASTERLINE_SIZE << 3U),
+WINDOWHEIGHT = (VIDEORAM_SIZE / RASTERLINE_SIZE),
+TERM_LINES = (WINDOWHEIGHT / 10), // Terminal lines
+TERM_COLUMNS = (WINDOWWIDTH / 6), // Terminal columns
+};
 
 /* GENIO_BASE provides a general address range  */
 /* where memory mapped I/O is placed            */
 /* the range is: $fc00 - ffff                   */
 /* It has to be a multiple of 1024              */
-#define GENIO_BASE  0xfc00
-#define GENIO_END   0xffff
-// 2nd memory mapped I/O is at E0xx
-#define GENIO_BASE2 0xe000
-#define GENIO_END2  0xe0ff
+/* ROM_BASE defines the base address where ROM  */
+/* memory is locatad (read-only memory).        */
+enum : uint16_t {
+GENIO_BASE = 0xfc00, /* Start addr. of mm-I/O up to 0xffff */
+ROM_BASE = 0xf000, /* Start addr. of ROM up to 0xffff */
+};
 
-#define ROM_BASE    0xf000   /* Start addr. of ROM up to 0xffff */
+const uint8_t MAX_DRIVES = 4; /* Max. number of supported disk drives */
 
-#define ORIGINAL_FREQUENCY 1.3396f
-#define ORIGINAL_PERIOD (1.0f / ORIGINAL_FREQUENCY)
+/* The default CPU frequncy [MHz] and time period [micro-seconds] */
+constexpr float ORIGINAL_FREQUENCY = 1.3396F;
+constexpr float ORIGINAL_PERIOD = (1.0F / ORIGINAL_FREQUENCY);
 
 #endif
 

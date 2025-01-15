@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,24 +29,25 @@
 #include <mutex>
 
 // Button mask for left, middle and right button
-#define L_MB        (4)
-#define M_MB        (2)
-#define R_MB        (1)
+const unsigned L_MB{4U};
+const unsigned M_MB{2U};
+const unsigned R_MB{1U};
 
 class JoystickIO
 {
 public:
     JoystickIO();
 
-    void    reset();
-    bool    get_values(int *deltaX, int *deltaY, unsigned int *buttonMask);
-    void    put_values(int deltaX, int deltaY);
-    void    put_value(unsigned int buttonMask);
+    void reset();
+    bool get_values(int *p_deltaX, int *p_deltaY, unsigned int *p_buttonMask);
+    void put_values(int p_deltaX, int p_deltaY);
+    void put_value(unsigned int p_buttonMask);
 
 private:
-    int deltaX, deltaY;
-    unsigned int buttonMask;
-    bool    newValues;
+    int deltaX{0};
+    int deltaY{0};
+    unsigned int buttonMask{0};
+    bool newValues{false};
     std::mutex joystick_mutex;
 };
 

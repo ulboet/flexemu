@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,19 +21,9 @@
 */
 
 
-#include "misc1.h"
+#include "typedefs.h"
 #include "vico1.h"
 
-
-VideoControl1::VideoControl1() :
-    value(0),
-    isFirstWrite(true)
-{
-}
-
-VideoControl1::~VideoControl1()
-{
-}
 
 void VideoControl1::requestWriteValue(Byte new_value)
 {

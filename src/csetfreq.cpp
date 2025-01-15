@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,8 +25,8 @@
 #include "schedule.h"
 
 
-CSetFrequency::CSetFrequency(Scheduler &x_sched, float x_frequency) :
-    scheduler(x_sched), frequency(x_frequency)
+CSetFrequency::CSetFrequency(Scheduler &p_sched, float p_frequency) :
+    scheduler(p_sched), frequency(p_frequency)
 {
 }
 

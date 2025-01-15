@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@
 #include "brcfile.h"
 #include "bregistr.h"
 #include "soptions.h"
+#include "termimpf.h"
 #include <string>
 #include <vector>
 #include "warnoff.h"
@@ -49,7 +50,7 @@ class FlexemuOptionsUi : public QObject, protected Ui_FlexemuSetup
 public:
 
     FlexemuOptionsUi();
-    virtual ~FlexemuOptionsUi();
+    ~FlexemuOptionsUi() override = default;
     void setupUi(QDialog *dialog);
     void TransferDataToDialog(const sOptions &options);
     void TransferDataFromDialog(sOptions &options);
@@ -68,17 +69,23 @@ private slots:
     void OnSelectDiskMonitorDir();
     void OnAccepted();
     void OnRejected();
+    void OnFormatChanged(int index);
+    void OnTrackChanged(int tracks);
+    void OnSectorChanged(int sectors);
+    void OnTrkSecChanged(int tracks, int sectors);
+    void OnDirectoryDiskActiveChanged(bool isActive);
+    void OnTerminalTypeChanged(TerminalType type);
 
 private:
-    enum class FileType
+    enum class FileType : uint8_t
     {
-        DiskContainerFile,
+        FlexDiskFile,
         CassetteFile,
         HexBinaryFile,
     };
 
     void ConnectSignalsWithSlots();
-    void AddFrequencyValidator(QLineEdit &lineEdit);
+    static void AddFrequencyValidator(QLineEdit &lineEdit);
     void InitializeHardwareHyperlink(const char *doc_dir);
     bool Validate();
     bool IsReadOnly(FlexemuOptionId optionId);
@@ -93,11 +100,10 @@ private:
     static std::string CreateHref(const char *encoded_url,
                                   const char *description);
     static QString GetRelativePath(
-            const QString &diskDir,
+            const QString &directory,
             const QString &filePath);
 
-    QDialog *dialog;
-    QLocale englishUS;
+    QDialog *dialog{nullptr};
     std::vector<FlexemuOptionId> readOnlyOptions;
 };
 

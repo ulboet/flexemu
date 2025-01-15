@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,37 +26,38 @@
 #define KEYBOARD_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
 #include "flexemu.h"
+#include "asciictl.h"
 #include <string>
 #include <deque>
 #include <mutex>
 #include <memory>
 
-#define BELL        (0x07)
-
 // key mask for shift, control key
-#define SHIFT_KEY   (8)
-#define CONTROL_KEY (16)
-
+enum : uint8_t {
+SHIFT_KEY = 8,
+CONTROL_KEY = 16,
+};
 
 class KeyboardIO
 {
     std::mutex parallel_mutex;
     std::deque<Byte> key_buffer_parallel;
-    unsigned int keyMask;
-    Word init_delay;
+    unsigned int keyMask{0};
+    Word init_delay{500};
+    Byte boot_char{};
 
 public:
-    void set_bell(Word x_percent);
+    static void set_bell(Word p_percent);
     void reset_parallel();
     bool has_key_parallel(bool &do_notify);
     Byte read_char_parallel(bool &do_notify);
     Byte peek_char_parallel();
     void put_char_parallel(Byte key, bool &do_notify);
     void put_value(unsigned int keyMask);
-    void get_value(unsigned int *keyMask);
-    void set_startup_command(const char *x_startup_command);
+    void get_value(unsigned int *keyMask) const;
+    void set_startup_command(const std::string &startup_command);
+    void set_boot_char(Byte p_boot_char);
 
     KeyboardIO();
 };

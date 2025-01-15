@@ -2,7 +2,7 @@
     ifilecnt.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,30 +27,34 @@
 #include <string>
 
 
-class FileContainerIf;
-class FileContainerIteratorImp;
+class IFlexDiskByFile;
+class IFlexDiskIteratorImp;
 
-class FileContainerIterator
+// class FlexDiskIterator allows to iterate over directory entries
+// of a FLEX disk. Depending on the Flex disk type it uses a different
+// implementation (see private member imp).
+//
+// Rename: FileContainerIterator => FlexDiskIterator
+class FlexDiskIterator
 {
 public:
-    FileContainerIterator(const char *aFilePattern = "*.*");
-    virtual               ~FileContainerIterator();
-    FlexDirEntry          &operator*();
-    FlexDirEntry          *operator->();
-    bool                   operator==(const FileContainerIf *) const;
-    bool                   operator!=(const FileContainerIf *) const;
-    FileContainerIterator &operator=(FileContainerIf *);
-    FileContainerIterator &operator++();
-    bool                   DeleteCurrent();
-    bool                   RenameCurrent(const char *);
-    bool                   SetDateCurrent(const BDate &date);
-    bool                   SetAttributesCurrent(Byte attributes);
+    explicit FlexDiskIterator(std::string p_wildcard = "*.*");
+    FlexDiskIterator(const FlexDiskIterator &src) = delete;
+    virtual ~FlexDiskIterator() = default;
+    FlexDirEntry &operator*();
+    FlexDirEntry *operator->();
+    bool operator==(const IFlexDiskByFile *base) const;
+    bool operator!=(const IFlexDiskByFile *base) const;
+    FlexDiskIterator &operator=(IFlexDiskByFile *base);
+    FlexDiskIterator &operator++();
+    FlexDiskIterator &operator=(const FlexDiskIterator &src) = delete;
+    bool DeleteCurrent();
+    bool RenameCurrent(const std::string &newName);
+    bool SetDateCurrent(const BDate &date);
+    bool SetAttributesCurrent(Byte attributes);
 private:
-    std::string            filePattern;
-    FileContainerIteratorImpPtr imp;
-    FileContainerIterator(const FileContainerIterator &); // should not be used
-    FileContainerIterator &operator=(const FileContainerIterator
-                                     &); // should not be used
+    std::string wildcard;
+    IFlexDiskIteratorImpPtr imp;
 };
 
 #endif // IFILECNT_INCLUDED

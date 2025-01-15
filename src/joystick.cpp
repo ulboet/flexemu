@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 #include "joystick.h"
 
 
-JoystickIO::JoystickIO() : deltaX(0), deltaY(0), buttonMask(0), newValues(false)
+JoystickIO::JoystickIO()
 {
     reset();
 }
@@ -32,49 +32,49 @@ JoystickIO::JoystickIO() : deltaX(0), deltaY(0), buttonMask(0), newValues(false)
 void JoystickIO::reset()
 {
     std::lock_guard<std::mutex> guard(joystick_mutex);
-    deltaX           = 0;
-    deltaY           = 0;
-    buttonMask       = 0;
-    newValues        = false;
+    deltaX = 0;
+    deltaY = 0;
+    buttonMask = 0;
+    newValues = false;
 }
 
-bool JoystickIO::get_values(int *pDeltaX, int *pDeltaY,
-                            unsigned int *pButtonMask)
+bool JoystickIO::get_values(int *p_deltaX, int *p_deltaY,
+                            unsigned int *p_buttonMask)
 {
     bool result;
 
     std::lock_guard<std::mutex> guard(joystick_mutex);
     result = newValues;
 
-    if (pDeltaX     != nullptr)
+    if (p_deltaX != nullptr)
     {
-        *pDeltaX     = deltaX;
+        *p_deltaX = deltaX;
     }
 
-    if (pDeltaY     != nullptr)
+    if (p_deltaY != nullptr)
     {
-        *pDeltaY     = deltaY;
+        *p_deltaY = deltaY;
     }
 
-    if (pButtonMask != nullptr)
+    if (p_buttonMask != nullptr)
     {
-        *pButtonMask = buttonMask;
+        *p_buttonMask = buttonMask;
     }
 
-    newValues  = false;
+    newValues = false;
     return result;
 }
 
-void JoystickIO::put_values(int x_deltaX, int x_deltaY)
+void JoystickIO::put_values(int p_deltaX, int p_deltaY)
 {
     std::lock_guard<std::mutex> guard(joystick_mutex);
-    deltaX     = x_deltaX;
-    deltaY     = x_deltaY;
-    newValues  = true;
+    deltaX = p_deltaX;
+    deltaY = p_deltaY;
+    newValues = true;
 }
 
-void JoystickIO::put_value(unsigned int x_buttonMask)
+void JoystickIO::put_value(unsigned int p_buttonMask)
 {
     std::lock_guard<std::mutex> guard(joystick_mutex);
-    buttonMask = x_buttonMask;
+    buttonMask = p_buttonMask;
 }

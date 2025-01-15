@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #ifndef FCNFFILE_INCLUDED
 #define FCNFFILE_INCLUDED
 
+#include "typedefs.h"
 #include <vector>
 #include <string>
 #include <set>
@@ -31,8 +32,8 @@
 struct sIoDeviceMapping
 {
     std::string name;
-    Word baseAddress;
-    int byteSize;
+    Word baseAddress{};
+    int byteSize{};
 };
 
 
@@ -40,20 +41,21 @@ class FlexemuConfigFile
 {
 public:
     FlexemuConfigFile() = delete;
-    FlexemuConfigFile(const FlexemuConfigFile &) = delete;
-    FlexemuConfigFile(FlexemuConfigFile &&);
-    FlexemuConfigFile(const char *aFileName);
+    FlexemuConfigFile(const FlexemuConfigFile &src) = delete;
+    FlexemuConfigFile(FlexemuConfigFile &&src) noexcept;
+    explicit FlexemuConfigFile(const std::string &fileName);
     ~FlexemuConfigFile() = default;
 
     FlexemuConfigFile &operator=(const FlexemuConfigFile &) = delete;
-    FlexemuConfigFile &operator=(FlexemuConfigFile &&);
+    FlexemuConfigFile &operator=(FlexemuConfigFile &&src) noexcept;
 
-    std::vector<sIoDeviceMapping> ReadIoDevices();
-    std::string GetDebugSupportOption(const std::string &key);
-    std::pair<std::string, std::set<std::string> > GetIoDeviceLogging();
-    int GetSerparAddress(const std::string &monitorFilePath);
-
-    static const std::set<std::string> validDevices;
+    std::string GetFileName() const;
+    bool IsValid() const;
+    std::vector<sIoDeviceMapping> ReadIoDevices() const;
+    std::string GetDebugSupportOption(const std::string &key) const;
+    std::pair<std::string, std::set<std::string> > GetIoDeviceLogging() const;
+    int GetSerparAddress(const std::string &monitorFilePath) const;
+    Byte GetBootCharacter(const std::string &monitorFilePath) const;
 
 private:
     std::string iniFileName;

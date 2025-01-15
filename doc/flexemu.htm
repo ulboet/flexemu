@@ -16,10 +16,10 @@
 <h1>flexemu - an MC6809 emulator running FLEX</h1>
 <hr>
 <h2 id="synopsis">SYNOPSIS</h2>
-<h3 id="synopsis_linux">On Linux</h3>
-<p class="justify">flexemu [-i] [-h] [-f&nbsp;path] [-p&nbsp;path] [-c&nbsp;color] [-0&nbsp;path] [-1&nbsp;path] [-2&nbsp;path] [-3&nbsp;path] [-t] [-r&nbsp;&lt;two_hex_digits&gt;] [-v] [-u] [-j&nbsp;screen_factor] [-C&nbsp;startup_command] [-O&nbsp;cccc]</p>
+<h3 id="synopsis_unix">On Unix like OS</h3>
+<p class="justify">flexemu [-i] [-h] [-f&nbsp;path] [-p&nbsp;path] [-c&nbsp;color] [-0&nbsp;path] [-1&nbsp;path] [-2&nbsp;path] [-3&nbsp;path] [-t] [-T (scroll|curses)] [-r&nbsp;&lt;two_hex_digits&gt;] [-V] [-u] [-j&nbsp;screen_factor] [-C&nbsp;startup_command] [-O&nbsp;cccc] [-L&nbsp;path]</p>
 <h3 id="synopsis_windows">On Windows</h3>
-<p class="justify">flexemu [-i] [-h] [-f&nbsp;path] [-p&nbsp;path] [-c&nbsp;color] [-0&nbsp;path] [-1&nbsp;path] [-2&nbsp;path] [-3&nbsp;path] [-v] [-u] [-j&nbsp;screen_factor] [-C&nbsp;startup_command] [-O&nbsp;cccc]</p>
+<p class="justify">flexemu [-i] [-h] [-f&nbsp;path] [-p&nbsp;path] [-c&nbsp;color] [-0&nbsp;path] [-1&nbsp;path] [-2&nbsp;path] [-3&nbsp;path] [-V] [-u] [-j&nbsp;screen_factor] [-C&nbsp;startup_command] [-O&nbsp;cccc] [-L&nbsp;path]</p>
 
 <h2 id="description">DESCRIPTION</h2>
 <div class="justify">
@@ -39,14 +39,15 @@ in Germany in the 1980ies.
 <b>flexemu</b> supports the following features:
 <p>
 <ul>
- <li>running on Linux and Windows.
+ <li>running on Unix like OS and Windows.
  <li>using Qt framework as platform independent user interface
  <li>Emulate
 <a href="e2hwdesc.htm#E2V5">Eurocom II/V5</a> with digital cassette drives or
 <a href="e2hwdesc.htm#E2V7">Eurocom II/V7</a> with floppy disk drives.
 <li>supporting all <a href="mc6809.htm">MC6809</a> instructions incl. CWAI and SYNC
  <li>CPU monitor with start/stop/step/next/reset, two breakpoints
- <li>continuous display of CPU frequency and cycle count
+ <li>continuous display of CPU frequency, cycle count and disassembly.
+ <li>disassembler supports configurable label names.
  <li>full interrupt support
  <li>stop processor and pop up dialog at unimplemented processor instructions
  <li>Optionally support
@@ -64,20 +65,22 @@ or original frequency
 <a href="e2hwdesc.htm#96KbRamExt">2 x 96 KByte RAM extension</a> or
 <a href="e2hwdesc.htm#384KbRamExt">2 x 288 KByte RAM extension</a>
  <li>MC6850 serial line used for terminal I/O
- <li>terminal only mode without graphical user interface (Linux only)
+ <li>terminal only mode without graphical user interface (Unix like OS only)
+ <li>two different terminal types are supported.
  <li>WD1793 floppy disk controller support with up to 4 disk drives
- <li>support of disk images (DSK-files) but also native file system
- <li>compatible to
-<a href="http://ourtimelines.com/reflex/tocpage.html"> Ben Williams FLEX emulators</a> DSK format
+ <li>support of DSK or FLX disk image files
+ <li>support of virtual disks based on a host directory
  <li>MC6809 CPU emulation is running in a separate thread
      for maximum performance
  <li>0% host CPU load during MC6809 CPU emulation is stopped
  <li>0% host CPU load during CWAI and SYNC Instruction
  <li>minimum host CPU load if emulated CPU is running with original frequency
- <li>On Linux Signal SIGINT, SIGUSR1 and SIGUSR2 generate NMI,
+ <li>On Unix like OS Signal SIGINT, SIGUSR1 and SIGUSR2 generate NMI,
      IRQ or FIRQ
  <li>Configurable CPU Instruction logging within address range
-     and/or Start/Stop trigger address
+     and/or Start/Stop trigger address, optional CPU register logging and
+     loop optimization.
+ <li>Support different monitor programs.
  <li>dynamic mount/unmount of disks possible
  <li>file conversion from/to FLEX ASCII file format
  <li><a href="http://www.eltec.de/">ELTEC</a> full screen editor e.cmd included
@@ -97,7 +100,7 @@ preferences dialog. Command line options supersede preferences and makes the
 corresponding preferences together with its dependent preferences read-only.
 </div>
 
-<h3 id="options_linux_windows">Command line options on Linux and Windows</h3>
+<h3 id="options_linux_windows">Command line options on Unix like OS and Windows</h3>
 <div class="options-list">
 <dl>
 <dt>-f &lt;hexfile&gt;</dt>
@@ -122,7 +125,8 @@ Inverse video display (foreground and background colors exchanged).
 </dd>
 <dt>-p &lt;path&gt;</dt>
 <dd>
-Specifies a path in which disk image files or nafs-directories will be looked
+Specifies a path in which disk image files or virtual disks (directory disks)
+will be looked
 for.<BR>Defaults:
 <table class="invisible compact">
  <tr>
@@ -130,7 +134,7 @@ for.<BR>Defaults:
   <td>&lt;INSTDIR&gt;\data</td>
  </tr>
  <tr>
-  <td>Linux:</td>
+  <td>Unix like OS:</td>
   <td>/usr/share/flexemu</td>
  </tr>
 </table>
@@ -186,7 +190,7 @@ Number of shades or colors. Default is <b>2</b>. Valid values are 2, 8 and 64.
 Support formatting disk in drive 0..3 (Overwrite format). This option enables
 or disables the write track command on the floppy disk controller.
 c represents drive 0..3 in this order. All drives have to be specified. Only
-file containers (not directory containers) support formatting a disk.
+disk image files (not virtual disk images) support formatting a disk.
 Supported values:
 <p>
 <table class="invisible compact">
@@ -201,30 +205,41 @@ Supported values:
  </tr>
 </table>
 <p>
-Only container files which do not have a valid file format are allowed to be formatted this way.<BR>
+Only disk image files which do not have a valid file format are allowed to be formatted this way.<BR>
 Example: <b>-O&nbsp;001-</b><BR>
 Drive 2 allows format, drive 0 and 1 not, drive 3 is kept unchanged.
+</dd>
+<dt>-L &lt;path&gt;</dt>
+<dd>
+Enable CPU instruction logging. File extension: *.log or *.txt logs to a text file; *.csv logs to a csv file.
 </dd>
 <dt>-h</dt>
 <dd>
 Print a command line parameter description and exit.
 </dd>
-<dt>-v</dt>
+<dt>-V</dt>
 <dd>
 Print version number and exit.
 </dd>
 </dl>
 </div>
 
-<p><h3 id="options_linux">Command line options only on Linux</h3>
+<p><h3 id="options_linux">Command line options only on Unix like OS</h3>
 <div class="options-list">
 <dl>
 <dt>-t</dt>
 <dd>
-Terminal only mode. All input/output will be done on the terminal from
-which flexemu is started. All Escape-Sequences of this terminal can be
-accessed. Montior program <b>neumnt54.hex</b> is NOT needed for this any more.
+Terminal only mode. All input/output is redirected to the terminal from
+which flexemu is started.<br>
+<b>Hint:</b> Montior program <b>neumnt54.hex</b> is NOT needed for this any
+more.
 <b>neumon54.hex</b> can be used for both terminal and GUI mode.
+</dd>
+<dt>-T</dt>
+<dd>
+Terminal type. There are two different terminal types available: <b>scroll</b>
+and <b>curses</b>. See <a href="flexemu.htm#terminal">Terminal Preferences</a>
+for details.
 </dd>
 <dt>-r &lt;two_hex_digits&gt;</dt>
 <dd>
@@ -253,7 +268,7 @@ The following preferences can be modified.
   <th>V7</th>
  </tr>
  <tr>
-  <th colspan="5">Emulated Hardware</td>
+  <th colspan="5">Emulated Hardware</th>
  </tr>
  <tr>
   <td>Emulated hardware</td>
@@ -288,7 +303,7 @@ The following preferences can be modified.
   <td>Emulate realtime clock</td>
  </tr>
  <tr>
-  <th colspan="5">User Interface</td>
+  <th colspan="5">User Interface</th>
  </tr>
  <tr>
   <td>Screen size</td>
@@ -337,7 +352,15 @@ The following preferences can be modified.
   <td>off</td>
  </tr>
  <tr>
-  <th colspan="5">Memory</td>
+  <td>Display Smooth</td>
+  <td>When enabled the video screen is display with a smooth effect. When
+   disabled the video screen displays pixels.</td>
+  <td><b>&check;</b></td>
+  <td><b>&check;</b></td>
+  <td>off</td>
+ </tr>
+ <tr>
+  <th colspan="5">Memory</th>
  </tr>
  <tr>
   <td>RAM extension</td>
@@ -353,15 +376,15 @@ The following preferences can be modified.
   <td>2 x 96 KByte</td>
  </tr>
  <tr>
-  <th colspan="5">Files and Directories</td>
+  <th colspan="5">Files and Directories</th>
  </tr>
  <tr>
   <td>Disk/Monitor directory</td>
-  <td>A Directory Path containing FLEX disks and monitor program.</td>
+  <td>A Directory Path containing FLEX disk images and monitor program.</td>
   <td><b>&check;</b></td>
   <td><b>&check;</b></td>
   <td>Windows: &lt;INSTDIR&gt;\data<BR>
-  Linux: /usr/share/flexemu</td>
+  Unix like OS: /usr/share/flexemu</td>
  </tr>
  <tr>
   <td>Monitor program</td>
@@ -400,25 +423,101 @@ The following preferences can be modified.
  </tr>
  <tr>
   <td>Cassette Drive 0</td>
-  <td>A filename or directory path for cassette drive 0.</td>
+  <td>A filename for cassette drive 0.</td>
   <td><b>&check;</b></td>
   <td><b>-</b></td>
   <td>system.mdcr</td>
  </tr>
  <tr>
   <td>Cassette Drive 1</td>
-  <td>A filename or directory path for cassette drive 1.</td>
+  <td>A filename for cassette drive 1.</td>
   <td><b>&check;</b></td>
   <td><b>-</b></td>
   <td>Not set</td>
  </tr>
  <tr>
-  <th colspan="5">Terminal (Linux only)</td>
+  <th colspan="5">Virtual Disk</th>
+ </tr>
+ <tr>
+  <td>Active</td>
+  <td>Enable or disable support of
+   <a href="flexfs.htm#nafs_format">directory disks</a>, also called virtual
+   disks.</td>
+  <td><b>-</b></td>
+  <td><b>&check;</b></td>
+  <td>on</td>
+ </tr>
+ <tr>
+  <td>Default Format</td>
+  <td>Choose the default format used when first time using a directory disk.
+   It is stored in the directory in the file .flexdiskrc</td>
+  <td><b>-</b></td>
+  <td><b>&check;</b></td>
+  <td>80 tracks, 36 sectors</td>
+ </tr>
+ <tr>
+  <td>Tracks</td>
+  <td>When choosing "[Set Tracks and Sectors]" as default format the number of tracks can be set individually.</td>
+  <td><b>-</b></td>
+  <td><b>&check;</b></td>
+  <td>80</td>
+ </tr>
+ <tr>
+  <td>Sectors</td>
+  <td>When choosing "[Set Tracks and Sectors]" as default format the number of sectors can be set individually.</td>
+  <td><b>-</b></td>
+  <td><b>&check;</b></td>
+  <td>36</td>
+ </tr>
+ <tr id="terminal">
+  <th colspan="5">Terminal (Unix like OS only)</th>
+ </tr>
+ <tr>
+  <td>Terminal Type</td>
+  <td>
+   If <a href="#options_linux">terminal only mode</a> is active, there are
+   different terminal types available:
+   <ul>
+    <li><b>Simple Scrolling Terminal:</b> Any input or output is simply
+    redirected to the controlling terminal. It's scrolling can be used
+    to see the input and output history. It is also possible to redirect
+    the output stream into a file using Unix builtin output redirection
+    support. This example creates a log-file of the whole flexemu session:<br>
+    <b>flexemu -t -T scroll | tee inout.log</b><br>
+    The escape sequences of the controlling terminal can be used (which
+    obviously creates a dependency between the executed flexemu command and
+    the controlling terminal).
+    </li>
+    <li><b>Enhanced Terminal Emulation:</b> This terminal type provides
+    an enhanced terminal emulation exactly as provided by the monitor program
+    <a href="neumon54.htm">neumon54.hex</a> with 25 lines and 84 columns.
+    All control characters and escape sequences are emulated (except for
+    CTRL-], ESC A, ESC F and ESC G).
+    This terminal type is useful for example for screen editors like
+    <a href="cedric.pdf">CEDRIC</a> or <a href="dynastar.pdf">DynaStar</a>
+    which depend on specific escape sequences. This terminal emulation is
+    based on the
+    <a href="https://invisible-island.net/ncurses/ncurses-intro.html">ncurses library</a>.
+    This example starts flexemu in this terminal mode without visible user
+    interface:<br>
+    <b>flexemu -t -T curses</b><br>
+    </li>
+   </ul>
+   <br>
+   On the FLEX prompt it is also possible to switch between graphical user
+   interface and terminal mode.
+   See <a href="flexutil.htm#terminal_graphic">corresponding EMU commands</a>
+   for details.
+  </td>
+  <td><b>&check;</b></td>
+  <td><b>&check;</b></td>
+  <td>Simple Scrolling Terminal</td>
  </tr>
  <tr>
   <td>Ignore output of NUL (0x00) characters</td>
   <td>
-			In terminal mode the output of NUL characters can be ignored. Their initial
+   In terminal only mode the output of NUL characters can be ignored.
+   Their initial
 			usage to wait until the teleprinter returns to the first printing position
 			is not needed any more. There are terminals which incorrectly display it as
 			a space. For details see:
@@ -433,7 +532,8 @@ The following preferences can be modified.
  <tr>
   <td>Ignore output of ESC (0x1B) characters</td>
   <td>
-			In terminal mode the output of ESC characters can be ignored. This option
+			Using simple scrolling terminal type the output of ESC characters can be
+   ignored. This option
 			has to be switched off, to send escape sequences to the terminal. When doing
 			this it is recommended to change <a href="flexmem.htm#ttyesc">TTYESC</a>
 			to a different character than ESC using
@@ -445,7 +545,7 @@ The following preferences can be modified.
   <td>on</td>
  </tr>
  <tr>
-  <th colspan="5">Expert Preferences</td>
+  <th colspan="5">Expert Preferences</th>
  </tr>
  <tr>
   <td>Undocumented instructions</td>
@@ -537,12 +637,22 @@ The following preferences can be modified.
   <td><b>&check;</b></td>
   <td>off</td>
  </tr>
+ <tr>
+  <td>Use file time</td>
+  <td>This is a flexemu extension to the FLEX filesystem. If enabled a
+   directory entry also contains the hour and minute of the file creation.
+   This feature is only partially implemented. FLEX does not yet support it.
+  </td>
+  <td><b>-</b></td>
+  <td><b>&check;</b></td>
+  <td>off</td>
+ </tr>
 </table>
 <p>
 [1] When this option is enabled a floppy disk can be formatted from within the
-emulator. Only file containers (not directory containers) support formatting a
-disk. When this option is on, the corresponding file container can be an empty
-non existent file. NEWDISK.CMD distributed on system.dsk for example can be
+emulator. Only disk image files (not virtual disk images) support formatting a
+disk. When this option is on, the corresponding disk image file can be an empty
+or non existent file. NEWDISK.CMD distributed on system.dsk for example can be
 used to format a disk.
 <p>
 
@@ -552,6 +662,20 @@ With the menu CPU-&gt;Breakpoints up to two breakpoints
 can be set. They have to be input as a one to four digit hexadecimal
 address. Execution automatically stops when the PC register contains one
 of the breakpoint addresses.
+</div>
+
+<h3 id="disassembler">MC6809 Disassembler</h3>
+<div class="justify">
+flexemu has an integrated disassembler. It displays the currently to be
+executed instruction. Configuring the
+<a href="flexemu.htm#logging">CPU Instruction Logging</a>
+allows to log all executed instructions.
+Addresses having a special meaning in the FLEX Operating System can be
+displayed as label instead of the hex-address. These labels are defined in
+the file
+<b>flexlabl.conf</b>. On Unix like OS the file get's installed in path
+<b>/etc/flexlabl.conf</b>. On Windows it is located in the installation
+directory.
 </div>
 
 <h3 id="logging">CPU Instruction Logging</h3>
@@ -567,6 +691,11 @@ four digit hexadecimal address:
   <th>Fieldname</th>
   <th>Default value</th>
   <th>Description</th>
+ </tr>
+ <tr>
+  <td>Enable logging</td>
+  <td>off</td>
+  <td>Enable or disable logging.</td>
  </tr>
  <tr>
   <td>Min Address</td>
@@ -611,16 +740,108 @@ four digit hexadecimal address:
   </td>
  </tr>
  <tr>
+  <td>Loop optimization</td>
+  <td>off</td>
+  <td>
+   Loop optimization detects repeated instruction sequences and prints them
+   using an optimized syntax. Within a loop no cycle count or register
+   contents are logged. The first loop execution is always logged outside
+   the loop to still see the cycle count and register contents when entering
+   the loop. All following loop executions are surrounded by a "DO" and
+   "REPEAT" pseudo instruction. "REPEAT" is followed by the number of
+   repetitions. Source code analysis has shown that this saves a tremendous
+   amount of logging file capacity while providing the exact same information.
+   [2]
+  </td>
+ </tr>
+ <tr>
+  <td>Format</td>
+  <td>Text</td>
+  <td>
+    The format of the logging file can be selected.
+    <ul>
+     <li>Text: Logs into a text based format. The data is arranged in columns separated by one or multiple spaces.</li>
+     <li>CSV Text: Logs into a text based format. The first line is a column header. The data is arranged in columns separated by a selectable separater character.</li>
+    </ul>
+  </td>
+ </tr>
+ <tr>
+  <td>CSV Separator</td>
+  <td>Semicolon</td>
+  <td>
+   Only enabled if log format is CSV Text. The separator character can be selected. [1]
+    <ul>
+     <li>Semicolon (hex <code>3B</code>)</li>
+     <li>Space (hex <code>20</code>)</li>
+     <li><code>TAB</code> (hex <code>09</code>)</li>
+    </ul>
+  </td>
+ </tr>
+ <tr>
   <td>Filename</td>
   <td>&lt;not set&gt;</td>
   <td>
     Filename to be used for the instruction logging. Independant of the Start
     and Stop Address this file remains open as long as Flexemu keeps running
-    until another Filename is set. An empty filename finishes Instruction
-    logging.
+    until another Filename is set or logging is disabled.
   </td>
  </tr>
 </table>
+<p>
+ [1] Comma is not available as separator character because it is used to separate operands in the MC6809 assembler syntax.<br>
+ [2] Loop optimization example with displaying loop register A contents:
+<div class="options-list">
+<table class="invisible compact indent">
+ <tr>
+  <td>0100</td>
+  <td>LDA</td>
+  <td>#6</td>
+  <td>A=XX</td>
+ </tr>
+ <tr>
+  <td>0102</td>
+  <td>DECA</td>
+  <td></td>
+  <td>A=06</td>
+ </tr>
+ <tr>
+  <td>0103</td>
+  <td>BNE</td>
+  <td>$0102</td>
+  <td>A=05</td>
+ </tr>
+ <tr>
+  <td></td>
+  <td>DO</td>
+  <td></td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>0102</td>
+  <td>DECA</td>
+  <td></td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>0103</td>
+  <td>BNE</td>
+  <td>$0102</td>
+  <td></td>
+ </tr>
+ <tr>
+  <td></td>
+  <td>REPEAT</td>
+  <td>#5</td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>0105</td>
+  <td>CLRB</td>
+  <td></td>
+  <td>A=00</td>
+ </tr>
+</table>
+</div>
 
 <h3 id="frequency_control">CPU Frequency control</h3>
 <div class="justify">
@@ -635,11 +856,11 @@ other frequencies can be specified. See
 <h2 id="keyboard">KEYBOARD</h2>
 <h3 id="keyboard_pat09">Eurocom PAT09 keyboard</h3>
 <div class="justify">
-The Eurocom II/V7 typically was shipped with a PAT09 keyboard:
+The preferred keyboard for the Eurocom II/V7 was the PAT09 keyboard:
 </div>
 <p>
 <img src="images/pat09_keyboard.png" alt="PAT09 keyboard"
- title="PAT09 keyboard" width="1024" />
+     title="PAT09 keyboard" width="1024">
 <p>
 <div class="justify">
 PAT09 can emit the whole ASCII character set (hex code <code>00</code> ..
@@ -652,7 +873,7 @@ supporting the ASCII character set.
 
 <h3 id="hotkeys">Hotkeys</h3>
 <div class="justify">
-The following table shows the hotkeys available in flexemu.
+The following table summarizes the hotkeys available in flexemu.
 </div>
 <p>
 <table>
@@ -937,11 +1158,11 @@ PAT09 keyboard has both a separate cursor control keypad and numeric keypad:
  <tr>
   <td>
     <img src="images/pat09_cursorpad.png" alt="PAT09 cursor pad"
-     title="PAT09 cursor pad" width="138" />
+     title="PAT09 cursor pad" width="138">
   </td>
   <td>
     <img src="images/pat09_numpad.png" alt="PAT09 numpad"
-     title="PAT09 numpad" width="138" />
+     title="PAT09 numpad" width="138">
   </td>
 </table>
 <p>
@@ -973,7 +1194,8 @@ The following hex codes can be generated.
   <th><kbd>Shift</kbd>+<kbd>Ctrl</kbd>+<kbd>&lt;key&gt;</kbd></th>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_thick_left_arrow.png" alt="Thick left arrow" width="48" /></td>
+  <td><img src="images/pat09_key_thick_left_arrow.png" alt="Thick left arrow"
+           width="48"></td>
   <td><kbd>Pos1</kbd></td>
   <td><code>F1</code></td>
   <td><code>E1</code></td>
@@ -981,7 +1203,7 @@ The following hex codes can be generated.
   <td><code>A1</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_down_arrow.png" alt="Down arrow" width="48" /></td>
+  <td><img src="images/pat09_key_down_arrow.png" alt="Down arrow" width="48"></td>
   <td><kbd>&#8595;</kbd></td> <!-- cursor down -->
   <td><code>F2</code></td>
   <td><code>E2</code></td>
@@ -989,7 +1211,8 @@ The following hex codes can be generated.
   <td><code>A2</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_thick_lower_right_arrow.png" alt="Thick lower right arrow" width="48" /></td>
+  <td><img src="images/pat09_key_thick_lower_right_arrow.png"
+           alt="Thick lower right arrow" width="48"></td>
   <td><kbd>Page Down</kbd></td>
   <td><code>F3</code></td>
   <td><code>E3</code></td>
@@ -997,7 +1220,7 @@ The following hex codes can be generated.
   <td><code>A3</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_left_arrow.png" alt="Left arrow" width="48" /></td>
+  <td><img src="images/pat09_key_left_arrow.png" alt="Left arrow" width="48"></td>
   <td><kbd>&#8592;</kbd></td> <!-- cursor left -->
   <td><code>F4</code></td>
   <td><code>E4</code></td>
@@ -1005,7 +1228,7 @@ The following hex codes can be generated.
   <td><code>A4</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_mode.png" alt="Mode" width="48" /></td>
+  <td><img src="images/pat09_key_mode.png" alt="Mode" width="48"></td>
   <td><kbd>Clear</kbd></td>
   <td><code>F5</code></td>
   <td><code>E5</code></td>
@@ -1013,7 +1236,7 @@ The following hex codes can be generated.
   <td><code>A5</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_right_arrow.png" alt="Right arrow" width="48" /></td>
+  <td><img src="images/pat09_key_right_arrow.png" alt="Right arrow" width="48"></td>
   <td><kbd>&#8594;</kbd></td> <!-- cursor right -->
   <td><code>F6</code></td>
   <td><code>E6</code></td>
@@ -1021,7 +1244,7 @@ The following hex codes can be generated.
   <td><code>A6</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_thick_upper_left_arrow.png" alt="Thick upper left arrow" width="48" /></td>
+  <td><img src="images/pat09_key_thick_upper_left_arrow.png" alt="Thick upper left arrow" width="48"></td>
   <td><kbd>Page Up</kbd></td>
   <td><code>F7</code></td>
   <td><code>E7</code></td>
@@ -1029,7 +1252,7 @@ The following hex codes can be generated.
   <td><code>A7</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_up_arrow.png" alt="Up arrow" width="48" /></td>
+  <td><img src="images/pat09_key_up_arrow.png" alt="Up arrow" width="48"></td>
   <td><kbd>&#8593;</kbd></td> <!-- cursor up -->
   <td><code>F8</code></td>
   <td><code>E8</code></td>
@@ -1037,7 +1260,7 @@ The following hex codes can be generated.
   <td><code>A8</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_thick_right_arrow.png" alt="Thick right arrow" width="48" /></td>
+  <td><img src="images/pat09_key_thick_right_arrow.png" alt="Thick right arrow" width="48"></td>
   <td><kbd>End</kbd></td>
   <td><code>F9</code></td>
   <td><code>E9</code></td>
@@ -1045,7 +1268,7 @@ The following hex codes can be generated.
   <td><code>A9</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_left_limit.png" alt="Left limit" width="64" /></td>
+  <td><img src="images/pat09_key_left_limit.png" alt="Left limit" width="64"></td>
   <td>
    <span class=left><kbd>Insert</kbd></span>
    &nbsp;&nbsp;&nbsp;
@@ -1057,7 +1280,7 @@ The following hex codes can be generated.
   <td><code>EA</code></td>
  </tr>
  <tr>
-  <td><img src="images/pat09_key_right_limit.png" alt="Right limit" width="64" /></td>
+  <td><img src="images/pat09_key_right_limit.png" alt="Right limit" width="64"></td>
   <td>
    <span class=left><kbd>Delete</kbd></span>
    <span class=right>[2]</span>
@@ -1080,6 +1303,102 @@ any hex code.
 <kbd>Ctrl</kbd>+<kbd>Delete</kbd> key emits key code <code>1F</code>.
 </div>
 
+<h2 id="monitor">MONITOR PROGRAM</h2>
+The monitor program provides basic I/O functions to the operating system.
+It is comparable to the BIOS on a PC.
+<p>
+But in addition it provides a simple command line interface to display or
+change memory contents or display, set or clear breakpoints. or boot FLEX
+operating system. From within FLEX the monitor program can be entered by
+entering MON on the FLEX prompt.
+<p>
+flexemu is deployed with the following monitor programs:
+
+<table>
+ <tr>
+  <th colspan="2">Monitor program</th>
+  <th colspan="2">Eurocom II</th>
+  <th colspan="3">RAM Extension</th>
+  <th rowspan="2">Boot disk</th>
+  <th rowspan="2">Comment</th>
+ </tr>
+ <tr>
+  <th>Version</th>
+  <th>File</th>
+  <th>V5</th>
+  <th>V7</th>
+  <th>None</th>
+  <th>2 x 96<br>KByte</th>
+  <th>2 x 288<br>KByte</th>
+ </tr>
+ <tr>
+  <td>V5.4 spec</td>
+  <td><a href="neumon54.htm">neumon54.hex</a></td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>&check;</td>
+  <td>&check;</td>
+  <td>&check;</td>
+  <td>system.dsk, system54.dsk</td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>V5.3</td>
+  <td><a href="mon53_54.htm">mon53.s19</a></td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>-</td>
+  <td>system54.dsk</td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>V5.4</td>
+  <td><a href="mon53_54.htm">mon54.s19</a></td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>system54.dsk</td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>U5.4</td>
+  <td><a href="monu54.htm">monu54-6.s19</a></td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>&check;</td>
+  <td>system54.dsk</td>
+  <td>Boot FLEX by entering <b>D</b></td>
+ </tr>
+ <tr>
+  <td>V2.4</td>
+  <td><a href="mon24.htm">mon24.s19</a></td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>-</td>
+  <td></td>
+  <td></td>
+ </tr>
+ <tr>
+  <td>V2.4</td>
+  <td><a href="mon24.htm#Mon24z">mon24z.s19</a></td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>&check;</td>
+  <td>-</td>
+  <td>-</td>
+  <td></td>
+  <td></td>
+ </tr>
+</table>
+
 <h2 id="see_also">SEE ALSO</h2>
 <ul>
  <li><a href="flexuser.htm"> FLEX Users Manual</a>
@@ -1091,6 +1410,8 @@ any hex code.
  <li><a href="flexfcb.htm"> FLEX File Control Block (FCB)</a>
  <li><a href="flexmem.htm"> FLEX Memory Map</a>
  <li><a href="neumon54.htm"> Monitor program neumon54.hex</a>
+ <li><a href="mon53_54.htm"> Monitor program mon53.s19 and mon54.s19</a>
+ <li><a href="monu54.htm"> Monitor program monu54-6.s19</a>
  <li><a href="mon24.htm"> Monitor program mon24.s19</a>
  <li><a href="e2hwdesc.htm"> Eurocom II hardware description</a>
  <li><a href="mc6809.htm"> Motorola MC6809</a>
@@ -1115,6 +1436,14 @@ any hex code.
  <li><a href="basprec.pdf" target="_blank">BASIC Precompiler User's Manual</a>
  <li><a href="f77.pdf" target="_blank">Fortan 77</a>
  <li><a href="util_man.pdf" target="_blank">Windrush FLEX Utilities Package</a>
+</ul>
+<h2 id="OtherLinks">Other Documents</h2>
+
+<ul>
+ <li><a href=cedric.pdf target=_blank>Cedric screen editor</a>
+ <li><a href="dynastar.pdf" target="_blank">Dynastar screen editor and text processor</a>
+ <li><a href="just.pdf" target="_blank">Just text processor</a>
+ <li><a href="TSC_Text_Processor.pdf" target="_blank">TSC Text Processor</a>
 </ul>
 
 <h2 id="related_links">Related Links</h2>

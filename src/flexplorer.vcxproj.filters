@@ -15,7 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ndircont.cpp">
+    <ClCompile Include="drawnwid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fpattrui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="fpcnvui.cpp">
@@ -48,10 +51,16 @@
     <ClCompile Include="fpwin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="fversion.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="winmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="qtfree.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -63,9 +72,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="benv.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="bfileptr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bintervl.h">
@@ -86,13 +92,22 @@
     <ClInclude Include="cvtwchar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cistring.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="confignt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="dircont.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="efilesiz.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="efiletim.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fattrib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fcinfo.h">
@@ -149,13 +164,10 @@
     <ClInclude Include="misc1.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ndircont.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="rfilecnt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sprinter.h">
+    <ClInclude Include="rndcheck.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mdcrtape.h">
@@ -165,9 +177,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="warnon.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="fpcnvui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fpdnd.h">
@@ -185,11 +194,20 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="propsui.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="sfpopts.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="qtfree.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <CustomBuild Include="drawnwid.h">
+      <Filter>Header Files</Filter>
+    </CustomBuild>
     <CustomBuild Include="fpmdich.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
@@ -211,11 +229,20 @@
     <CustomBuild Include="fpnew.ui">
       <Filter>Resource Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="about.ui">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
     <CustomBuild Include="fpopt.ui">
       <Filter>Resource Files</Filter>
     </CustomBuild>
     <CustomBuild Include="fpcnv.ui">
       <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="fpcnvui.h">
+      <Filter>Header Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="fversion.h">
+      <Filter>Header Files</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>

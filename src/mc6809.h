@@ -2,7 +2,7 @@
     mc6809.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This file is based on usim-0.91 which is
     Copyright (C) 1994 by R. B. Bellis
@@ -13,8 +13,6 @@
 #ifndef MC6809_INCLUDED
 #define MC6809_INCLUDED
 
-#include <stdio.h>
-#include <atomic>
 #include "misc1.h"
 #include "typedefs.h"
 #include "memory.h"
@@ -24,11 +22,21 @@
 #include "flexemu.h"
 #include "absdisas.h"
 #include "bobserv.h"
+#include "mc6809lg.h"
+#include <atomic>
+#include <array>
+#include "warnoff.h"
+#include <optional>
+#include "warnon.h"
 
+using OptionalWord = std::optional<Word>;
+
+/* Keep macro to be controlable from command line */
+/* NOLINTNEXTLINE(cppcoreguidelines-macro-usage) */
 #define USE_ASM 1
 
 // Test if GCC inline assembler can be used
-#if defined(__amd64__) || defined(__i386__)
+#if defined(__amd64__)
     #define IX86
 #endif
 #if defined(__GNUC__) && defined (USE_ASM) && defined(IX86) && \
@@ -37,28 +45,29 @@
 #endif
 
 #ifdef BITFIELDS_LSB_FIRST
-    #define CC_BIT_C      0x01
-    #define CC_BIT_V      0x02
-    #define CC_BIT_Z      0x04
-    #define CC_BIT_N      0x08
-    #define CC_BIT_I      0x10
-    #define CC_BIT_H      0x20
-    #define CC_BIT_F      0x40
-    #define CC_BIT_E      0x80
+constexpr auto CC_BIT_C{0x01U};
+constexpr auto CC_BIT_V{0x02U};
+constexpr auto CC_BIT_Z{0x04U};
+constexpr auto CC_BIT_N{0x08U};
+constexpr auto CC_BIT_I{0x10U};
+constexpr auto CC_BIT_H{0x20U};
+constexpr auto CC_BIT_F{0x40U};
+constexpr auto CC_BIT_E{0x80U};
 #else
-    #define CC_BIT_C      0x80
-    #define CC_BIT_V      0x40
-    #define CC_BIT_Z      0x20
-    #define CC_BIT_N      0x10
-    #define CC_BIT_I      0x08
-    #define CC_BIT_H      0x04
-    #define CC_BIT_F      0x02
-    #define CC_BIT_E      0x01
+constexpr auto CC_BIT_C{0x80U};
+constexpr auto CC_BIT_V{0x40U};
+constexpr auto CC_BIT_Z{0x20U};
+constexpr auto CC_BIT_N{0x10U};
+constexpr auto CC_BIT_I{0x08U};
+constexpr auto CC_BIT_H{0x04U};
+constexpr auto CC_BIT_F{0x02U};
+constexpr auto CC_BIT_E{0x01U};
 #endif
-#define CC_BITS_HNZVC (CC_BIT_H | CC_BIT_N | CC_BIT_Z | CC_BIT_V | CC_BIT_C)
-#define CC_BITS_NZVC  (CC_BIT_N | CC_BIT_Z | CC_BIT_V | CC_BIT_C)
-#define CC_BITS_NZV   (CC_BIT_N | CC_BIT_Z | CC_BIT_V)
-#define CC_BITS_NZC   (CC_BIT_N | CC_BIT_Z | CC_BIT_C)
+constexpr auto CC_BITS_HNZVC{CC_BIT_H | CC_BIT_N | CC_BIT_Z | CC_BIT_V |
+    CC_BIT_C};
+constexpr auto CC_BITS_NZVC{CC_BIT_N | CC_BIT_Z | CC_BIT_V | CC_BIT_C};
+constexpr auto CC_BITS_NZV{CC_BIT_N | CC_BIT_Z | CC_BIT_V};
+constexpr auto CC_BITS_NZC{CC_BIT_N | CC_BIT_Z | CC_BIT_C};
 
 #ifdef FASTFLEX
     #define PC ipcreg
@@ -69,9 +78,6 @@
     #define PC pc
     #define CC_BITI (cc.bit.i)
     #define CC_BITF (cc.bit.f)
-    #define EXEC_NMI(s)  nmi(s)
-    #define EXEC_IRQ(s)  irq(s)
-    #define EXEC_FIRQ(s) firq(s)
 #endif
 
 // uncomment this for debug output of cpu
@@ -80,63 +86,63 @@
 
 union uacc
 {
-    Word            d;  // Combined accumulator
+    Word d; // Combined accumulator
     struct
     {
 #ifdef WORDS_BIGENDIAN
-        Byte        a;  // Accumulator a
-        Byte        b;  // Accumulator b
+        Byte a; // Accumulator a
+        Byte b; // Accumulator b
 #else
-        Byte        b;  // Accumulator b
-        Byte        a;  // Accumulator a
+        Byte b; // Accumulator b
+        Byte a; // Accumulator a
 #endif
     } byte;
 };
 
 union udpreg
 {
-    Word            dp16;
+    Word dp16;
     struct
     {
 #ifdef WORDS_BIGENDIAN
-        Byte        h;
-        Byte        l;
+        Byte h;
+        Byte l;
 #else
-        Byte        l;
-        Byte        h;
+        Byte l;
+        Byte h;
 #endif
     } byte;
 };
 
 union ucc
 {
-    Byte            all;    // Condition code register
+    Byte all; // Condition code register
     struct
     {
 #ifdef BITFIELDS_LSB_FIRST
-        bool        c : 1;  // Carry
-        bool        v : 1;  // Overflow
-        bool        z : 1;  // Zero
-        bool        n : 1;  // Negative
-        bool        i : 1;  // IRQ disable
-        bool        h : 1;  // Half carry
-        bool        f : 1;  // FIRQ disable
-        bool        e : 1;  // Entire
+        bool c : 1; // Carry
+        bool v : 1; // Overflow
+        bool z : 1; // Zero
+        bool n : 1; // Negative
+        bool i : 1; // IRQ disable
+        bool h : 1; // Half carry
+        bool f : 1; // FIRQ disable
+        bool e : 1; // Entire
 #else
-        bool        e : 1;  // Entire
-        bool        f : 1;  // FIRQ disable
-        bool        h : 1;  // Half carry
-        bool        i : 1;  // IRQ disable
-        bool        n : 1;  // Negative
-        bool        z : 1;  // Zero
-        bool        v : 1;  // Overflow
-        bool        c : 1;  // Carry
+        bool e : 1; // Entire
+        bool f : 1; // FIRQ disable
+        bool h : 1; // Half carry
+        bool i : 1; // IRQ disable
+        bool n : 1; // Negative
+        bool z : 1; // Zero
+        bool v : 1; // Overflow
+        bool c : 1; // Carry
 #endif
     } bit;
 };
 
 class Da6809;
-class Mc6809CpuStatus;
+struct Mc6809CpuStatus;
 
 
 class Mc6809 : public ScheduledCpu, public BObserver
@@ -144,114 +150,120 @@ class Mc6809 : public ScheduledCpu, public BObserver
 public:
     enum class Event : Word
     {
-        NONE = 0,
-        Nmi = (1 << 0),
-        Firq = (1 << 1),
-        Irq = (1 << 2),
-        Invalid = (1 << 3),
-        BreakPoint = (1 << 4),
-        SingleStep = (1 << 5),
-        SingleStepFinished = (1 << 6),
-        SyncExec = (1 << 7),
-        Timer = (1 << 8),
-        SetStatus = (1 << 9),
-        FrequencyControl = (1 << 10),
-        DoSchedule = (1 << 11),
-        Cwai = (1 << 13),
-        Sync = (1 << 14),
-        IgnoreBP = (1 << 15),
+        NONE = 0U,
+        Nmi = (1U << 0U),
+        Firq = (1U << 1U),
+        Irq = (1U << 2U),
+        Invalid = (1U << 3U),
+        BreakPoint = (1U << 4U),
+        SingleStep = (1U << 5U),
+        SingleStepFinished = (1U << 6U),
+        SyncExec = (1U << 7U),
+        Timer = (1U << 8U),
+        SetStatus = (1U << 9U),
+        FrequencyControl = (1U << 10U),
+        DoSchedule = (1U << 11U),
+        Cwai = (1U << 13U),
+        Sync = (1U << 14U),
+        IgnoreBP = (1U << 15U),
     };
 
 protected:
     class atomic_event
     {
-        using T = std::underlying_type<Mc6809::Event>::type;
+        using T = std::underlying_type_t<Mc6809::Event>;
         std::atomic<T> event;
 
     public:
         atomic_event() = delete;
-        atomic_event(Event x_event)
+        explicit atomic_event(Event p_event)
+            : event(static_cast<T>(p_event))
         {
-            event = static_cast<T>(x_event);
         }
         ~atomic_event() = default;
         atomic_event(const atomic_event&) = delete;
         atomic_event& operator= (const atomic_event&) = delete;
-        Event operator= (Event x_event)
+        atomic_event &operator= (Event p_event)
         {
-            event = static_cast<T>(x_event);
-            return static_cast<Event>(static_cast<T>(event));
+            event = static_cast<T>(p_event);
+            return *this;
         }
-        Event operator& (Event x_event)
+        Event operator& (Event p_event)
         {
             return static_cast<Event>(static_cast<T>(event) &
-                                      static_cast<T>(x_event));
+                                      static_cast<T>(p_event));
         }
-        Event operator|= (Event x_event)
+        Event operator|= (Event p_event)
         {
-            event |= static_cast<T>(x_event);
+            event |= static_cast<T>(p_event);
             return static_cast<Event>(static_cast<T>(event));
         }
-        Event operator&= (Event x_event)
+        Event operator&= (Event p_event)
         {
-            event &= static_cast<T>(x_event);
+            event &= static_cast<T>(p_event);
             return static_cast<Event>(static_cast<T>(event));
         }
-        bool operator!= (Event x_event)
+        bool operator!= (Event p_event)
         {
-            return static_cast<T>(event) != static_cast<T>(x_event);
+            return static_cast<T>(event) != static_cast<T>(p_event);
         }
     };
 
     // Processor registers
 protected:
 
-    Byte            indexed_cycles[256];    // add. cycles for
+    std::array<Byte, 256> indexed_cycles{}; // add. cycles for
     // indexed addr.
-    Byte            psh_pul_cycles[256];    // add. cycles for psh
+    std::array<Byte, 256> psh_pul_cycles{}; // add. cycles for psh
     // and pull-instr.
-    Byte            nmi_armed;      // for handling
+    Byte nmi_armed{0}; // for handling
     // interrupts
-    atomic_event events; // event status flags (atomic access)
-    tInterruptStatus    interrupt_status;
+    atomic_event events{Event::NONE}; // event status flags (atomic access)
+    tInterruptStatus interrupt_status{};
 #ifdef FASTFLEX
-    std::atomic<Word> ipcreg;
-    Word            iureg, isreg, ixreg, iyreg;
-    Byte            iareg, ibreg, iccreg, idpreg;
-    Word            eaddr;
-    Byte            ireg;
-    Byte            iflag;
-    Byte            tb;
-    Word            tw;
-    Byte            k;
-    Byte            *pMem;      // needed for memory access
+    std::atomic<Word> ipcreg{0};
+    Word iureg{0};
+    Word isreg{0};
+    Word ixreg{0};
+    Word iyreg{0};
+    Byte iareg{0};
+    Byte ibreg{0};
+    Byte iccreg{0};
+    Byte idpreg{0};
+    Word eaddr{0};
+    Byte ireg{0};
+    Byte iflag{0};
+    Byte tb{0};
+    Word tw{0};
+    Byte k{0};
+    Byte *pMem{nullptr}; // needed for memory access
 #else
-    std::atomic<Word> pc;
-    Word            u, s;       // Stack pointers
-    Word            x, y;       // Index registers
-    union uacc acc;
-    union udpreg dpreg;
-    Byte           &a;
-    Byte           &b;
-    Word           &d;
-    Byte           &dp;
-    union ucc cc;
+    std::atomic<Word> pc{0};
+    Word s{0}; // Stack pointer
+    Word u{0}; // Alternative Stack pointer
+    Word x{0}; // Index Register
+    Word y{0}; // Index register
+    union uacc acc{0};
+    union udpreg dpreg{0};
+    Byte &a;
+    Byte &b;
+    Word &d;
+    Byte &dp;
+    union ucc cc{0};
 #endif // #ifndef FASTFLEX
 
 protected:
 
-    Da6809     *disassembler;
+    Da6809 *disassembler{nullptr};
 
     // funcitons for instruction execution:
 
 private:
 
-    void            init();
-    void            init_indexed_cycles();
-    void            init_psh_pul_cycles();
-    void            illegal();
-    void            log_current_instruction();
-    std::string     asCCString(Byte reg);
+    void init();
+    void init_indexed_cycles();
+    void init_psh_pul_cycles();
+    void illegal();
 
 #ifndef FASTFLEX
     //***********************************
@@ -368,7 +380,7 @@ private:
     inline void mul()
     {
         d = a * b;
-        cc.bit.c = BTST7(b);
+        cc.bit.c = BTST<Byte>(b, 7U);
         cc.bit.z = !d;
     }
 
@@ -379,7 +391,7 @@ private:
 
     inline void sex()
     {
-        cc.bit.n = BTST7(b);
+        cc.bit.n = BTST<Byte>(b, 7U);
         cc.bit.z = !b;
         a = cc.bit.n ? 255 : 0;
     }
@@ -478,11 +490,9 @@ private:
             pc += 2 + memory.read_word(pc);
             return 6;
         }
-        else
-        {
-            pc += 2;
-            return 5;
-        }
+
+        pc += 2;
+        return 5;
     }
 
     inline void bcc()
@@ -527,12 +537,12 @@ private:
 
     inline void bgt()
     {
-        do_br(!(cc.bit.z | (cc.bit.n ^ cc.bit.v)));
+        do_br(!(static_cast<unsigned>(cc.bit.n ^ cc.bit.v) | cc.bit.z));
     }
 
     inline cycles_t lbgt()
     {
-        return do_lbr(!(cc.bit.z | (cc.bit.n ^ cc.bit.v)));
+        return do_lbr(!(static_cast<unsigned>(cc.bit.n ^ cc.bit.v) | cc.bit.z));
     }
 
     inline void bhi()
@@ -547,12 +557,12 @@ private:
 
     inline void ble()
     {
-        do_br(cc.bit.z | (cc.bit.n ^ cc.bit.v));
+        do_br(static_cast<unsigned>(cc.bit.n ^ cc.bit.v) | cc.bit.z);
     }
 
     inline cycles_t lble()
     {
-        return do_lbr(cc.bit.z | (cc.bit.n ^ cc.bit.v));
+        return do_lbr(static_cast<unsigned>(cc.bit.n ^ cc.bit.v) | cc.bit.z);
     }
 
     inline void bls()
@@ -695,7 +705,7 @@ private:
     inline void com(Byte &reg)
     {
         reg = ~reg;
-        cc.bit.c = 1;
+        cc.bit.c = true;
         tst(reg);
     }
 
@@ -764,9 +774,9 @@ private:
 
     inline void lsr(Byte &reg)
     {
-        cc.bit.c = BTST0(reg);
-        reg >>= 1;
-        cc.bit.n = 0;
+        cc.bit.c = BTST<Byte>(reg, 0U);
+        reg >>= 1U;
+        cc.bit.n = false;
         cc.bit.z = !reg;
     }
 
@@ -780,15 +790,15 @@ private:
     inline void rol(Byte &reg)
     {
         bool oc = cc.bit.c;
-        cc.bit.c = BTST7(reg);
-        reg <<= 1;
+        cc.bit.c = BTST<Byte>(reg, 7U);
+        reg <<= 1U;
 
         if (oc)
         {
-            BSET0(reg);
+            BSET<Byte>(reg, 0U);
         }
 
-        cc.bit.n = BTST7(reg);
+        cc.bit.n = BTST<Byte>(reg, 7U);
         cc.bit.v = cc.bit.c ^ cc.bit.n;
         cc.bit.z = !reg;
     }
@@ -803,15 +813,15 @@ private:
     inline void ror(Byte &reg)
     {
         bool oc = cc.bit.c;
-        cc.bit.c = BTST0(reg);
-        reg = reg >> 1;
+        cc.bit.c = BTST<Byte>(reg, 0U);
+        reg = reg >> 1U;
 
         if (oc)
         {
-            BSET7(reg);
+            BSET<Byte>(reg, 7U);
         }
 
-        cc.bit.n = BTST7(reg);
+        cc.bit.n = BTST<Byte>(reg, 7U);
         cc.bit.z = !reg;
     }
 
@@ -827,8 +837,8 @@ private:
     inline void ld(Word &reg, Word operand)
     {
         reg = operand;
-        cc.bit.n = BTST15(d);
-        cc.bit.v = 0;
+        cc.bit.n = BTST<Word>(d, 15U);
+        cc.bit.v = false;
         cc.bit.z = !reg;
     }
 
@@ -841,8 +851,8 @@ private:
     inline void st(Word &reg, Word addr)
     {
         memory.write_word(addr, reg);
-        cc.bit.n = BTST15(reg);
-        cc.bit.v = 0;
+        cc.bit.n = BTST<Word>(reg, 15U);
+        cc.bit.v = false;
         cc.bit.z = !reg;
     }
 
@@ -852,43 +862,46 @@ private:
         cc.bit.z = !reg;
     }
 
-    inline void lea_nocc(Word &reg, Word addr)
+    static inline void lea_nocc(Word &reg, Word addr)
     {
         reg = addr;
     }
 
-    inline void     daa();
-    inline void     dec(Byte &reg);
-    inline void     inc(Byte &reg);
-    inline void     lsl(Byte &reg);
-    inline void     neg(Byte &reg);
-    inline void     tst(Byte reg);
-    inline void     cmp(Byte reg, Byte operand);
-    inline void     cmp(Word reg, Word operand);
-    inline void     adc(Byte &reg, Byte operand);
-    inline void     add(Byte &reg, Byte operand);
-    inline void     add(Word &reg, Word operand);
-    inline void     sbc(Byte &reg, Byte operand);
-    inline void     sub(Byte &reg, Byte operand);
-    inline void     sub(Word &reg, Word operand);
-    inline void     swi(), swi2(), swi3();
-    inline void     cwai(), sync();
+    inline void daa();
+    inline void dec(Byte &reg);
+    inline void inc(Byte &reg);
+    inline void lsl(Byte &reg);
+    inline void neg(Byte &reg);
+    inline void tst(Byte reg);
+    inline void cmp(Byte reg, Byte operand);
+    inline void cmp(Word reg, Word operand);
+    inline void adc(Byte &reg, Byte operand);
+    inline void add(Byte &reg, Byte operand);
+    inline void add(Word &reg, Word operand);
+    inline void sbc(Byte &reg, Byte operand);
+    inline void sub(Byte &reg, Byte operand);
+    inline void sub(Word &reg, Word operand);
+    inline void swi(), swi2(), swi3();
+    inline void cwai(), sync();
     inline cycles_t rti();
-    inline void     asr(Byte &reg);
-    void     tfr();
-    void     exg();
+    inline void asr(Byte &reg);
+    void tfr();
+    void exg();
     cycles_t psh(Byte what, Word &s, Word &u);
     cycles_t pul(Byte what, Word &s, Word &u);
-    Word     do_effective_address(Byte);
+    Word do_effective_address(Byte post);
 #endif
-    void     nmi(bool save_state);
-    void     firq(bool save_state);
-    void     irq(bool save_state);
-    void     invalid(const char *pmessage);
-    bool     use_undocumented;
+    void EXEC_NMI(bool save_state);
+    void EXEC_IRQ(bool save_state);
+    void EXEC_FIRQ(bool save_state);
+    void nmi(bool save_state);
+    void firq(bool save_state);
+    void irq(bool save_state);
+    void invalid(const char *pmessage);
+    bool use_undocumented{false};
 public:
-    void            set_use_undocumented(bool b);
-    bool            is_use_undocumented()
+    void set_use_undocumented(bool value);
+    bool is_use_undocumented() const
     {
         return use_undocumented;
     };
@@ -899,43 +912,43 @@ public:
     CpuState run(RunMode mode) override;
     void exit_run() override;
     QWord get_cycles(bool reset = false) override;
-    void get_status(CpuStatus *x_cpu_status) override;
+    void get_status(CpuStatus *p_cpu_status) override;
     CpuStatusPtr create_status_object() override;
     void get_interrupt_status(tInterruptStatus &s) override;
-    void set_required_cyclecount(cycles_t x_cycles) override;
+    void set_required_cyclecount(cycles_t p_cycles) override;
 
     // test support
-    void set_status(CpuStatus *x_cpu_status);
+    void set_status(CpuStatus *p_cpu_status);
 protected:
     CpuState runloop();
 
     // interrupt handling:
 public:
-    void            reset();        // CPU reset
-    inline cycles_t        exec_irqs(bool save_state = true);
-    void            set_nmi();
-    void            set_firq();
-    void            set_irq();
+    void reset(); // CPU reset
+    inline cycles_t exec_irqs(bool save_state = true);
+    void set_nmi();
+    void set_firq();
+    void set_irq();
 
 protected:
-    std::atomic<QWord> total_cycles; // total cycle count with 64 Bit resolution
-    cycles_t        cycles;     // cycle cnt for one timer tick
-    std::atomic<cycles_t> required_cyclecount;//cycle count for freq ctrl
+    std::atomic<QWord> total_cycles{}; // total cycle count with 64 Bit resolution
+    cycles_t cycles{}; // cycle cnt for one timer tick
+    std::atomic<cycles_t> required_cyclecount{};//cycle count for freq ctrl
 
     // breakpoint support
 protected:
-    unsigned int    bp[3];
+    std::array<OptionalWord, 3> bp;
 public:
-    void        set_bp(int which, Word address);
-    unsigned int    get_bp(int which);
-    int     is_bp_set(int which);
-    void        reset_bp(int which);
+    void set_bp(int which, Word address);
+    OptionalWord get_bp(int which);
+    bool is_bp_set(int which);
+    void reset_bp(int which);
 
     // interface to other classes
 public:
-    void        set_disassembler(Da6809 *x_da);
-    bool        set_logfile(const struct s_cpu_logfile &x_lfs);
-    Word        get_pc()
+    void set_disassembler(Da6809 *p_disassembler);
+    bool setLoggerConfig(const Mc6809LoggerConfig &loggerConfig);
+    Word get_pc()
     {
         return PC;
     }
@@ -945,18 +958,16 @@ public:
     void UpdateFrom(NotifyId id, void *param = nullptr) override;
 
 protected:
-    int Disassemble(Word address, InstFlg *pFlags,
-                    char **pCode, char **pMnemonic);
-    FILE        *log_fp;
-    s_cpu_logfile lfs;
-    bool        do_logging;
-
+    unsigned Disassemble(Word address, InstFlg &p_flags,
+                    std::string &code, std::string &mnemonic,
+                    std::string &operands);
+    Mc6809Logger logger;
     Memory &memory;
 
     // Public constructor and destructor
 public:
-    Mc6809(Memory &x_memory);
-    virtual ~Mc6809();
+    explicit Mc6809(Memory &p_memory);
+    ~Mc6809() override = default;
 };
 
 //*******************************************************************
@@ -1068,10 +1079,10 @@ inline void Mc6809::sub(Word &reg, Word operand)
 inline void Mc6809::add(Byte &reg, Byte operand)
 {
     Word sum = reg + operand;
-    cc.bit.n = BTST7(sum);
-    cc.bit.v = BTST7(reg ^ operand ^ sum ^ (sum >> 1));
-    cc.bit.c = BTST8(sum);
-    cc.bit.h = BTST4(reg ^ operand ^ sum);
+    cc.bit.n = BTST<Word>(sum, 7U);
+    cc.bit.v = BTST<Word>(reg ^ operand ^ sum ^ (sum >> 1), 7U);
+    cc.bit.c = BTST<Word>(sum, 8U);
+    cc.bit.h = BTST<Word>(reg ^ operand ^ sum, 4U);
     reg = (Byte)sum;
     cc.bit.z = !reg;
 }
@@ -1079,9 +1090,9 @@ inline void Mc6809::add(Byte &reg, Byte operand)
 inline void Mc6809::add(Word &reg, Word operand)
 {
     DWord sum = (DWord)reg + operand;
-    cc.bit.n = BTST15(sum);
-    cc.bit.v = BTST15(reg ^ operand ^ sum ^ (sum >> 1));
-    cc.bit.c = BTST16(sum);
+    cc.bit.n = BTST<DWord>(sum, 15U);
+    cc.bit.v = BTST<DWord>(reg ^ operand ^ sum ^ (sum >> 1), 15U);
+    cc.bit.c = BTST<DWord>(sum, 16U);
     reg = (Word)sum;
     cc.bit.z = !reg;
 }
@@ -1089,9 +1100,9 @@ inline void Mc6809::add(Word &reg, Word operand)
 inline void Mc6809::sub(Byte &reg, Byte operand)
 {
     Word diff = reg - operand;
-    cc.bit.n = BTST7(diff);
-    cc.bit.v = BTST7(reg ^ operand ^ diff ^ (diff >> 1));
-    cc.bit.c = BTST8(diff);
+    cc.bit.n = BTST<Word>(diff, 7U);
+    cc.bit.v = BTST<Word>(reg ^ operand ^ diff ^ (diff >> 1), 7U);
+    cc.bit.c = BTST<Word>(diff, 8U);
     reg = (Byte)diff;
     cc.bit.z = !reg;
 }
@@ -1099,9 +1110,9 @@ inline void Mc6809::sub(Byte &reg, Byte operand)
 inline void Mc6809::sub(Word &reg, Word operand)
 {
     DWord diff = reg - operand;
-    cc.bit.n = BTST15(diff);
-    cc.bit.v = BTST15(reg ^ operand ^ diff ^ (diff >> 1));
-    cc.bit.c = BTST16(diff);
+    cc.bit.n = BTST<DWord>(diff, 15U);
+    cc.bit.v = BTST<DWord>(reg ^ operand ^ diff ^ (diff >> 1), 15U);
+    cc.bit.c = BTST<DWord>(diff, 16U);
     reg = (Word)diff;
     cc.bit.z = !reg;
 }
@@ -1164,10 +1175,10 @@ inline void Mc6809::sbc(Byte &reg, Byte operand)
 inline void Mc6809::adc(Byte &reg, Byte operand)
 {
     Word sum = reg + operand + cc.bit.c;
-    cc.bit.n = BTST7(sum);
-    cc.bit.v = BTST7(reg ^ operand ^ sum ^ (sum >> 1));
-    cc.bit.c = BTST8(sum);
-    cc.bit.h = BTST4(reg ^ operand ^ sum);
+    cc.bit.n = BTST<Word>(sum, 7U);
+    cc.bit.v = BTST<Word>(reg ^ operand ^ sum ^ (sum >> 1), 7U);
+    cc.bit.c = BTST<Word>(sum, 8U);
+    cc.bit.h = BTST<Word>(reg ^ operand ^ sum, 4U);
     reg = (Byte)sum;
     cc.bit.z = !reg;
 }
@@ -1175,9 +1186,9 @@ inline void Mc6809::adc(Byte &reg, Byte operand)
 inline void Mc6809::sbc(Byte &reg, Byte operand)
 {
     Word diff = reg - operand - cc.bit.c;
-    cc.bit.n = BTST7(diff);
-    cc.bit.v = BTST7(reg ^ operand ^ diff ^ (diff >> 1));
-    cc.bit.c = BTST8(diff);
+    cc.bit.n = BTST<Word>(diff, 7U);
+    cc.bit.v = BTST<Word>(reg ^ operand ^ diff ^ (diff >> 1), 7U);
+    cc.bit.c = BTST<Word>(diff, 8U);
     reg = (Byte)diff;
     cc.bit.z = !reg;
 }
@@ -1185,31 +1196,32 @@ inline void Mc6809::sbc(Byte &reg, Byte operand)
 
 inline void Mc6809::daa()
 {
-    Word    t, c = 0;
-    Byte    lsn = a & 0x0f;
-    Byte    msn = a & 0xf0;
+    Word t;
+    Word c = 0;
+    Byte lsn = a & 0x0FU;
+    Byte msn = a & 0xF0U;
 
     if (cc.bit.h || (lsn > 9))
     {
-        c |= 0x06;
+        c |= 0x06U;
     }
 
     if (cc.bit.c    ||
         (msn > 0x90) ||
         ((msn > 0x80) && (lsn > 9)))
     {
-        c |= 0x60;
+        c |= 0x60U;
     }
 
     t = c + a;
-    a = (Byte)t;
+    a = static_cast<Byte>(t);
 
-    if (BTST8(t))
+    if (BTST<Word>(t, 8U))
     {
         cc.bit.c = true;
     }
 
-    cc.bit.n = BTST7(a);
+    cc.bit.n = BTST<Byte>(a, 7U);
     cc.bit.z = !a;
 }
 
@@ -1287,7 +1299,7 @@ inline void Mc6809::neg(Byte &reg)
 inline void Mc6809::dec(Byte &reg)
 {
     reg--;
-    cc.bit.n = BTST7(reg);
+    cc.bit.n = BTST<Byte>(reg, 7U);
     cc.bit.z = !reg;
     cc.bit.v = (reg == 0x7f);
 }
@@ -1295,7 +1307,7 @@ inline void Mc6809::dec(Byte &reg)
 inline void Mc6809::inc(Byte &reg)
 {
     reg++;
-    cc.bit.n = BTST7(reg);
+    cc.bit.n = BTST<Byte>(reg, 7U);
     cc.bit.z = !reg;
     cc.bit.v = (reg == 0x80);
 }
@@ -1306,7 +1318,7 @@ inline void Mc6809::neg(Byte &reg)
     cc.bit.v = (reg == 0x80);
     cc.bit.c = (reg != 0);
     reg = (~reg) + 1;
-    cc.bit.n = BTST7(reg);
+    cc.bit.n = BTST<Byte>(reg, 7U);
     cc.bit.z = !reg;
 }
 #endif
@@ -1389,24 +1401,24 @@ inline void Mc6809::tst(Byte reg)
 inline void Mc6809::cmp(Byte reg, Byte operand)
 {
     Word diff = reg - operand;
-    cc.bit.n = BTST7(diff);
-    cc.bit.v = BTST7(reg ^ operand ^ diff ^ (diff >> 1));
+    cc.bit.n = BTST<Word>(diff, 7U);
+    cc.bit.v = BTST<Word>(reg ^ operand ^ diff ^ (diff >> 1), 7U);
     cc.bit.z = !(diff & 0xFF);
-    cc.bit.c = BTST8(diff);
+    cc.bit.c = BTST<Word>(diff, 8U);
 }
 
 inline void Mc6809::cmp(Word reg, Word operand)
 {
     DWord diff = reg - operand;
-    cc.bit.n = BTST15(diff);
-    cc.bit.v = BTST15(reg ^ operand ^ diff ^ (diff >> 1));
+    cc.bit.n = BTST<DWord>(diff, 15U);
+    cc.bit.v = BTST<DWord>(reg ^ operand ^ diff ^ (diff >> 1), 15U);
     cc.bit.z = !(diff & 0xFFFF);
-    cc.bit.c = BTST16(diff);
+    cc.bit.c = BTST<DWord>(diff, 16U);
 }
 
 inline void Mc6809::tst(Byte reg)
 {
-    cc.bit.n = BTST7(reg);
+    cc.bit.n = BTST<Byte>(reg, 7U);
     cc.bit.v = 0;
     cc.bit.z = !reg;
 }
@@ -1463,22 +1475,22 @@ inline void Mc6809::asr(Byte &reg)
 #else
 inline void Mc6809::lsl(Byte &reg)
 {
-    cc.bit.c = BTST7(reg);
-    cc.bit.v = BTST7(reg ^ (reg << 1));
+    cc.bit.c = BTST<Byte>(reg, 7U);
+    cc.bit.v = BTST<Byte>(reg ^ (reg << 1), 7U);
     reg <<= 1;
-    cc.bit.n = BTST7(reg);
+    cc.bit.n = BTST<Byte>(reg, 7U);
     cc.bit.z = !reg;
 }
 
 inline void Mc6809::asr(Byte &reg)
 {
-    cc.bit.c = BTST0(reg);
+    cc.bit.c = BTST<Byte>(reg, 0U);
     reg >>= 1;
-    cc.bit.n = BTST6(reg);
+    cc.bit.n = BTST<Byte>(reg, 6U);
 
     if (cc.bit.n)
     {
-        BSET7(reg);
+        BSET<Byte>(reg, 7U);
     }
 
     cc.bit.z = !reg;
@@ -1497,12 +1509,10 @@ inline cycles_t Mc6809::rti()
         pul(0xfe, s, u);
         return 15;
     }
-    else
-    {
-        pc = memory.read_word(s);
-        s += 2;
-        return 6;
-    }
+
+    pc = memory.read_word(s);
+    s += 2;
+    return 6;
 }
 
 inline void Mc6809::sync()
@@ -1514,7 +1524,7 @@ inline void Mc6809::sync()
 inline void Mc6809::cwai()
 {
     cc.all &= memory.read_byte(pc++);
-    cc.bit.e = 1;
+    cc.bit.e = true;
     psh(0xff, s, u);
     events |= Event::Cwai;
     pc -= 2; // processor loops in cwai instruction until interrupt
@@ -1522,22 +1532,22 @@ inline void Mc6809::cwai()
 
 inline void Mc6809::swi()
 {
-    cc.bit.e = 1;
+    cc.bit.e = true;
     psh(0xff, s, u);
-    cc.bit.f = cc.bit.i = 1;
+    cc.bit.f = cc.bit.i = true;
     pc = memory.read_word(0xfffa);
 }
 
 inline void Mc6809::swi2()
 {
-    cc.bit.e = 1;
+    cc.bit.e = true;
     psh(0xff, s, u);
     pc = memory.read_word(0xfff4);
 }
 
 inline void Mc6809::swi3()
 {
-    cc.bit.e = 1;
+    cc.bit.e = true;
     psh(0xff, s, u);
     pc = memory.read_word(0xfff2);
 }
@@ -1547,7 +1557,7 @@ inline void Mc6809::swi3()
 
 inline Mc6809::Event operator| (Mc6809::Event lhs, Mc6809::Event rhs)
 {
-    using T1 = std::underlying_type<Mc6809::Event>::type;
+    using T1 = std::underlying_type_t<Mc6809::Event>;
 
     return static_cast<Mc6809::Event>(static_cast<T1>(lhs) |
                                       static_cast<T1>(rhs));
@@ -1555,7 +1565,7 @@ inline Mc6809::Event operator| (Mc6809::Event lhs, Mc6809::Event rhs)
 
 inline Mc6809::Event operator& (Mc6809::Event lhs, Mc6809::Event rhs)
 {
-    using T1 = std::underlying_type<Mc6809::Event>::type;
+    using T1 = std::underlying_type_t<Mc6809::Event>;
 
     return static_cast<Mc6809::Event>(static_cast<T1>(lhs) &
                                       static_cast<T1>(rhs));
@@ -1563,14 +1573,14 @@ inline Mc6809::Event operator& (Mc6809::Event lhs, Mc6809::Event rhs)
 
 inline Mc6809::Event operator~ (Mc6809::Event rhs)
 {
-    using T1 = std::underlying_type<Mc6809::Event>::type;
+    using T1 = std::underlying_type_t<Mc6809::Event>;
 
     return static_cast<Mc6809::Event>(~static_cast<T1>(rhs));
 }
 
 inline bool operator! (Mc6809::Event rhs)
 {
-    using T1 = std::underlying_type<Mc6809::Event>::type;
+    using T1 = std::underlying_type_t<Mc6809::Event>;
 
     return static_cast<T1>(rhs) == 0;
 }

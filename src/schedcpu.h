@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2004-2022  W. Schwotzer
+    Copyright (C) 2004-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,11 +25,11 @@
 #ifndef SCHEDCPU_INCLUDED
 #define SCHEDCPU_INCLUDED
 
-#include "typedefs.h"
+#include "misc1.h"
 #include "cpustate.h"
 
 
-enum tIrqType
+enum tIrqType : uint8_t
 {
     INT_IRQ = 0,
     INT_FIRQ,
@@ -37,7 +37,7 @@ enum tIrqType
     INT_RESET
 };
 
-enum class RunMode : Byte
+enum class RunMode : uint8_t
 {
     SingleStepOver,
     SingleStepInto,
@@ -45,17 +45,21 @@ enum class RunMode : Byte
     RunningContinue,
 };
 
+/* The following struct represents the current Mc6809 CPU interrupt status */
+/* For performance reasons it uses plain C arrays. */
+/* NOLINTBEGIN(modernize-avoid-c-arrays) */
 struct sInterruptStatus
 {
     DWord count[INT_RESET + 1];
 };
+/* NOLINTEND(modernize-avoid-c-arrays) */
 
-typedef struct sInterruptStatus tInterruptStatus;
+using tInterruptStatus = struct sInterruptStatus;
 
 class ScheduledCpu
 {
 public:
-    virtual ~ScheduledCpu() { };
+    virtual ~ScheduledCpu() = default;
     virtual void do_reset() = 0;
     virtual CpuState run(RunMode mode) = 0;
     virtual void exit_run() = 0;

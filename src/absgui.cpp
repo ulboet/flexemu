@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <cassert>
 #include "misc1.h"
 #include "pia1.h"
 #include "absgui.h"
@@ -31,17 +32,18 @@
 #include "schedule.h"
 #include "mc6809st.h"
 #include "terminal.h"
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
-void AbstractGui::update_cpuview(const Mc6809CpuStatus &stat)
+void AbstractGui::update_cpuview(const Mc6809CpuStatus &status)
 {
-    redraw_cpuview(stat);
+    redraw_cpuview(status);
 }
 
-void AbstractGui::redraw_cpuview(const Mc6809CpuStatus &stat)
+void AbstractGui::redraw_cpuview(const Mc6809CpuStatus &status)
 {
-    int i;
-
     clear_cpuview();
     text(0, 0, "Cycl:");
     text(0, 1, "Inst:");
@@ -61,113 +63,114 @@ void AbstractGui::redraw_cpuview(const Mc6809CpuStatus &stat)
     text(22, 0, "Freq:");
     text(35, 0, "MHz");
 
-    for (i = 0; i < 6; ++i)
+    for (Word i = 0U; i < CPU_STACK_LINES; ++i)
     {
         text(4, i + 8, ":");
     }
 
-    redraw_cpuview_contents(stat);
+    redraw_cpuview_contents(status);
 }
 
-void AbstractGui::redraw_cpuview_contents(const Mc6809CpuStatus &stat)
+void AbstractGui::redraw_cpuview_contents(const Mc6809CpuStatus &status)
 {
-    static char tmp[CPU_LINE_WIDTH];
-    Byte                    i, j;
-    Word            mem_addr;
-    std::stringstream total_cycles;
+    int stack_base = ((status.s / CPU_STACK_BYTES) * CPU_STACK_BYTES) - 16;
+    text(6, 2, flx::hexstr(status.pc));
+    text(6, 3, flx::hexstr(status.s));
+    text(6, 4, flx::hexstr(status.u));
+    text(6, 5, flx::hexstr(status.x));
+    text(6, 6, flx::hexstr(status.y));
+    text(15, 3, flx::binstr(status.cc));
+    text(15, 4, flx::hexstr(status.dp));
+    text(15, 5, flx::hexstr(status.a));
+    text(15, 6, flx::hexstr(status.b));
 
-    mem_addr = ((stat.s >> 3) << 3) - 16;
-    text(6, 2, hexstr(stat.pc));
-    text(6, 3, hexstr(stat.s));
-    text(6, 4, hexstr(stat.u));
-    text(6, 5, hexstr(stat.x));
-    text(6, 6, hexstr(stat.y));
-    text(15, 3, binstr(stat.cc));
-    text(15, 4, hexstr(stat.dp));
-    text(15, 5, hexstr(stat.a));
-    text(15, 6, hexstr(stat.b));
-    total_cycles << std::setw(16) << stat.total_cycles;
+    std::string cycles_str = fmt::format("{:16}", status.total_cycles);
+    text(5, 0, cycles_str);
 
-    text(5,  0, total_cycles.str().c_str());
-    sprintf(tmp, "%6.2f", stat.freq);
-    text(28,  0, tmp);
-    text(6, 1, "                        "); // first clear area
+    std::stringstream freq_str;
+    freq_str << std::fixed << std::setprecision(2) << std::setw(6) <<
+        status.freq;
+    text(28, 0, freq_str.str());
 
-    if (stat.mnemonic[0] != '\0')
+    static const std::string spaces(24, ' ');
+    text(6, 1, spaces); // Clear previous mnemonic.
+
+    if (status.mnemonic[0] != '\0')
     {
-        text(6, 1, stat.mnemonic);
+        auto mnemonic_str = fmt::format("{:<5} {}", status.mnemonic,
+                                        status.operands);
+        text(6, 1, mnemonic_str);
     }
     else
     {
-        text(6, 1, "sorry, no disassembler installed");
+        text(6, 1, "<No disassembler installed>");
     }
 
-    for (i = 0; i < 2; i++)
+    for (int i = 0; i < 2; i++)
     {
-        if (!cpu.is_bp_set(i))
+        const auto bp = cpu.get_bp(i);
+        if (!bp.has_value())
         {
             text(25, 5 + i, "    ");
         }
         else
-            text(25, 5 + i, hexstr((Word)cpu.get_bp(i)));
-    }  // for
+        {
+            text(25, 5 + i, flx::hexstr(bp.value()));
+        }
+    }
 
-    Word stk = 0;
-    Byte ch;
+    Word stack_offset = 0U;
 
-    for (i = 0; i < 6; ++i)
+    for (Word line = 0U; line < CPU_STACK_LINES; ++line)
     {
-        text(0, i + 8, hexstr((Word)(stk + mem_addr)));
+        const auto stack_line = static_cast<Word>(stack_base + stack_offset);
+        text(0, line + 8, flx::hexstr(stack_line));
 
-        tmp[0] = ' ';
-        tmp[1] = '\0';
+        std::string hex_dump;
+        std::string ascii_dump;
 
-        for (j = 0; j < 8; ++j)
+        for (Word x = 0U; x < CPU_STACK_BYTES; ++x)
         {
-            ch = stat.memory[stk + j];
-            strcat(tmp, hexstr(ch));
-            strcat(tmp, " ");
-        } // for
+            auto byte = status.memory[stack_offset + x];
+            hex_dump.append(flx::hexstr(byte)).append(" ");
+            auto ch = static_cast<char>(byte);
+            ascii_dump.append(flx::ascchr(ch));
+        }
 
-        for (j = 0; j < 8; ++j)
-        {
-            ch = stat.memory[stk + j];
-            strcat(tmp, ascchr(ch));
-        } // for
+        text(6, line + 8, hex_dump);
+        text(6 + 3 * CPU_STACK_BYTES, line + 8, ascii_dump);
+        stack_offset += CPU_STACK_BYTES;
+    }
+    assert(stack_offset == sizeof(status.memory));
 
-        text(5, i + 8, tmp);
-        stk += 8;
-    } // for
+    // Mark the current stack position in the hex dump.
+    Word base = status.s & 7U;
+    text(5 + 3 * base, 10, "[");
+    text(8 + 3 * base, 10, "]");
 
-    redraw_cpuview_impl(stat);
+    redraw_cpuview_impl(status);
 }
 
-void AbstractGui::redraw_cpuview_impl(const Mc6809CpuStatus &)
+void AbstractGui::redraw_cpuview_impl(const Mc6809CpuStatus &/*status*/)
 {
 }
 
-void AbstractGui::text(int x, int y, const char *str)
+void AbstractGui::text(int x, int y, const std::string &str)
 {
-    assert(x >= 0 && x + strlen(str) <= CPU_LINE_WIDTH);
+    assert(x >= 0 && x + str.size() <= CPU_LINE_WIDTH);
     assert(y >= 0 && y < CPU_LINES);
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
-#pragma GCC diagnostic ignored "-Wstringop-overflow"
-#endif
-    strncpy(&cpustring[CPU_LINE_WIDTH * y + x], str, strlen(str));
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
+    auto index = CPU_LINE_WIDTH * y + x;
+
+    std::copy(str.begin(), str.cend(), cpustring.begin() + index);
 }
 
 void AbstractGui::clear_cpuview()
 {
-    static const char *delim = "\n";
+    const std::string delim("\n");
 
-    memset(cpustring, ' ', sizeof(cpustring));
-    cpustring[sizeof(cpustring) - 1] = '\0';
-    auto size = static_cast<int>(strlen(delim));
+    cpustring.resize(CPU_LINES * CPU_LINE_WIDTH + 1, ' ');
+    cpustring[cpustring.size() - 1] = '\0';
+    auto size = static_cast<int>(delim.size());
 
     for (int y = 0; y < CPU_LINES; ++y)
     {
@@ -175,35 +178,41 @@ void AbstractGui::clear_cpuview()
     }
 }
 
-void AbstractGui::output_to_terminal()
+bool AbstractGui::output_to_terminal()
 {
     if (terminalIO.is_terminal_supported() && inout.is_serpar_address_valid())
     {
-        memory.write_byte(inout.serpar_address(), Byte(0xFF));
+        memory.write_byte(inout.serpar_address(), 0xFFU);
+        return true;
     }
+
+    return false;
 }
 
-void AbstractGui::output_to_graphic()
+bool AbstractGui::output_to_graphic()
 {
     if (inout.is_serpar_address_valid())
     {
         memory.write_byte(inout.serpar_address(), 0);
+        return true;
     }
+
+    return false;
 }
 
-AbstractGui::AbstractGui(
-    Mc6809 &x_cpu,
-    Memory &x_memory,
-    Inout &x_inout,
-    TerminalIO &x_terminalIO)
-        : cpu(x_cpu)
-        , memory(x_memory)
-        , inout(x_inout)
-        , terminalIO(x_terminalIO)
+void AbstractGui::write_char_serial(Byte /*value*/)
 {
 }
 
-AbstractGui::~AbstractGui()
+AbstractGui::AbstractGui(
+    Mc6809 &p_cpu,
+    Memory &p_memory,
+    Inout &p_inout,
+    TerminalIO &p_terminalIO)
+        : cpu(p_cpu)
+        , memory(p_memory)
+        , inout(p_inout)
+        , terminalIO(p_terminalIO)
 {
 }
 

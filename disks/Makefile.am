@@ -1,8 +1,10 @@
 pkgdata_DATA = \
 	btx.dsk \
+	cedric.dsk \
 	colors.dsk \
 	diag6809.dsk \
 	games.dsk \
+	just.dsk \
 	laycad.dsk \
 	layout.dsk \
 	pictures.dsk \
@@ -10,7 +12,9 @@ pkgdata_DATA = \
 	system.dsk \
 	system.mdcr \
 	system54.dsk \
-	test.dsk
+	test.dsk \
+	dynadocu.dsk \
+	tsc_man.dsk
 
 EXTRA_DIST = ${pkgdata_DATA}
 

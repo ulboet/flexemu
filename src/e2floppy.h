@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,14 +25,15 @@
 #define E2FLOPPY_INCLUDED
 
 #include "misc1.h"
+#include <array>
 
 #ifndef __fromflex__
 
-    #include <stdio.h>
     #include <sys/stat.h>
     #include "flexemu.h"
     #include "wd1793.h"
     #include "filecnts.h"
+    #include "e2.h"
     #include "fcinfo.h"
     #include <string>
     #include <mutex>
@@ -47,13 +48,10 @@ struct sOptions;
 
 class E2floppy : public Wd1793
 {
-public:
-    static const unsigned MAX_DRIVES{4U}; // max. number of disk drives.
-
 private:
 
     // States for writing a track (formatting a disk).
-    enum class WriteTrackState
+    enum class WriteTrackState : uint8_t
     {
         Inactive,
         WaitForIdAddressMark,
@@ -63,12 +61,20 @@ private:
         WaitForCrc,
     };
 
+    // Indices for idAddressMark
+    enum Id : uint8_t
+    {
+        Track,
+        Side,
+        Sector,
+        SizeCode,
+    };
 
     // Internal registers:
     //
     //  selected        Selected drive as index into floppy array
 
-    Byte selected;
+    Byte selected{MAX_DRIVES};
 
     // Interface to operating system:
     //
@@ -80,23 +86,26 @@ private:
     //  disk_dir        Disk directory
     // Drive nr. 4 means no drive selected
 
-    FileContainerIfSectorPtr floppy[MAX_DRIVES + 1U];
-    FileContainerIfSector *pfs;
-    Byte            track[MAX_DRIVES + 1U];
-    DiskStatus      drive_status[MAX_DRIVES + 1U];
-    Byte            sector_buffer[1024];
-    std::string     disk_dir;
+    std::array<IFlexDiskBySectorPtr, MAX_DRIVES + 1U> floppy{};
+    IFlexDiskBySector *pfs{};
+    std::array<Byte, MAX_DRIVES + 1U> track{};
+    std::array<DiskStatus, MAX_DRIVES + 1U> drive_status{};
+    std::array<Byte, 1024>sector_buffer{};
+    std::string disk_dir;
     mutable std::mutex status_mutex;
     // data for CMD_WRITETRACK
-    WriteTrackState writeTrackState; // Write track state
-    Word            offset; // offset when reading a track
-    char            idAddressMark[4]; // Contains track, side, sector, sizecode
+    WriteTrackState writeTrackState{WriteTrackState::Inactive};
+    Word offset{}; // offset when reading or writing a track
+    // idAddressMark contains track, side, sector, sizecode.
+    // It is used when formatting a track.
+    std::array<Byte, 4> idAddressMark{};
+
     const struct sOptions &options;
 
 public:
     E2floppy() = delete;
-    E2floppy(const struct sOptions &options);
-    virtual ~E2floppy();
+    explicit E2floppy(const struct sOptions &options);
+    ~E2floppy() override;
 
     // public interface
 public:
@@ -106,23 +115,23 @@ public:
         return "fdc";
     };
 
-    virtual void get_drive_status(DiskStatus status[MAX_DRIVES]);
-    virtual void         disk_directory(const char *x_disk_dir);
-    virtual void         mount_all_drives(std::string drive[]);
-    virtual bool         sync_all_drives(
-                                    tMountOption option = MOUNT_DEFAULT);
-    virtual bool         umount_all_drives();
-    virtual bool         mount_drive(const char *path, Word drive_nr,
-                                     tMountOption option = MOUNT_DEFAULT);
-    virtual bool         format_disk(SWord trk, SWord sec,
-                                     const char *name,
-                                     int type = TYPE_DSK_CONTAINER);
-    virtual bool         sync_drive(Word drive_nr,
-                                    tMountOption option = MOUNT_DEFAULT);
-    virtual bool         umount_drive(Word drive_nr);
-    virtual FlexContainerInfo drive_info(Word drive_nr);
-    virtual std::string  drive_info_string(Word drive_nr);
-    virtual void         select_drive(Byte new_selected);
+    virtual void get_drive_status(std::array<DiskStatus, MAX_DRIVES> &stat);
+    virtual void disk_directory(const std::string &p_disk_dir);
+    virtual void mount_all_drives(
+            const std::array<std::string, MAX_DRIVES> &drives);
+    virtual bool sync_all_drives(tMountOption option = MOUNT_DEFAULT);
+    virtual bool umount_all_drives();
+    virtual bool mount_drive(const std::string &path, Word drive_nr,
+                             tMountOption option = MOUNT_DEFAULT);
+    virtual bool format_disk(SWord trk, SWord sec,
+                             const std::string &name, DiskType type);
+    virtual bool sync_drive(Word drive_nr,
+                            tMountOption option = MOUNT_DEFAULT);
+    virtual bool umount_drive(Word drive_nr);
+    virtual FlexDiskAttributes drive_attributes(Word drive_nr);
+    virtual std::string drive_attributes_string(Word drive_nr);
+    virtual void select_drive(Byte new_selected);
+    virtual IFlexDiskBySector const *get_drive(Word drive_nr) const;
 
 private:
 
@@ -140,7 +149,6 @@ private:
     bool isSeekError(Byte new_track) const override;
     Word getBytesPerSector() const override;
     Byte getSizeCode() const;
-    const char       *open_mode(char *path);
 };
 
 #endif /* #ifndef __fromflex__ */

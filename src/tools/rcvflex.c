@@ -8,18 +8,18 @@ FLEX to UNIX
 
 #include <stdio.h>
 
-#ifdef linux
+#if defined(__linux__)
 
 #include <ctype.h>
 #include <sys/ioctl.h>
-#include <termio.h>
+#include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #define __fromflex__
-#include "../typedefs.h"
+#include "typedefs.h"
 #include "../filecnts.h"
 
 #define DEFAULT_DEVICE	"/dev/cua2"
@@ -28,7 +28,7 @@ FLEX to UNIX
 
 struct s_flex_header 	flh;	/* file header				*/
 FILE 			*fp;	/* file pointer to target file		*/
-struct termio 		oldtty, ntty;
+struct termios oldtty, ntty;
 int			fd;	/* file descriptor for serial device	*/
 char			*device; /* pointer to serial device		*/
 
@@ -47,7 +47,7 @@ void do_exit(int exit_code)
 	void sigint(int param)
 #endif
 {
-        (void)param; /* satisfy compiler */
+        (void)param;
 	do_exit(0);
 } /* sigint */
 
@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "%s is wrong device\n", device);
 		exit(1);
 	}
-	memcpy(&ntty, &oldtty, sizeof(struct termio));
+	memcpy(&ntty, &oldtty, sizeof(struct termios));
 	signal(SIGINT, sigint);
 	ntty.c_iflag = 0;
 	ntty.c_oflag = 0;
@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
 		} /* for si */
 	} /* for tr */
 	fprintf(stdout, "finished\n");		
-        (void)count; /* satisfy compiler */
+        (void)count;
 	do_exit(0);
 	return 0;
 
@@ -258,9 +258,11 @@ int main(int argc, char *argv[])
 #else
 int main(int argc, char *argv[])
 {
+	(void)argc;
+	(void)argv;
 	fprintf(stderr, "rcvflex can only be compiled on Linux, sorry\n");
 	return 1;
 } /* main */
 
-#endif /* ifdef linux */
+#endif
 

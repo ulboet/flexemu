@@ -6,6 +6,7 @@ pkgdata_DATA = \
 	ba2bqs.pdf \
 	basic_um.pdf\
 	basprec.pdf \
+	cedric.pdf \
 	crasmb.pdf \
 	debug.pdf \
 	dynamite.pdf \
@@ -23,14 +24,19 @@ pkgdata_DATA = \
 	flexmem.htm \
 	flexuser.htm \
 	flexutil.htm \
+	just.pdf \
 	linkload.pdf \
 	mc6809.htm \
 	mon24.htm \
+	mon53_54.htm \
+	monu54.htm \
 	neumon54.htm \
 	relasmb.pdf \
 	swflexum.pdf\
 	tedit.pdf \
-	util_man.pdf
+	util_man.pdf \
+	dynastar.pdf \
+	TSC_Text_Processor.pdf
 
 extra_files = \
 	instance.fig \

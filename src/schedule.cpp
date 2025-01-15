@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,26 +20,36 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+// Uncomment the following line for cycle count debugging.
+//#define DEBUG_FILE "cycle_time.txt"
 
 #include <limits>
+#include <cinttypes>
 #ifndef _WIN32
     #include <sched.h>
 #endif
 #include "misc1.h"
-#include <signal.h>
 #include "schedule.h"
 #include "mc6809.h"
 #include "inout.h"
+#include "breltime.h"
+#include <cstring>
+#ifdef DEBUG_FILE
+#include <fstream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
+#endif
 
 
-Scheduler::Scheduler(ScheduledCpu &x_cpu, Inout &x_inout) :
-    cpu(x_cpu), inout(x_inout),
+Scheduler::Scheduler(ScheduledCpu &p_cpu, Inout &p_inout) :
+    cpu(p_cpu), inout(p_inout),
     state(CpuState::Run), events(Event::NONE), user_state(CpuState::NONE),
     total_cycles(0), time0sec(0),
     is_status_valid(false), is_resume(false),
     target_frequency(ORIGINAL_FREQUENCY), frequency(0.0), time0(0), cycles0(0)
 {
-    memset(&interrupt_status, 0, sizeof(tInterruptStatus));
+    std::memset(&interrupt_status, 0, sizeof(tInterruptStatus));
 }
 
 Scheduler::~Scheduler()
@@ -47,11 +57,11 @@ Scheduler::~Scheduler()
     commands.clear();
 }
 
-void Scheduler::request_new_state(CpuState x_user_state)
+void Scheduler::request_new_state(CpuState p_user_state)
 {
-    if (x_user_state != CpuState::NONE)
+    if (p_user_state != CpuState::NONE)
     {
-        user_state = x_user_state;
+        user_state = p_user_state;
         cpu.exit_run();
     }
 }
@@ -71,7 +81,7 @@ void Scheduler::process_events()
             irq_status_mutex.lock();
             cpu.get_interrupt_status(interrupt_status);
             irq_status_mutex.unlock();
-            QWord time1sec = systemTime.GetTimeUsll();
+            auto time1sec = BRelativeTime::GetTimeUsll();
             total_cycles = cpu.get_cycles(true);
 
             if (target_frequency > 0.0)
@@ -126,16 +136,11 @@ void Scheduler::process_events()
 // Return with any other state.
 CpuState Scheduler::idleloop()
 {
-    while (user_state == CpuState::NONE || user_state == CpuState::Stop)
+    while (user_state == CpuState::NONE || user_state == CpuState::Stop ||
+           user_state == CpuState::Invalid)
     {
         process_events();
         suspend();
-
-        // CpuState::Invalid is only a temporary state to update CPU view.
-        if (state == CpuState::Invalid)
-        {
-            return CpuState::Stop;
-        }
     }
 
     return user_state;
@@ -143,9 +148,9 @@ CpuState Scheduler::idleloop()
 
 CpuState Scheduler::runloop(RunMode mode)
 {
-    CpuState new_state;
+    CpuState new_state = CpuState::Schedule;
 
-    do
+    while (new_state == CpuState::Schedule)
     {
         new_state = cpu.run(mode);
 
@@ -165,7 +170,6 @@ CpuState Scheduler::runloop(RunMode mode)
 
         mode = RunMode::RunningContinue;
     }
-    while (new_state == CpuState::Schedule);
 
     return new_state;
 }
@@ -228,16 +232,16 @@ CpuState Scheduler::statemachine(CpuState initial_state)
                 state = CpuState::Run;
                 break;
 
-        } // switch
+        }
 
         if (inout.is_gui_present())
         {
             events |= Event::SetStatus;
         }
-    } // while
+    }
 
     return state;
-} // statemachine
+}
 
 void Scheduler::timer_elapsed()
 {
@@ -250,7 +254,7 @@ void Scheduler::do_reset()
 {
     cpu.do_reset();
     total_cycles = 0;
-    cycles0      = 0;
+    cycles0 = 0;
 }
 
 // thread support: Start Running CPU Thread
@@ -263,7 +267,7 @@ void Scheduler::run()
     SetThreadPriority(hThread, GetThreadPriority(hThread) - 1);
 #endif
 
-    time0sec = systemTime.GetTimeUsll();
+    time0sec = BRelativeTime::GetTimeUsll();
     statemachine(CpuState::Run);
 }
 
@@ -305,15 +309,11 @@ CpuStatus *Scheduler::get_status()
 void Scheduler::get_interrupt_status(tInterruptStatus &stat)
 {
     std::lock_guard<std::mutex> guard(irq_status_mutex);
-    memcpy(&stat, &interrupt_status, sizeof(tInterruptStatus));
+    std::memcpy(&stat, &interrupt_status, sizeof(tInterruptStatus));
 }
 
-//#define DEBUG_FILE "time.txt"
 void Scheduler::frequency_control(QWord time1)
 {
-#ifdef DEBUG_FILE
-    FILE *fp;
-#endif
     cycles_t required_cyclecount;
 
     if (time0 == 0)
@@ -325,18 +325,21 @@ void Scheduler::frequency_control(QWord time1)
     }
     else
     {
-        SQWord timediff = time1 - time0;
-        required_cyclecount = static_cast<cycles_t>
-                              (timediff * target_frequency);
+        auto timediff = time1 - time0;
+        auto fCyclecount = static_cast<double>(timediff) *
+                           static_cast<double>(target_frequency);
+        required_cyclecount = static_cast<cycles_t>(fCyclecount);
         cpu.set_required_cyclecount(required_cyclecount);
         time0 = time1;
+
 #ifdef DEBUG_FILE
 
-        if ((fp = fopen(DEBUG_FILE, "a")) != nullptr)
+        std::ofstream ofs(DEBUG_FILE, std::ios::out | std::ios::app);
+        if (ofs.is_open())
         {
-            fprintf(fp, "timediff: %llu required_cyclecount: %lu\n",
-                    timediff, required_cyclecount);
-            fclose(fp);
+            ofs << fmt::format("timediff: {:5} us, required_cyclecount: {:6}\n",
+                               timediff, required_cyclecount);
+            ofs.close();
         }
 
 #endif
@@ -351,33 +354,33 @@ void Scheduler::update_frequency()
 
     cycles1 = cpu.get_cycles();
     cyclecount = cycles1 - cycles0;
-    frequency = (float)(cyclecount / 1000000.0);
+    frequency = static_cast<float>(static_cast<double>(cyclecount) / 1000000.0);
     cycles0 = cycles1;
 }
 
 
-void Scheduler::set_frequency(float x_target_frequency)
+void Scheduler::set_frequency(float p_target_frequency)
 {
     cycles_t cycles;
 
-    if (x_target_frequency == 0.0f)
+    if (p_target_frequency == 0.0F)
     {
-        target_frequency = x_target_frequency;
+        target_frequency = p_target_frequency;
         cycles = std::numeric_limits<decltype(cycles)>::max();
     }
     else
     {
-        if (x_target_frequency < 0.0f)
+        if (p_target_frequency < 0.0F)
         {
-            x_target_frequency = ORIGINAL_FREQUENCY;
+            p_target_frequency = ORIGINAL_FREQUENCY;
         }
-        target_frequency = x_target_frequency;
+        target_frequency = p_target_frequency;
         cycles = static_cast<cycles_t>(TIME_BASE * target_frequency);
         time0 = 0;
     }
 
     cpu.set_required_cyclecount(cycles);
-} // set_frequency
+}
 
 void Scheduler::suspend()
 {

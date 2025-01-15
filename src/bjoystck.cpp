@@ -1,9 +1,9 @@
 /*
-    bjoystck.h: a basic class for reading from standard analog joystick
-
+    bjoystck.cpp  A basic class for reading from standard analog joystick
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
+
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
@@ -21,7 +21,7 @@
 
 
 
-#include <misc1.h>
+#include "misc1.h"
 
 #ifdef LINUX_JOYSTICK_IS_PRESENT
 #include <sys/stat.h>
@@ -34,14 +34,16 @@
 
 BJoystick::BJoystick(int which)
 {
-    axis[0] = axis[1] = buttons = 0;
-
     if (which == 0)
     {
+        // There is no alternative to this system call.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         js = open(JOYSTICK_DEVICE_0, O_RDONLY);
     }
     else if (which == 1)
     {
+        // There is no alternative to this system call.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
         js = open(JOYSTICK_DEVICE_1, O_RDONLY);
     }
     else
@@ -60,33 +62,26 @@ BJoystick::~BJoystick()
     js = -1;
 }
 
-short BJoystick::IsOpened()
+bool BJoystick::IsOpened() const
 {
-#ifdef LINUX_JOYSTICK_IS_PRESENT
     return js >= 0;
-#else
-    return 0;
-#endif
 }
 
-short BJoystick::Actualize()
+bool BJoystick::Actualize()
 {
-    int status;
-    struct JS_DATA_TYPE raw_js_data;
+    struct JS_DATA_TYPE raw_js_data{};
 
     if (js < 0)
     {
-        return 0;
+        return false;
     }
 
-    status = read(js, &raw_js_data, JS_RETURN);
+    auto status = read(js, &raw_js_data, JS_RETURN);
 
     if (status == JS_RETURN)
     {
-        int x, y;
-
-        x = raw_js_data.x;
-        y = raw_js_data.y;
+        auto x = raw_js_data.x;
+        auto y = raw_js_data.y;
 
         if (x < 0)
         {
@@ -106,26 +101,25 @@ short BJoystick::Actualize()
             y = 255;
         }
 
-        axis[0]   = x - 128;
-        axis[1]   = y - 128;
+        axis[0] = x - 128;
+        axis[1] = y - 128;
         buttons = raw_js_data.buttons ;
-        return 1;
+
+        return true;
     }
-    else
-    {
-        return 0;
-    }
+
+    return false;
 }
 
 // check for button "which" is set. Which is in the range of 0 .. 31
-int BJoystick::IsButtonSet(int which)
+bool BJoystick::IsButtonSet(uint32_t which) const
 {
-    if (which < 0 || which > 31)
+    if (which > 31U)
     {
-        return 0;
+        return false;
     }
 
-    return buttons & (1 << which);
+    return (buttons & (1U << which)) != 0U;
 }
 
-#endif  //#ifdef LINUX_JOYSTICK_IS_PRESENT
+#endif //#ifdef LINUX_JOYSTICK_IS_PRESENT

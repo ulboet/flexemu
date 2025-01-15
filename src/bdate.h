@@ -2,7 +2,7 @@
     bdate.h
 
     Basic class containing a date
-    Copyright (C) 1999-2022  W. Schwotzer
+    Copyright (C) 1999-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,19 +23,21 @@
 #define BDATE_INCLUDED
 
 #include <string>
+#include <array>
+#include <cstdint>
 
 class BDate
 {
 
 private:
 
-    int     day;
-    int     month;
-    int     year;
+    int day{0};
+    int month{0};
+    int year{0};
 
 public:
 
-    enum class Format
+    enum class Format : uint8_t
     {
         D2MS3Y4, // DD-MMM-YYYY, MMM are the first three char. of month name
         D2MSU3Y4,// DD-MMM-YYYY, MMM are the first three char. of month name
@@ -43,32 +45,34 @@ public:
         Iso, // YYYYMMDD
     };
 
-    BDate(int d = 0, int m = 0, int year = 0);  // public constructor
-    BDate(const BDate &d);              // public constructor
-    ~BDate();                   // public destructor
+    BDate() = default;
+    BDate(int d, int m, int y);
+    BDate(const BDate &src) = default;
+    ~BDate() = default;
 
+    static BDate Now();
+    std::string GetDateString(Format format = Format::D2MS3Y4) const;
+    void Assign(int day, int month, int year);
+    void GetDate(int &day, int &month, int &year) const;
+    void SetDate(int day, int month, int year);
+    void SetDate(const BDate &date);
+    int GetDay() const ;
+    int GetMonth() const ;
+    int GetMonthBounded() const;
+    int GetYear() const;
+    BDate &operator = (const BDate &src) = default;
+    bool operator < (const BDate &d) const;
+    bool operator == (const BDate &d) const;
+    bool operator != (const BDate &d) const;
+    bool operator > (const BDate &d) const;
+    bool operator >= (const BDate &d) const;
+    bool operator <= (const BDate &d) const;
 
-    static const BDate Now();
-    const std::string GetDateString(Format format = Format::D2MS3Y4) const;
-    void    Assign(int day, int month, int year);
-    void    GetDate(int *day, int *month, int *year);
-    void    SetDate(int day, int month, int year);
-    void    SetDate(const BDate &date);
-    int     GetDay() const ;
-    int     GetMonth() const ;
-    int     GetMonthBounded() const;
-    int     GetYear() const;
-    BDate &operator = (const BDate &d);
-    bool    operator < (const BDate &d) const;
-    bool    operator == (const BDate &d) const;
-    bool    operator > (const BDate &d) const;
-    bool    operator >= (const BDate &d) const;
-    bool    operator <= (const BDate &d) const;
 private:
-    static const char *monthName[];
-    int     MakeComparable() const;
+    static const std::array<const char *, 13> monthNames;
+    int MakeComparable() const;
 
-    //static int        year2000; // if !0 0 and if year < 70 add 1900 to it
+    //static int year2000; // if !0 0 and if year < 70 add 1900 to it
 }; // class BDate
 
 inline void BDate::Assign(int d, int m, int y)
@@ -76,11 +80,6 @@ inline void BDate::Assign(int d, int m, int y)
     day = d;
     month = m;
     year = y;
-}
-inline BDate &BDate::operator = (const BDate &d)
-{
-    Assign(d.day, d.month, d.year);
-    return *this;
 }
 inline int BDate::GetDay() const
 {
@@ -90,11 +89,11 @@ inline int BDate::GetMonth() const
 {
     return month;
 }
-inline void BDate::GetDate(int *d, int *m, int *y)
+inline void BDate::GetDate(int &d, int &m, int &y) const
 {
-    *d = day;
-    *m = month;
-    *y = year;
+    d = day;
+    m = month;
+    y = year;
 }
 inline void BDate::SetDate(int d, int m, int y)
 {

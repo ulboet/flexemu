@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2003-2022  W. Schwotzer
+    Copyright (C) 2003-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,20 +28,22 @@
 #include "bcommand.h"
 #include "scpulog.h"
 
-class CSetLogFile : public BCommand
+class CmdSetMc6809LoggerConfig : public BCommand
 {
 
 public:
-    CSetLogFile() = delete;
-    CSetLogFile(Mc6809 &x_cpu, const s_cpu_logfile &x_log_file);
-    CSetLogFile(const CSetLogFile &src) = delete;
-    CSetLogFile &operator=(const CSetLogFile &src) = delete;
+    CmdSetMc6809LoggerConfig() = delete;
+    CmdSetMc6809LoggerConfig(Mc6809 &p_cpu,
+            Mc6809LoggerConfig p_cpuLoggerConfig);
+    CmdSetMc6809LoggerConfig(const CmdSetMc6809LoggerConfig &src) = delete;
+    CmdSetMc6809LoggerConfig &operator=(const CmdSetMc6809LoggerConfig &src)
+        = delete;
 
     void Execute() override;
 
 protected:
     Mc6809 &cpu;
-    s_cpu_logfile s_log_file;
+    Mc6809LoggerConfig cpuLoggerConfig;
 };
 
 #endif

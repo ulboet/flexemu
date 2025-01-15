@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,22 +25,24 @@
 #ifndef DEBUG_INCLUDED
 #define DEBUG_INCLUDED
 
-#include <stdio.h>
+#include <fstream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 #define LOG_TEMPLATE(print_line)\
     {\
-        FILE *logfp;\
-        logfp = fopen(DEBUG_FILE, "a");\
-        if (logfp != nullptr) {\
-            print_line;\
-            fclose(logfp);\
+        std::ofstream log_ofs(DEBUG_FILE, std::ios::out | std::ios::app);\
+        if (log_ofs.is_open()) {\
+            log_ofs << (print_line);\
+            log_ofs.close();\
         }\
     }
 
-#define LOG(format)              LOG_TEMPLATE(fprintf(logfp, format))
-#define LOG_X(format, a)         LOG_TEMPLATE(fprintf(logfp, format, a))
-#define LOG_XX(format, a, b)     LOG_TEMPLATE(fprintf(logfp, format, a, b))
-#define LOG_XXX(format, a, b, c) LOG_TEMPLATE(fprintf(logfp, format, a, b, c))
+#define LOG(fmt_str) LOG_TEMPLATE(fmt::format(fmt_str))
+#define LOG_X(fmt_str, a) LOG_TEMPLATE(fmt::format(fmt_str, a))
+#define LOG_XX(fmt_str, a, b) LOG_TEMPLATE(fmt::format(fmt_str, a, b))
+#define LOG_XXX(fmt_str, a, b, c) LOG_TEMPLATE(fmt::format(fmt_str, a, b, c))
 
 
 #endif // DEBUG_INCLUDED

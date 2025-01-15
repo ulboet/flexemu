@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,8 +25,6 @@
 #define WD1793_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "iodevice.h"
 #include "filecntb.h"   // needed only for SECTOR_SIZE
 
@@ -36,18 +34,18 @@ class Wd1793 : public IoDevice
 public:
 
     // Bits of status register
-    static const Byte STR_NOTREADY{0x80};
-    static const Byte STR_PROTECTED{0x40};
-    static const Byte STR_HEADLOADED{0x20};
-    static const Byte STR_WRITEFAULT{0x20}; // for type 2 and 3 write commands
-    static const Byte STR_RECORDNOTFOUND{0x10}; // for type 2 and 3 commands
-    static const Byte STR_SEEKERROR{0x10}; // for type 1 commands
-    static const Byte STR_CRCERROR{0x08}; // for type 1, 2 and 3 commands
-    static const Byte STR_TRACK0{0x04};
-    static const Byte STR_LOSTDATA{0x04}; // for type 2 and 3 commands
-    static const Byte STR_DATAREQUEST{0x02}; // for type 2 and 3 commands
-    static const Byte STR_INDEX{0x02}; // for type 1 commands
-    static const Byte STR_BUSY{0x01};
+    static const unsigned STR_NOTREADY{0x80};
+    static const unsigned STR_PROTECTED{0x40};
+    static const unsigned STR_HEADLOADED{0x20};
+    static const unsigned STR_WRITEFAULT{0x20}; // for type 2 and 3 write comds,
+    static const unsigned STR_RECORDNOTFOUND{0x10}; // for type 2 and 3 commands
+    static const unsigned STR_SEEKERROR{0x10}; // for type 1 commands
+    static const unsigned STR_CRCERROR{0x08}; // for type 1, 2 and 3 commands
+    static const unsigned STR_TRACK0{0x04};
+    static const unsigned STR_LOSTDATA{0x04}; // for type 2 and 3 commands
+    static const unsigned STR_DATAREQUEST{0x02}; // for type 2 and 3 commands
+    static const unsigned STR_INDEX{0x02}; // for type 1 commands
+    static const unsigned STR_BUSY{0x01};
 
     // Commands in command register (mask 0xf0)
     // TU:   Track update flag
@@ -93,17 +91,23 @@ public:
 
 private:
 
-    Byte                dr, tr, sr, cr, str;
-    Byte                stepOffset;
-    bool                isDataRequest, isInterrupt;
-    bool                side;
-    Word                byteCount, strRead;
-    Byte                indexPulse; // emulate index hole of floppy disc.
+    Byte dr{0};
+    Byte tr{0};
+    Byte sr{0};
+    Byte cr{0};
+    Byte str{0};
+    Byte stepOffset{1};
+    bool isDataRequest{false};
+    bool isInterrupt{false};
+    bool side{false};
+    Word byteCount{0};
+    Word strRead{0};
+    Byte indexPulse{0}; // emulate index hole of floppy disc.
 
     // Internal functions
 private:
 
-    void                 do_seek(Byte new_track);
+    void do_seek(Byte new_track);
 
 public:
 
@@ -208,9 +212,8 @@ public:
 
 public:
 
-    Wd1793();
-    virtual             ~Wd1793();
-
+    Wd1793() = default;
+    ~Wd1793() override = default;
 };
 
 #endif // WD1793_INCLUDED

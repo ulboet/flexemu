@@ -2,8 +2,8 @@
     ndircont.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,26 +23,39 @@
 #ifndef NDIRCONT_INCLUDED
 #define NDIRCONT_INCLUDED
 
-#ifdef NAFS
 
 #include "misc1.h"
 
 #include "efiletim.h"
+#include "filecntb.h"
 #include "filecnts.h"
+#include "rndcheck.h"
 #include "flexemu.h"
 #include <string>
 #include <vector>
+#include <array>
 #include <unordered_map>
 
-
-class NafsDirectoryContainer : public FileContainerIfSector
+// class FlexDirectoryDiskBySector implements a sector oriented access
+// to a FLEX disk by mapping a host directory emulating a FLEX disk.
+//
+// Rename: NafsDirectoryContainer => FlexDirectoryDiskBySector.
+class FlexDirectoryDiskBySector : public IFlexDiskBySector
 {
+    // Common used parameter names and types:
+    //
+    // SDWord sec_idx     Index into flex_links (if < 0 it is invalid e.g.
+    //                    end of free chain).
+    // Word   ds_idx      Directory sector index, index into flex_directory.
+    // SDWord dir_idx     Index to directory entry (s_dir_entry),
+    //                    for existing files can be used as file_id,
+    //                    (if < 0 it is invalid, e.g. directory/disk full).
+    // SDWord file_id     Unique id of a file. For existing files can be used
+    //                    as dir_idx. Ids of new files are < 0.
+    // SDWord new_file_id Id of a new file. always < 0. Used as key in
+    //                    new_files.
 
-    static const int MAX_TRACK{79}; // maximum track number (zero based).
-    static const int MAX_SECTOR{36}; // number of sectors per track,
-                                     // side 0 and 1 (one based).
-
-    enum class SectorType : Byte
+    enum class SectorType : uint8_t
     {
         Unknown, // Unknown sector type.
         Boot, // Boot sectors.
@@ -67,11 +80,11 @@ class NafsDirectoryContainer : public FileContainerIfSector
     //   SectorType::File, SectorType::NewFile, SectorType::Directory.
     struct s_link_table
     {
-        st_t        next;       // Track and sector number of next sector
-        Byte        record_nr[2]; // FLEX logical record number
-        Word        f_record;   // Relative position in file / 252
-        SWord       file_id;
-        SectorType  type; // The sector type.
+        st_t next; // Track and sector number of next sector
+        std::array<Byte, 2> record_nr; // FLEX logical record number
+        Word f_record; // Relative position in file / 252
+        SDWord file_id;
+        SectorType type; // The sector type.
     };
 
     // A new file is a newly created file which not yet has an entry in
@@ -87,93 +100,98 @@ class NafsDirectoryContainer : public FileContainerIfSector
     };
 
 public:
-    NafsDirectoryContainer() = delete;
-    NafsDirectoryContainer(const NafsDirectoryContainer &) = delete;
-    NafsDirectoryContainer(NafsDirectoryContainer &&) = delete;
-    NafsDirectoryContainer(const char *path,
-                           const FileTimeAccess &fileTimeAccess);
-    virtual ~NafsDirectoryContainer();
+    FlexDirectoryDiskBySector() = delete;
+    FlexDirectoryDiskBySector(const FlexDirectoryDiskBySector &) = delete;
+    FlexDirectoryDiskBySector(FlexDirectoryDiskBySector &&) = delete;
+    FlexDirectoryDiskBySector(const std::string &path,
+                           const FileTimeAccess &fileTimeAccess,
+                           int tracks, int sectors);
+    ~FlexDirectoryDiskBySector() override;
 
-    NafsDirectoryContainer &operator=(const NafsDirectoryContainer &) = delete;
-    NafsDirectoryContainer &operator=(NafsDirectoryContainer &&) = delete;
+    FlexDirectoryDiskBySector &operator=(const FlexDirectoryDiskBySector &) = delete;
+    FlexDirectoryDiskBySector &operator=(FlexDirectoryDiskBySector &&) = delete;
 
 private:
     std::string directory;
-    Byte attributes;
-    bool isOpen;
-    const FileTimeAccess &ft_access;
-
-    s_floppy param;
+    RandomFileCheck randomFileCheck;
+    Byte attributes{};
+    const FileTimeAccess &ft_access{};
+    s_floppy param{};
 
     // Some structures needed for a FLEX file system
     // link table: Each sector has an entry in the link table.
-    std::array<s_link_table, (MAX_TRACK + 1) * MAX_SECTOR> flex_links;
-    std::array<s_sys_info_sector, 2> flex_sys_info; // system info sectors
+    std::vector<s_link_table> flex_links;
+    std::array<s_sys_info_sector, 2> flex_sys_info{}; // system info sectors
     std::vector<s_dir_sector> flex_directory; // directory sectors
-    std::unordered_map<SWord, s_new_file> new_files; // new file table
-    st_t dir_extend;         // track and sector of directory extend sector
-    Word init_dir_sectors; // initial number of directory sectors
-                           // without directory extension.
+    std::unordered_map<SDWord, s_new_file> new_files; // new file table
+    std::unordered_map<SDWord, SectorMap_t> sector_maps; // random file
+                                                         // sector maps
+    st_t dir_extend{0U, 0U}; // track and sector of directory extend sector
+    Word init_dir_sectors{}; // initial number of directory sectors
+                             // without directory extension.
+    SDWord next_dir_idx{-1}; // Next directory index used when filling up
+                             // directory with file entries.
 
 public:
-    static NafsDirectoryContainer *Create(const char *dir,
-                                          const char *name,
-                                          const FileTimeAccess &fileTimeAccess,
-                                          int t, int s,
-                                          int fmt = TYPE_DSK_CONTAINER);
-    bool CheckFilename(const char *fileName) const;
-    bool ReadSector(Byte *buffer, int trk, int sec, int side = -1) const;
-    bool WriteSector(const Byte *buffer, int trk, int sec, int side = -1);
+    static FlexDirectoryDiskBySector *Create(const std::string &path,
+            const FileTimeAccess &fileTimeAccess,
+            int tracks, int sectors, DiskType disk_type);
+
+    // IFlexDiskBase interface declaration.
+    bool IsWriteProtected() const override;
+    bool GetDiskAttributes(FlexDiskAttributes &diskAttributes) const override;
+    DiskType GetFlexDiskType() const override;
+    DiskOptions GetFlexDiskOptions() const override;
+    std::string GetPath() const override;
+
+    // IFlexDiskBySector interface declaration.
+    bool ReadSector(Byte *buffer, int trk, int sec,
+                    int side = -1) const override;
+    bool WriteSector(const Byte *buffer, int trk, int sec,
+                     int side = -1) override;
     bool FormatSector(const Byte *buffer, int trk, int sec, int side,
-                      int sizecode);
-    bool IsFlexFormat() const;
-    bool IsWriteProtected() const;
-    bool IsTrackValid(int track) const;
-    bool IsSectorValid(int track, int sector) const;
-    int GetBytesPerSector() const;
-    bool GetInfo(FlexContainerInfo &info) const;
-    int GetContainerType() const;
-    std::string GetPath() const;
+                      unsigned sizecode) override;
+    bool IsFlexFormat() const override;
+    bool IsTrackValid(int track) const override;
+    bool IsSectorValid(int track, int sector) const override;
+    unsigned GetBytesPerSector() const override;
 
 private:
-    void fill_flex_directory(bool is_write_protected);
-    void initialize_header(bool is_write_protected);
+    void fill_flex_directory();
+    void initialize_header(int tracks, int sectors);
     void initialize_flex_sys_info_sectors(Word number);
     void initialize_flex_directory();
     void initialize_flex_link_table();
     void close_new_files();
-    void mount(Word number);
-    SWord next_free_dir_entry();
-    std::string get_unix_filename(SWord file_id) const;
-    std::string get_unix_filename(const s_dir_entry &dir_entry) const;
+    void mount(Word number, int tracks, int sectors);
+    SDWord next_free_dir_entry();
+    std::string get_unix_filename(SDWord file_id) const;
+    static std::string get_unix_filename(const s_dir_entry &dir_entry);
     bool add_to_link_table(
-        SWord dir_index,
+        SDWord dir_idx,
         off_t size,
         bool is_random,
         st_t &begin,
         st_t &end);
     void add_to_directory(
-        const char *name,
-        const char *ext,
-        SWord dir_index,
+        std::string name,
+        std::string ext,
+        SDWord dir_idx,
         bool is_random,
         const struct stat &stat,
         const st_t &begin,
         const st_t &end,
-        bool is_write_protected);
-    void modify_random_file(const char *path, const struct stat &stat,
-                            const st_t &pbegin);
-    bool IsFlexFilename(
-        const char *filename,
-        std::string &name,
-        std::string &extension,
-        bool with_extension) const;
-    bool is_in_file_random(const char *ppath, const char *pfilename);
-    void check_for_delete(SWord dir_index, const s_dir_sector &d);
-    void check_for_extend(SWord dir_index, const s_dir_sector &d);
-    void check_for_rename(SWord dir_index, const s_dir_sector &d) const;
-    void check_for_new_file(SWord dir_index, const s_dir_sector &d);
-    bool extend_directory(SWord index, const s_dir_sector &d);
+        bool is_file_wp);
+    SectorMap_t create_sector_map(
+                           const std::string &path,
+                           const struct stat &sbuf,
+                           const st_t &begin);
+    void check_for_delete(Word ds_idx, const s_dir_sector &d);
+    void check_for_extend(Word ds_idx, const s_dir_sector &d);
+    void check_for_rename(Word ds_idx, const s_dir_sector &d);
+    void check_for_new_file(Word ds_idx, const s_dir_sector &d);
+    void check_for_changed_file_attr(Word ds_idx, s_dir_sector &d);
+    bool extend_directory(SDWord sec_idx, const s_dir_sector &d);
     bool set_file_time(
         const char *ppath,
         Byte month,
@@ -181,16 +199,16 @@ private:
         Byte year,
         Byte hour,
         Byte minute) const;
-    bool update_file_time(const char *path, SWord file_id) const;
+    bool update_file_time(const char *path, SDWord file_id) const;
     st_t link_address() const;
-    bool is_last_of_free_chain(const st_t &st) const;
-    SWord index_of_new_file(const st_t &st);
-    std::string get_path_of_file(SWord file_id) const;
-    Word record_nr_of_new_file(SWord new_file_index, Word index) const;
+    bool is_last_of_free_chain(const st_t &track_sector) const;
+    SDWord id_of_new_file(const st_t &track_sector);
+    std::string get_path_of_file(SDWord file_id) const;
+    Word record_nr_of_new_file(SDWord new_file_id, SDWord sec_idx) const;
     void change_file_id_and_type(
-        SWord index,
-        SWord old_id,
-        SWord new_id,
+        SDWord sec_idx,
+        SDWord old_file_id,
+        SDWord new_file_id,
         SectorType new_type);
     static void update_sector_buffer_from_link(Byte *buffer,
                                                const s_link_table &link);
@@ -198,10 +216,8 @@ private:
                                                const Byte *buffer);
     static std::string to_string(SectorType type);
     std::string get_unique_filename(const char *extension) const;
-    SWord get_sector_index(const st_t &sector_track) const;
+    SDWord get_sector_index(const st_t &track_sector) const;
+};
 
-};  // class NafsDirectoryContainer
-
-#endif // NAFS
 #endif // NDIRCONT_INCLUDED
 

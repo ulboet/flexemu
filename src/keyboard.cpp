@@ -1,9 +1,9 @@
 /*
-    inout.cpp
+    keyboard.cpp
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,12 +21,12 @@
 */
 
 
-#include "misc1.h"
+#include "typedefs.h"
 #include "keyboard.h"
 #include <iterator>
 
 
-KeyboardIO::KeyboardIO() : init_delay(500)
+KeyboardIO::KeyboardIO()
 {
     reset_parallel();
 }
@@ -34,12 +34,15 @@ KeyboardIO::KeyboardIO() : init_delay(500)
 void KeyboardIO::reset_parallel()
 {
     init_delay = 500;
+    boot_char = '\0';
     std::lock_guard<std::mutex> guard(parallel_mutex);
     key_buffer_parallel.clear();
 }
 
 void KeyboardIO::put_char_parallel(Byte key, bool &do_notify)
 {
+    do_notify = false;
+
     std::lock_guard<std::mutex> guard(parallel_mutex);
     bool was_empty = key_buffer_parallel.empty();
     key_buffer_parallel.push_back(key);
@@ -51,7 +54,15 @@ void KeyboardIO::put_char_parallel(Byte key, bool &do_notify)
 
 bool KeyboardIO::has_key_parallel(bool &do_notify)
 {
-    // After a reset delay the parallel key input request.
+    do_notify = false;
+
+    if (boot_char != '\0')
+    {
+        do_notify = true;
+        return true;
+    }
+
+    // After a reset and booting FLEX delay the parallel key input request.
     // Reason: After output one line FLEX requests for keyboard input.
     // If startup command is present any keyboard input has to be
     // delayed until the FLEX prompt.
@@ -60,10 +71,15 @@ bool KeyboardIO::has_key_parallel(bool &do_notify)
         --init_delay;
         if (!init_delay)
         {
-            do_notify = true;
+            std::lock_guard<std::mutex> guard(parallel_mutex);
+            if (!key_buffer_parallel.empty())
+            {
+                do_notify = true;
+            }
         }
-        return false;
+        return do_notify;
     }
+
     std::lock_guard<std::mutex> guard(parallel_mutex);
     return !key_buffer_parallel.empty();
 }
@@ -73,6 +89,20 @@ bool KeyboardIO::has_key_parallel(bool &do_notify)
 Byte KeyboardIO::read_char_parallel(bool &do_notify)
 {
     Byte result = 0x00;
+
+    do_notify = false;
+
+    if (boot_char != '\0')
+    {
+        result = boot_char;
+        boot_char = '\0';
+        std::lock_guard<std::mutex> guard(parallel_mutex);
+        if (!key_buffer_parallel.empty())
+        {
+            do_notify = true;
+        }
+        return result;
+    }
 
     std::lock_guard<std::mutex> guard(parallel_mutex);
     if (!key_buffer_parallel.empty())
@@ -106,36 +136,42 @@ Byte KeyboardIO::peek_char_parallel()
     return result;
 }
 
-void KeyboardIO::set_bell(Word /*x_percent*/)
+void KeyboardIO::set_bell(Word /*p_percent*/)
 {
 #ifdef _WIN32
     Beep(400, 100);
 #endif
 #ifdef UNIX
-    static char bell = BELL;
+    // the write syscall may be aborted by EINTR or no byte is written.
+    // This is defined bahaviour.
+    // Solution: Retry up to 4 times.
+    static const char bell = BEL;
 
-    ssize_t count = write(fileno(stdout), &bell, 1);
-    (void)count; // satisfy compiler
+    for (int i = 0; i < 4; ++i)
+    {
+        if (write(fileno(stdout), &bell, 1) == 1)
+        {
+            break;
+        }
+    }
 #endif
 }
 
-void KeyboardIO::put_value(unsigned int x_keyMask)
+void KeyboardIO::put_value(unsigned int p_keyMask)
 {
-    keyMask = x_keyMask;
+    keyMask = p_keyMask;
 }
 
-void KeyboardIO::get_value(unsigned int *x_keyMask)
+void KeyboardIO::get_value(unsigned int *p_keyMask) const
 {
-    if (x_keyMask != nullptr)
+    if (p_keyMask != nullptr)
     {
-        *x_keyMask = keyMask;
+        *p_keyMask = keyMask;
     }
 }
 
-void KeyboardIO::set_startup_command(const char *x_startup_command)
+void KeyboardIO::set_startup_command(const std::string &startup_command)
 {
-    std::string startup_command(x_startup_command);
-
     if (!startup_command.empty())
     {
         std::lock_guard<std::mutex> guard(parallel_mutex);
@@ -143,5 +179,10 @@ void KeyboardIO::set_startup_command(const char *x_startup_command)
                   std::back_inserter(key_buffer_parallel));
         key_buffer_parallel.push_back('\r');
     }
+}
+
+void KeyboardIO::set_boot_char(Byte p_boot_char)
+{
+    boot_char = p_boot_char;
 }
 

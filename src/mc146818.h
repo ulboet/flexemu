@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@
 #include "misc1.h"
 #include "iodevice.h"
 #include "bobservd.h"
+#include <string>
+#include <array>
 
 
 class Mc6809;
@@ -37,11 +39,21 @@ class Mc146818 : public IoDevice, public BObserved
     // Internal registers:
 
 protected:
-    Byte                second, minute, hour;
-    Byte                al_second, al_minute, al_hour;
-    Byte                weekday, day, month, year;
-    Byte                A, B, C, D;
-    Byte                ram[50]; // 50 bytes of internal RAM
+    Byte second{0};
+    Byte minute{0};
+    Byte hour{0};
+    Byte al_second{0};
+    Byte al_minute{0};
+    Byte al_hour{0};
+    Byte weekday{0};
+    Byte day{0};
+    Byte month{0};
+    Byte year{0};
+    Byte A{0};
+    Byte B{0};
+    Byte C{0};
+    Byte D{0};
+    std::array<Byte, 50> ram{}; // 50 bytes of internal RAM
 
 public:
 
@@ -56,25 +68,30 @@ public:
     {
         return 64;
     };
-    virtual void             update_1_second();
+    virtual void update_1_second();
 
 private:
 
-    Byte                convert(Byte val);
-    Byte                convert_hour(Byte val);
-    Byte                convert_bin(Byte val);
-    bool                increment(Byte &, Byte, Byte);
-    bool                increment_hour(Byte &);
-    bool                increment_day(Byte &, Byte, Byte);
-    const char          *getFileName();
-    char                path[PATH_MAX];
+    enum class Config : std::uint8_t
+    {
+        NewOrOld, // Use new config path if exists, otherwise old path.
+        Old, // Always use new config path.
+        New, // Always use new config path.
+    };
 
-    // Public constructor and destructor
+    Byte convert(Byte val) const;
+    Byte convert_hour(Byte val) const;
+    Byte convert_bin(Byte val) const;
+    bool increment(Byte &reg, Byte min, Byte max);
+    bool increment_hour(Byte &p_hour) const;
+    bool increment_day(Byte &p_day, Byte p_month, Byte p_year);
+
+    static std::string getConfigFilePath(Config type);
 
 public:
 
     Mc146818();
-    virtual             ~Mc146818();
+    ~Mc146818() override;
 
 };
 

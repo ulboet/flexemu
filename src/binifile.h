@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,28 +25,29 @@
 
 #include <string>
 #include <map>
-#include <fstream>
+#include <cstdint>
 
 
 class BIniFile
 {
 public:
     BIniFile() = delete;
-    BIniFile(const BIniFile &) = delete;
-    BIniFile(BIniFile &&);
-    BIniFile(const char *aFileName);
-    ~BIniFile();
+    BIniFile(const BIniFile &src) = delete;
+    BIniFile(BIniFile &&src) noexcept;
+    explicit BIniFile(std::string p_fileName);
+    ~BIniFile() = default;
 
-    BIniFile &operator=(const BIniFile &) = delete;
-    BIniFile &operator=(BIniFile &&);
+    BIniFile &operator=(const BIniFile &src) = delete;
+    BIniFile &operator=(BIniFile &&src) noexcept;
 
     bool IsValid() const;
     std::string GetFileName() const;
     std::map<std::string, std::string> ReadSection(const std::string &section)
                                                                           const;
+    int GetLineNumber(const std::string &section, const std::string &key) const;
 
 private:
-    enum class Type
+    enum class Type : uint8_t
     {
         Comment,
         Section,
@@ -54,8 +55,8 @@ private:
         Unknown,
     };
 
-    Type ReadLine(std::istream &istream, std::string &section,
-                  std::string &key, std::string &value,
+    Type ReadLine(int line_number, std::istream &istream,
+                  std::string &section, std::string &key, std::string &value,
                   bool isSectionOnly) const;
 
     std::string fileName;

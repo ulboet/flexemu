@@ -2,8 +2,8 @@
     fpoptui.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ class FlexplorerOptionsUi : public QObject, protected Ui_FlexplorerOptions
 public:
 
     FlexplorerOptionsUi();
-    virtual ~FlexplorerOptionsUi();
+    ~FlexplorerOptionsUi() override = default;
     void setupUi(QDialog &dialog);
     void TransferDataToDialog(const struct sFPOptions &options);
     void TransferDataFromDialog(struct sFPOptions &options);
@@ -58,7 +58,7 @@ private:
     void ConnectSignalsWithSlots();
     bool Validate();
 
-    QDialog *dialog;
+    QDialog *dialog{nullptr};
 };
 
 #endif

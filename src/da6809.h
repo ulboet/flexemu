@@ -5,8 +5,9 @@
 #ifndef DA6809_INCLUDED
 #define DA6809_INCLUDED
 
-#include "misc1.h"
 #include "absdisas.h"
+#include <map>
+#include <string>
 
 
 class Da6809 : public AbstractDisassembler
@@ -14,48 +15,67 @@ class Da6809 : public AbstractDisassembler
 
 protected:
 
-    char        code_buf[28];       // buffer for machinecode
-    char        mnem_buf[28];       // buffer for mnemonic
-    bool        use_undocumented;
+    Word pc{};
+    const Byte *memory{};
+    bool use_undocumented{false};
 
 public:
-    Da6809();
-    virtual ~Da6809() override;
+    Da6809() = default;
+    ~Da6809() override = default;
 
-    int Disassemble(
-            const Byte * const pMemory,
-            DWord pc,
-            InstFlg *pFlags,
-            DWord *pAddr,
-            char **pCode,
-            char **pMnemonic) override;
+    InstFlg Disassemble(
+            const Byte *p_memory,
+            DWord p_pc,
+            DWord &p_jumpaddr,
+            std::string &p_code,
+            std::string &p_mnemonic,
+            std::string &p_operands) override;
     void set_use_undocumented(bool value) override;
+    unsigned getByteSize(const Byte *p_memory) override;
+    void SetFlexLabelFile(const std::string &path);
 
 private:
 
-    inline Byte D_Page10(InstFlg *, Word, const Byte *pMemory, DWord *pAddr);
-    inline Byte     D_Page11(InstFlg *, Word, const Byte *pMemory, DWord *pAddr);
-    inline Byte     D_Illegal(const char *, Word, Byte, const Byte *);
-    inline Byte     D_Direct(const char *, Word, Byte, const Byte *);
-    inline Byte     D_Immediat(const char *, Word, Byte, const Byte *);
-    inline Byte     D_ImmediatL(const char *, Word, Byte, const Byte *,
-                                DWord *pAddr);
-    inline Byte     D_Inherent(const char *, Word, Byte, const Byte *);
-    Byte     D_Indexed(const char *, Word, Byte, const Byte *);
-    inline Byte     D_Extended(const char *, Word, Byte, const Byte *,
-                               DWord *pAddr);
-    inline Byte     D_Relative(const char *, Word, Byte, const Byte *,
-                               DWord *pAddr);
-    inline Byte     D_RelativeL(const char *, Word, Byte, const Byte *,
-                                DWord *pAddr);
-    inline Byte     D_Register0(const char *, Word, Byte, const Byte *);
-    inline Byte     D_Register1(const char *, Word, Byte, const Byte *);
-    inline Byte     D_Register2(const char *, Word, Byte, const Byte *);
+    inline InstFlg D_Page2(InstFlg p_flags, DWord &p_jumpaddr,
+            std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    inline InstFlg D_Page3(InstFlg p_flags, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline InstFlg D_Illegal(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline void D_Direct(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline void D_Immediate8(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline void D_Immediate16(const char *mnemo, Byte bytes,
+            std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    inline void D_Inherent(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic);
+    void D_Indexed(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline void D_Extended(const char *mnemo, Byte bytes, std::string &p_code,
+            std::string &p_mnemonic, std::string &p_operands);
+    inline void D_Relative8(const char *mnemo, Byte bytes, DWord &p_jumpaddr,
+            std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    inline void D_Relative16(const char *mnemo, Byte bytes, DWord &p_jumpaddr,
+            std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    inline void D_RegisterRegister(const char *mnemo, Byte bytes,
+            std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    inline void D_RegisterList(const char *mnemo, const char *ns_reg,
+            Byte bytes, std::string &p_code, std::string &p_mnemonic,
+            std::string &p_operands);
+    std::string PrintCode(int bytes);
+    const char *FlexLabel(Word addr);
 
-    const char  *IndexedRegister(Byte which);
-    const char      *InterRegister(Byte which);
-    const char  *StackRegister(Byte which, const char *not_stack);
-    const char  *FlexLabel(Word);
-};  // class Da6809
+    std::string flexLabelFile;
+    std::map<unsigned, std::string> label_for_address;
+    static const char *IndexRegister(Byte which);
+    static const char *InterRegister(Byte which);
+    static const char *StackRegister(Byte which, const char *not_stack);
+};
 
 #endif // DA6809_INCLUDED

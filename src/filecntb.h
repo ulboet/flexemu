@@ -1,8 +1,8 @@
 /*
     filecntb.h
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,43 +26,13 @@
 #include <string>
 
 
-/* possible constants for container type */
-
-const int TYPE_CONTAINER    = 0x01; /* type: file container */
-const int TYPE_DIRECTORY    = 0x02; /* type: directory */
-const int TYPE_DSK_CONTAINER    =
-    0x10; /* subtype: a file container with DSK format */
-const int TYPE_FLX_CONTAINER    =
-    0x20; /* subtype: a file container with FLX format */
-const int TYPE_NAFS_DIRECTORY   = 0x40; /* subtype: NAFS directory */
-/* (means: without text conversion) */
-const int TYPE_RAM_CONTAINER    =
-    0x80; /* subtype: filecontainer loaded in RAM */
-const int TYPE_JVC_HEADER       =
-    0x100; /* subtype: DSK filecontainer with JVC header */
-
 // This macro defines the name of a file. It contains the boot sector.
 // It is used in directory containers to be able to boot from them.
-#define BOOT_FILE "boot"
+constexpr const char *BOOT_FILE = "boot";
 
-const unsigned int SECTOR_SIZE  = 256;
+const int SECTOR_SIZE = 256;
 
-class FlexContainerInfo;
-
-// Supported file attributes.
-// They are used as bit masks and can be combined.
-// File attributes are used in struct s_dir_entry in field file_attr.
-// All other bits of file_attr should remain 0.
-// (WRITE_PROTECT also used for container attribute)
-enum
-{
-    WRITE_PROTECT   = 0x80,
-    DELETE_PROTECT  = 0x40,
-    READ_PROTECT    = 0x20,
-    CATALOG_PROTECT = 0x10,
-    ALL_PROTECT     = WRITE_PROTECT | DELETE_PROTECT | READ_PROTECT |
-                      CATALOG_PROTECT
-};
+class FlexDiskAttributes;
 
 // Magic number to mark a file as random access file. This byte is stored
 // in s_dir_entry in field sector_map.
@@ -82,15 +52,64 @@ const size_t FLEX_FILEEXT_LENGTH = 3U;
 const size_t FLEX_FILENAME_LENGTH =
                  FLEX_BASEFILENAME_LENGTH + FLEX_FILEEXT_LENGTH + 2U;
 
-class FileContainerIfBase
+enum class DiskType : uint8_t
+{
+    DSK, // A *.dsk (or *.wta) disk image file.
+    FLX, // A *.flx disk image file.
+    Directory, // A directory disk.
+};
+
+// The read-only options a disk image or directory disk can have.
+enum class DiskOptions : uint8_t
+{
+    NONE = 0, // No options set.
+    JvcHeader = 1, // A *.dsk (or *.wta) disk image file with a JVC header.
+    HasSectorIF = 2, // Has a sector oriented interface.
+    RAM = 4, // a disk image file fully loaded in RAM.
+};
+
+// This interface gives basic properties access to a FLEX disk image.
+// Rename: FileContainerIfBase => IFlexDiskBase
+class IFlexDiskBase
 {
 public:
     virtual bool IsWriteProtected() const = 0;
-    virtual bool  GetInfo(FlexContainerInfo &info) const = 0;
-    virtual int  GetContainerType() const = 0;
+    virtual bool GetDiskAttributes(FlexDiskAttributes
+            &diskAttributes) const = 0;
+    virtual DiskType GetFlexDiskType() const = 0;
+    virtual DiskOptions GetFlexDiskOptions() const = 0;
     virtual std::string GetPath() const = 0;
-    virtual ~FileContainerIfBase() { };
-};  /* class FileContainerIfBase */
+
+    virtual ~IFlexDiskBase() = default;
+};
+
+inline DiskOptions operator| (DiskOptions lhs, DiskOptions rhs)
+{
+    using TYPE = std::underlying_type_t<DiskOptions>;
+
+    return static_cast<DiskOptions>(static_cast<TYPE>(lhs) |
+                                    static_cast<TYPE>(rhs));
+}
+
+inline DiskOptions operator& (DiskOptions lhs, DiskOptions rhs)
+{
+    using TYPE = std::underlying_type_t<DiskOptions>;
+
+    return static_cast<DiskOptions>(static_cast<TYPE>(lhs) &
+                                    static_cast<TYPE>(rhs));
+}
+
+inline DiskOptions operator|= (DiskOptions &lhs, DiskOptions rhs)
+{
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+inline DiskOptions operator&= (DiskOptions &lhs, DiskOptions rhs)
+{
+    lhs = lhs & rhs;
+    return lhs;
+}
 
 #endif /* FILECNTB_INCLUDED */
 

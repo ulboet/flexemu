@@ -2,8 +2,8 @@
     fpoptui.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,10 +21,11 @@
 */
 
 
-#include "misc1.h"
 #include "fpoptui.h"
+#include "efilesiz.h"
 #include <stdexcept>
 #include "warnoff.h"
+#include <QDir>
 #include <QLineEdit>
 #include <QFileInfo>
 #include <QFileDialog>
@@ -32,11 +33,7 @@
 #include "warnon.h"
 
 FlexplorerOptionsUi::FlexplorerOptionsUi() :
-    Ui_FlexplorerOptions(), dialog(nullptr)
-{
-}
-
-FlexplorerOptionsUi::~FlexplorerOptionsUi()
+    Ui_FlexplorerOptions()
 {
 }
 
@@ -70,11 +67,17 @@ void FlexplorerOptionsUi::TransferDataToDialog(const struct sFPOptions &options)
     c_injectTextFileAskUser->setChecked(options.injectTextFileAskUser);
     c_extractTextFileConvert->setChecked(options.extractTextFileConvert);
     c_extractTextFileAskUser->setChecked(options.extractTextFileAskUser);
+    c_onTrack0OnlyDirSectors->setChecked(options.onTrack0OnlyDirSectors);
+
+    bool isFileSize = (options.fileSizeType == FileSizeType::FileSize);
+    r_fileSize->setChecked(isFileSize);
+    r_dataSize->setChecked(!isFileSize);
 }
 
 void FlexplorerOptionsUi::TransferDataFromDialog(struct sFPOptions &options)
 {
-    options.bootSectorFile = e_bootSectorFile->text().toUtf8().data();
+    options.bootSectorFile =
+        QDir::toNativeSeparators(e_bootSectorFile->text()).toStdString();
 
     auto index = cb_fileTimeAccess->currentIndex();
     index = (index == 2) ? 3 : index;
@@ -84,6 +87,9 @@ void FlexplorerOptionsUi::TransferDataFromDialog(struct sFPOptions &options)
     options.injectTextFileAskUser = c_injectTextFileAskUser->isChecked();
     options.extractTextFileConvert = c_extractTextFileConvert->isChecked();
     options.extractTextFileAskUser = c_extractTextFileAskUser->isChecked();
+    options.onTrack0OnlyDirSectors = c_onTrack0OnlyDirSectors->isChecked();
+    options.fileSizeType = r_fileSize->isChecked() ?
+        FileSizeType::FileSize : FileSizeType::DataSize;
 }
 
 void FlexplorerOptionsUi::ConnectSignalsWithSlots()
@@ -104,6 +110,7 @@ void FlexplorerOptionsUi::OnSelectBootSectorFile()
     bootSectorFile = QFileDialog::getOpenFileName(
         dialog, tr("Select Boot Sector File"), bootSectorFile,
         tr("Boot Sector Files (*);;All files (*.*)"));
+    bootSectorFile = QDir::toNativeSeparators(bootSectorFile);
 
     if (!bootSectorFile.isEmpty())
     {
@@ -118,15 +125,16 @@ bool FlexplorerOptionsUi::Validate()
     if (!info.exists())
     {
         e_bootSectorFile->setFocus(Qt::OtherFocusReason);
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), 
+        QMessageBox::critical(dialog, tr("Flexplorer Error"),
                 tr("Boot Sector File does not exist"));
 
         return false;
     }
-    else if (!info.isFile() || (info.size() != 256 && info.size() != 512))
+
+    if (!info.isFile() || (info.size() != 256 && info.size() != 512))
     {
         e_bootSectorFile->setFocus(Qt::OtherFocusReason);
-        QMessageBox::critical(dialog, tr("Flexplorer Error"), 
+        QMessageBox::critical(dialog, tr("Flexplorer Error"),
                 tr("Invalid Boot Sector File"));
 
         return false;

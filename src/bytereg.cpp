@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,16 +21,8 @@
 */
 
 
-#include "misc1.h"
+#include "typedefs.h"
 #include "bytereg.h"
-
-ByteRegister::ByteRegister()
-{
-}
-
-ByteRegister::~ByteRegister()
-{
-}
 
 Byte ByteRegister::requestReadValue()
 {
@@ -39,7 +31,7 @@ Byte ByteRegister::requestReadValue()
     return 0xff;
 }
 
-void ByteRegister::requestWriteValue(Byte)
+void ByteRegister::requestWriteValue(Byte /*value*/)
 {
 }
 
@@ -56,7 +48,7 @@ Byte ByteRegister::readIo(Word offset)
         return requestReadValue();
     }
 
-    return 0;   // default, should never be used!
+    return 0; // default, should never be used!
 }
 
 

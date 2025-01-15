@@ -2,8 +2,8 @@
     fdirent.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,70 +20,24 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "misc1.h"
+#include "typedefs.h"
 #include <string>
 #include <algorithm>
 #include <iterator>
 #include <locale>
 #include "bdate.h"
 #include "fdirent.h"
-#include <stdio.h>
+#include <iostream>
+#include <cstring>
 
 
-FlexDirEntry::FlexDirEntry() :
-    size(0),
-    attributes(0),
-    sectorMap(0),
-    startTrk(-1),
-    startSec(0),
-    endTrk(0),
-    endSec(0),
-    status(0)
-{
-} // FlexDirEntry
-
-FlexDirEntry::~FlexDirEntry()
-{
-}
-
-FlexDirEntry::FlexDirEntry(const FlexDirEntry &src)
-{
-    if (&src != this)
-    {
-        fileName = src.fileName;
-        CopyFrom(src);
-    }
-}
-
-FlexDirEntry::FlexDirEntry(FlexDirEntry &&src)
+FlexDirEntry::FlexDirEntry(FlexDirEntry &&src) noexcept
 {
     if (&src != this)
     {
         fileName = std::move(src.fileName);
         CopyFrom(src);
     }
-}
-
-FlexDirEntry &FlexDirEntry::operator=(const FlexDirEntry &src)
-{
-    if (&src != this)
-    {
-        fileName = src.fileName;
-        CopyFrom(src);
-    }
-
-    return *this;
-}
-
-FlexDirEntry &FlexDirEntry::operator=(FlexDirEntry &&src)
-{
-    if (&src != this)
-    {
-        fileName = std::move(src.fileName);
-        CopyFrom(src);
-    }
-
-    return *this;
 }
 
 void FlexDirEntry::CopyFrom(const FlexDirEntry &src)
@@ -120,9 +74,9 @@ void FlexDirEntry::SetTime(const BTime &t)
     time = t;
 }
 
-void FlexDirEntry::SetTotalFileName(const char *s)
+void FlexDirEntry::SetTotalFileName(const std::string &p_fileName)
 {
-    fileName = s;
+    fileName = p_fileName;
 }
 
 std::string FlexDirEntry::GetFileName() const
@@ -136,18 +90,16 @@ std::string FlexDirEntry::GetFileName() const
         // If '.' not found return whole string
         return fileName;
     }
-    else
+
+    std::string result;
+
+    it++;
+    if (it != fileName.rend())
     {
-        std::string result;
-
-        it++;
-        if (it != fileName.rend())
-        {
-            std::copy(fileName.begin(), it.base(), std::back_inserter(result));
-        }
-
-        return result;
+        std::copy(fileName.begin(), it.base(), std::back_inserter(result));
     }
+
+    return result;
 }
 
 std::string FlexDirEntry::GetFileExt() const
@@ -155,7 +107,7 @@ std::string FlexDirEntry::GetFileExt() const
     const char *p;
     std::string ext;
 
-    p = strchr(fileName.c_str(), '.');
+    p = std::strchr(fileName.c_str(), '.');
 
     if (p != nullptr)
     {
@@ -194,7 +146,7 @@ void FlexDirEntry::GetEndTrkSec(int &track, int &sector) const
     sector = endSec;
 }
 
-const std::string FlexDirEntry::GetAttributesString() const
+std::string FlexDirEntry::GetAttributesString() const
 {
     std::string str;
 
@@ -223,5 +175,5 @@ const std::string FlexDirEntry::GetAttributesString() const
 
 void FlexDirEntry::SetAttributes(Byte setMask, Byte clearMask)
 {
-    attributes = (attributes & ~clearMask) | setMask;
+    attributes = (static_cast<unsigned>(~clearMask) & attributes) | setMask;
 }

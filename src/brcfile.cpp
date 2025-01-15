@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,44 +20,34 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <stdio.h>
-#include <errno.h>
 #include "misc1.h"
 #include "brcfile.h"
-#include "bfileptr.h"
+#include <sstream>
+#include <fstream>
+#include <cstring>
+#include "warnoff.h"
+#include <optional>
+#include "warnon.h"
 
-BRcFile::BRcFile()
+
+BRcFile::BRcFile(std::string p_fileName) : fileName(std::move(p_fileName))
 {
 }
 
-BRcFile::BRcFile(const char *aFileName) : fileName(aFileName)
+int BRcFile::SetValue(const char *key, const std::string &value)
 {
-}
+    std::ofstream fs(fileName, std::ios::out | std::ios::app);
 
-BRcFile::~BRcFile()
-{
-}
-
-void BRcFile::SetFileName(const char *aFileName)
-{
-    fileName = aFileName;
-}
-
-int BRcFile::SetValue(const char *key, const char *value)
-{
-    size_t res;
-    BFilePtr fp(fileName.c_str(), "a");
-
-    if (fp == nullptr)
+    if (!fs.is_open())
     {
-        return errno;
+        return 1;
     }
 
-    res = fprintf(fp, "%s\t\t\"%s\"\n", key, value);
+    fs << key << "\t\t" << "\"" << value << "\"\n";
 
-    if (res != 2)
+    if (fs.fail())
     {
-        return errno;
+        return 1;
     }
 
     return BRC_NO_ERROR;
@@ -65,60 +55,64 @@ int BRcFile::SetValue(const char *key, const char *value)
 
 int BRcFile::SetValue(const char *key, int value)
 {
-    size_t res;
-    std::string str;
-    BFilePtr fp(fileName.c_str(), "a");
+    std::ofstream fs(fileName, std::ios::out | std::ios::app);
 
-    if (fp == nullptr)
+    if (!fs.is_open())
     {
-        return errno;
+        return 1;
     }
 
-    res = fprintf(fp, "%s\t\t%i\n", key, value);
+    fs << key << "\t\t" << value << "\n";
 
-    if (res != 2)
+    if (fs.fail())
     {
-        return errno;
+        return 1;
     }
 
     return BRC_NO_ERROR;
 }
 
-int BRcFile::GetValue(const char *key, std::string &value, int *isInteger)
+int BRcFile::GetValue(const char *key, std::string &value)
 {
-    char def[256];
-    char strparm[PATH_MAX];
-    BFilePtr fp(fileName.c_str(), "r");
+    std::optional<bool> isInteger;
 
-    if (isInteger)
+    return GetValue(key, value, isInteger);
+}
+
+int BRcFile::GetValue(const char *key, std::string &value,
+        std::optional<bool> &isInteger)
+{
+    std::ifstream fs(fileName, std::ios::in);
+    auto keyLength = std::strlen(key);
+
+    isInteger = true;
+
+    if (!fs.is_open())
     {
-        *isInteger = 1;
+        return 1;
     }
 
-    if (fp == nullptr)
+    while (!fs.eof())
     {
-        return errno;
-    }
+        std::stringbuf strbuf;
+        std::string skey;
 
-    while (!feof((FILE *)fp))
-    {
-        if (fscanf(fp, "%79s %[^\n]\n", def, strparm) == 2 &&
-            stricmp(def, key) == 0)
+        fs >> skey;
+        if (!skey.empty())
         {
-            value = strparm;
-
-            if (value[0] == '"')
+            fs.get(strbuf);
+            fs.get(); // skip delimiter char.
+            if (skey.size() == keyLength && skey.compare(key) == 0)
             {
-
-                if (isInteger)
+                value = flx::trim(strbuf.str());
+                if (!value.empty() && value[0] == '"')
                 {
-                    *isInteger = 0;
+                    isInteger = false;
+                    value = value.substr(1, value.length() - 2);
                 }
 
-                value = value.substr(1, value.length() - 2);
+                return BRC_NO_ERROR;
             }
-
-            return BRC_NO_ERROR;
         }
     }
 
@@ -128,21 +122,22 @@ int BRcFile::GetValue(const char *key, std::string &value, int *isInteger)
 int BRcFile::GetValue(const char *key, int &value)
 {
     std::string str;
-    int isInt;
+    std::optional<bool> isInt;
 
-    if (int res = GetValue(key, str, &isInt))
+    if (int res = GetValue(key, str, isInt))
     {
         return res;
     }
 
-    if (!isInt)
+    if (isInt.has_value() && !isInt.value())
     {
         return BRC_NO_INTEGER;
     }
 
-    if (sscanf(str.c_str(), "%i", &value) != 1)
+    std::stringstream stream(str);
+    if ((stream >> value).fail())
     {
-        return BRC_NO_INTEGER;    // returned value is no integer
+        return BRC_NO_INTEGER; // returned value is no integer
     }
 
     return BRC_NO_ERROR;
@@ -150,11 +145,51 @@ int BRcFile::GetValue(const char *key, int &value)
 
 int BRcFile::Initialize()
 {
-    BFilePtr fp(fileName.c_str(), "w");
+    std::ofstream fs(fileName, std::ios::out | std::ios::trunc);
 
-    if (fp == nullptr)
+    if (!fs.is_open())
     {
-        return errno;
+        return 1;
+    }
+
+    return BRC_NO_ERROR;
+}
+
+int BRcFile::GetValues(const char *keyPrefix,
+        std::map<std::string, std::string> &values)
+{
+    std::ifstream fs(fileName.c_str());
+    const auto lcKeyPrefix = flx::tolower(keyPrefix);
+
+    values.clear();
+    if (!fs.is_open())
+    {
+        return BRC_NOT_FOUND;
+    }
+
+    while (!fs.eof())
+    {
+        std::stringbuf strbuf;
+        std::string key;
+
+        fs >> key;
+        fs.get(strbuf);
+        auto value = flx::ltrim(strbuf.str());
+        if (key.size() > std::strlen(keyPrefix))
+        {
+            const auto lcPrefixOfKey =
+                flx::tolower(key.substr(0, lcKeyPrefix.size()));
+            auto subKey = key.substr(lcKeyPrefix.size());
+
+            if (fs.good() && lcKeyPrefix.compare(lcPrefixOfKey) == 0)
+            {
+                if (value[0] == '"')
+                {
+                    value = value.substr(1, value.length() - 2);
+                }
+                values[subKey] = value;
+            }
+        }
     }
 
     return BRC_NO_ERROR;

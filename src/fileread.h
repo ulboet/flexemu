@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,29 +26,32 @@
 
 #include <limits>
 #include <ostream>
+#include <string>
 #include "memsrc.h"
 #include "memtgt.h"
 
-extern int load_hexfile(const char *filename, MemoryTarget<size_t> &memtgt,
-                        size_t &startAddress);
-extern int load_flex_binary(const char *filename, MemoryTarget<size_t> &memtgt,
-                            size_t &startAddress);
-extern int write_flex_binary(const char *filename,
-                             const MemorySource<size_t> &memsrc,
-                             size_t startAddress =
-                                 std::numeric_limits<size_t>::max());
-extern int write_intelhex(const char *filename,
-                          const MemorySource<size_t> &memsrc,
-                          size_t startAddress =
-                              std::numeric_limits<size_t>::max());
-extern int write_motorola_srec(const char *filename,
-                               const MemorySource<size_t> &memsrc,
-                               size_t startAddress =
-                                   std::numeric_limits<size_t>::max());
-extern int write_raw_binary(const char *filename,
-                            const MemorySource<size_t> &memsrc,
-                            size_t startAddress =
-                                std::numeric_limits<size_t>::max());
+extern int load_hexfile(const std::string &filename,
+                        MemoryTarget<DWord> &memtgt,
+                        DWord &startAddress);
+extern int load_flex_binary(const std::string &filename,
+                            MemoryTarget<DWord> &memtgt,
+                            DWord &startAddress);
+extern int write_flex_binary(const std::string &filename,
+                             const MemorySource<DWord> &memsrc,
+                             DWord startAddress =
+                                 std::numeric_limits<DWord>::max());
+extern int write_intel_hex(const std::string &filename,
+                           const MemorySource<DWord> &memsrc,
+                           DWord startAddress =
+                              std::numeric_limits<DWord>::max());
+extern int write_motorola_srecord(const std::string &filename,
+                                  const MemorySource<DWord> &memsrc,
+                                  DWord startAddress =
+                                   std::numeric_limits<DWord>::max());
+extern int write_raw_binary(const std::string &filename,
+                            const MemorySource<DWord> &memsrc,
+                            DWord startAddress =
+                                std::numeric_limits<DWord>::max());
 extern void print_hexfile_error(std::ostream &ostream, int error_id);
 
 #endif // FILREAD_INCLUDED

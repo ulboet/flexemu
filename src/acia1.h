@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,11 +25,11 @@
 #ifndef ACIA1_INCLUDED
 #define ACIA1_INCLUDED
 
-#include <stdio.h>
 #include "mc6850.h"
 #include "bobservd.h"
 
 class TerminalIO;
+class Inout;
 
 class Acia1 : public Mc6850, public BObserved
 {
@@ -37,6 +37,7 @@ class Acia1 : public Mc6850, public BObserved
 protected:
 
     TerminalIO &terminalIO;
+    Inout &inout;
 
 public:
     // read data from serial line
@@ -58,13 +59,14 @@ public:
         return "acia1";
     };
 
-    // Public constructor and destructor
 public:
-
     Acia1() = delete;
-    Acia1(TerminalIO &x_terminalIO);
-    virtual             ~Acia1();
-
+    Acia1(TerminalIO &p_terminalIO, Inout &p_inout);
+    ~Acia1() override = default;
+    Acia1(const Acia1 &src) = delete;
+    Acia1(Acia1 &&src) = delete;
+    Acia1 &operator=(const Acia1 &src) = delete;
+    Acia1 &operator=(Acia1 &&src) = delete;
 };
 
 #endif // ACIA1_INCLUDED

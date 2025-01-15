@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,7 +39,8 @@ public:
     using AddressRanges = std::vector<AddressRange>;
 
     virtual const AddressRanges& GetAddressRanges() const = 0;
-    virtual void CopyTo(Byte *buffer, T address, T aSize) const = 0;
+    virtual void CopyTo(Byte *target, T address, T size) const = 0;
+    virtual ~MemorySource() = default;
 };
 #endif
 

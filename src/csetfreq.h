@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -31,7 +31,12 @@ class CSetFrequency : public BCommand
 {
 
 public:
-    CSetFrequency(Scheduler &x_sched, float x_frequency);
+    CSetFrequency(Scheduler &p_sched, float p_frequency);
+    ~CSetFrequency() override = default;
+    CSetFrequency(const CSetFrequency &src) = delete;
+    CSetFrequency(CSetFrequency &&src) = delete;
+    CSetFrequency &operator=(const CSetFrequency &src) = delete;
+    CSetFrequency &operator=(CSetFrequency &&src) = delete;
     void Execute() override;
 
 protected:

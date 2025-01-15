@@ -2,7 +2,7 @@
     absgui.h: abstract gui interface.
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,8 +25,6 @@
 #define ABSGUI_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-#include <string.h>
 
 #include "e2.h"
 #include "flexemu.h"
@@ -38,44 +36,43 @@
 class Mc6809;
 class Inout;
 class Memory;
-class Mc6809CpuStatus;
+struct Mc6809CpuStatus;
 class TerminalIO;
 
 class AbstractGui
 {
-
-    // private instance variables:
-
 protected:
-    static constexpr int CPU_LINE_WIDTH{39};
-    static constexpr int CPU_LINES{14};
-
-    Mc6809 &cpu;    // Reference to cpu to send interrupts
+    Mc6809 &cpu; // Reference to cpu to send interrupts
     Memory &memory; // Reference to memory (incl. video memory access)
     Inout &inout; // Reference to IO-class handling input/output
     TerminalIO &terminalIO; // Reference to terminal data provider.
-    char cpustring[CPU_LINES * CPU_LINE_WIDTH + 1];
+    std::string cpustring;
 
 protected:
-    virtual void redraw_cpuview_impl(const Mc6809CpuStatus &stat);
+    virtual void redraw_cpuview_impl(const Mc6809CpuStatus &status);
     void clear_cpuview();
-    void redraw_cpuview(const Mc6809CpuStatus &stat);
-    void redraw_cpuview_contents(const Mc6809CpuStatus &stat);
-    void text(int x, int y, const char *str);
+    void redraw_cpuview(const Mc6809CpuStatus &status);
+    void redraw_cpuview_contents(const Mc6809CpuStatus &status);
+    void text(int x, int y, const std::string &str);
 
 public:
-    virtual void update_cpuview(const Mc6809CpuStatus &stat);
-    virtual void output_to_terminal(); // set output to terminal
-    virtual void output_to_graphic(); // set output to GUI
+    virtual void update_cpuview(const Mc6809CpuStatus &status);
+    virtual bool output_to_terminal(); // set output to terminal
+    virtual bool output_to_graphic(); // set output to GUI
+    virtual void write_char_serial(Byte value); // write character to printer
 
 public:
     AbstractGui(
-        Mc6809 &x_cpu,
-        Memory &x_memory,
-        Inout &x_inout,
-        TerminalIO &x_terminalIO);
-    virtual ~AbstractGui();
+        Mc6809 &p_cpu,
+        Memory &p_memory,
+        Inout &p_inout,
+        TerminalIO &p_terminalIO);
+    virtual ~AbstractGui() = default;
+    AbstractGui(const AbstractGui &src) = delete;
+    AbstractGui(AbstractGui &&src) = delete;
+    AbstractGui &operator=(const AbstractGui &src) = delete;
+    AbstractGui &operator=(AbstractGui &&src) = delete;
 };
 
-#endif // ABSGUI_INCLUDED
+#endif
 

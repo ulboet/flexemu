@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,9 +29,9 @@
 
 struct WinApiContext
 {
-    HINSTANCE hInstance;  // handle to current instance
-    HINSTANCE hPrevInstance;  // handle to previous instance
-    int nCmdShow;   // show state of window
+    HINSTANCE hInstance; // handle to current instance
+    HINSTANCE hPrevInstance; // handle to previous instance
+    int nCmdShow; // show state of window
 };
 
 extern WinApiContext winApiContext;

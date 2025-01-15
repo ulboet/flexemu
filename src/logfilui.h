@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,38 +27,41 @@
 #include "warnoff.h"
 #include "logfil_ui.h"
 #include <QObject>
+#include <array>
 #include "warnon.h"
 
 class QDialog;
 class QAbstractButton;
 class QLineEdit;
-struct s_cpu_logfile;
+struct Mc6809LoggerConfig;
 
-class LogfileSettingsUi : public QObject, protected Ui_LogfileSettings
+class Mc6809LoggerConfigUi : public QObject, protected Ui_LogfileSettings
 {
     Q_OBJECT
 
 public:
 
-    LogfileSettingsUi();
-    ~LogfileSettingsUi() = default;
+    Mc6809LoggerConfigUi();
+    ~Mc6809LoggerConfigUi() override = default;
     void setupUi(QDialog &dialog);
-    void SetData(const s_cpu_logfile &settings);
-    s_cpu_logfile GetData() const;
+    void SetData(const Mc6809LoggerConfig &loggerConfig);
+    Mc6809LoggerConfig GetData() const;
 
 protected:
     void OnClicked(QAbstractButton *button);
     void InitializeWidgets();
     void ConnectSignalsWithSlots();
     void OnSelectFile(QLineEdit &lineEdit);
+    void OnTextFormat() const;
+    void OnCsvFormat() const;
 
 private slots:
     void OnAccepted();
     void OnRejected();
 
 private:
-    QDialog *dialog;
-    std::array<QCheckBox *, 8> regCheckBoxes;
+    QDialog *dialog{nullptr};
+    std::array<QCheckBox *, 8> regCheckBoxes{};
 };
 
 #endif

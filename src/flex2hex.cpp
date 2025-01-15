@@ -4,7 +4,7 @@
 
     flex2hex, a utility to convert FLEX binary files to Intel Hex or
     Motorola S-Record files.
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@
 #include "bmembuf.h"
 #include "fileread.h"
 #include "flexerr.h"
-#include <ctype.h>
+#include <cctype>
 #include <limits>
 #include <iostream>
 #include <iomanip>
@@ -39,7 +39,7 @@
 #endif
 
 
-enum class FileType
+enum class FileType : uint8_t
 {
     Unknown,
     IntelHex,
@@ -47,14 +47,12 @@ enum class FileType
     RawBinary,
 };
 
-void version()
+static void version()
 {
-    std::cout <<
-        "flex2hex " << VERSION << "\n" <<
-        "flex2hex " << COPYRIGHT_MESSAGE;
+    flx::print_versions(std::cout, "flex2hex");
 }
 
-void syntax()
+static void syntax()
 {
     std::cout <<
         "flex2hex syntax:\n"
@@ -74,29 +72,29 @@ void syntax()
         "   -h:              Print this help and exit.\n";
 }
 
-int ConvertFlexToHex(const char *ifile, const char *ofile,
-                     FileType ofiletype, int verbose)
+static int ConvertFlexToHex(const std::string &ifile, const std::string &ofile,
+        FileType ofiletype, int verbose)
 {
     BMemoryBuffer memory(65536);
-    size_t startAddress = std::numeric_limits<size_t>::max();
+    DWord startAddress = std::numeric_limits<DWord>::max();
 
     auto result = load_flex_binary(ifile, memory, startAddress);
     if (result < 0)
     {
-        std::cerr << "*** Error in \"" << ifile << "\":" << std::endl << "    ";
+        std::cerr << "*** Error in \"" << ifile << "\":\n    ";
         print_hexfile_error(std::cerr, result);
-        std::cerr << std::endl;
+        std::cerr << '\n';
         return 1;
     }
 
     switch(ofiletype)
     {
         case FileType::IntelHex:
-                  result = write_intelhex(ofile, memory, startAddress);
+                  result = write_intel_hex(ofile, memory, startAddress);
                   break;
 
         case FileType::MotorolaSRec:
-                  result = write_motorola_srec(ofile, memory, startAddress);
+                  result = write_motorola_srecord(ofile, memory, startAddress);
                   break;
 
         case FileType::RawBinary:
@@ -104,15 +102,15 @@ int ConvertFlexToHex(const char *ifile, const char *ofile,
                   break;
 
         case FileType::Unknown:
-                  std::cerr << "*** No file format specified" << std::endl;
+                  std::cerr << "*** No file format specified\n";
                   return 1;
     }
 
     if (result < 0)
     {
-        std::cerr << "*** Error in \"" << ofile << "\":" << std::endl << "    ";
+        std::cerr << "*** Error in \"" << ofile << "\":\n    ";
         print_hexfile_error(std::cerr, result);
-        std::cerr << std::endl;
+        std::cerr << '\n';
         return 1;
     }
 
@@ -147,14 +145,14 @@ int main(int argc, char *argv[])
             case 'o': ofilePrefered = optarg;
                       break;
 
-            case 'i': 
-            case 'm': 
+            case 'i':
+            case 'm':
             case 'b':
                       if (ofiletype != FileType::Unknown &&
                           ofiletype != fileTypes.at(result))
                       {
                           std::cerr << "*** Error: Only one of -m or -i can "
-                                       "be used at a time." << std::endl;
+                                       "be used at a time.\n";
                           syntax();
                           return 1;
                       }
@@ -199,7 +197,7 @@ int main(int argc, char *argv[])
 
     if (ifiles.empty())
     {
-        std::cerr << "*** Error: No FLEX binary file specified" << std::endl;
+        std::cerr << "*** Error: No FLEX binary file specified\n";
         syntax();
         return 1;
     }
@@ -207,7 +205,7 @@ int main(int argc, char *argv[])
     if ((ifiles.size() > 1 && !ofilePrefered.empty()))
     {
         std::cerr << "*** Error: Option -o only supported for one "
-                     "FLEX binary file" << std::endl;
+                     "FLEX binary file\n";
         syntax();
         return 1;
     }
@@ -216,12 +214,12 @@ int main(int argc, char *argv[])
 
     for (const auto &ifile : ifiles)
     {
-        struct stat status;
+        struct stat status{};
         auto ofile(ofilePrefered);
 
         if (ofile.empty())
         {
-            ofile = getFileStem(ifile);
+            ofile = flx::getFileStem(ifile);
             switch (ofiletype)
             {
                 case FileType::IntelHex:
@@ -238,7 +236,7 @@ int main(int argc, char *argv[])
 
                 case FileType::Unknown:
                     std::cerr << "*** No file format specified. "
-                                 "Conversion skipped" << std::endl;
+                                 "Conversion skipped\n";
                     continue;
             }
         }
@@ -248,8 +246,7 @@ int main(int argc, char *argv[])
             if (!S_ISREG(status.st_mode))
             {
                 std::cerr << "*** File " << ofile
-                          << " exists but is no file. Conversion skipped."
-                          << std::endl;
+                          << " exists but is no file. Conversion skipped.\n";
                 continue;
             }
 
@@ -258,13 +255,13 @@ int main(int argc, char *argv[])
                 std::string input;
 
                 // User confirmation to overwrite file.
-                while (input.empty() || 
+                while (input.empty() ||
                        (tolower(input[0]) != 'y' && tolower(input[0]) != 'n'))
                 {
                     std::cout << "File " << ofile
                               << " already exists. Overwrite [Y,n]: ";
                     std::getline(std::cin, input);
-                    input = ltrim(input);
+                    input = flx::ltrim(std::move(input));
                 }
 
                 if (!input.empty() && tolower(input[0]) == 'n')
@@ -272,7 +269,7 @@ int main(int argc, char *argv[])
                     if (verbose > 0)
                     {
                         std::cout << " Conversion to " << ofile << " skipped."
-                                  << std::endl;
+                                  << '\n';
                     }
 
                     continue;
@@ -280,8 +277,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        result |= ConvertFlexToHex(ifile.c_str(), ofile.c_str(),
-                                   ofiletype, verbose);
+        result = ConvertFlexToHex(ifile, ofile, ofiletype, verbose);
     }
 
     return result;

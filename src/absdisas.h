@@ -5,48 +5,53 @@
 #ifndef ABSDISAS_INCLUDED
 #define ABSDISAS_INCLUDED
 
-#include "misc1.h"
+#include "typedefs.h"
 #include <type_traits>
+#include <string>
 
+
+static constexpr Byte PAGE2{0x10};
+static constexpr Byte PAGE3{0x11};
 
 // Instruction flags as scoped enum.
-enum class InstFlg : Byte
+enum class InstFlg : uint8_t
 {
-    NONE = 0,
-    Jump = (1 << 0),         // next instruction will not be processed
-    Sub = (1 << 1),          // jump into a subroutine
-    ComputedGoto = (1 << 2), // an instruction containing a computed goto
-    Illegal = (1 << 3),      // illegal instruction
-    Noop = (1 << 4),         // no operation
-    JumpAddr = (1 << 5),     // return a jump target address
-    LabelAddr = (1 << 6),    // return a label address
+    NONE = 0U,
+    Jump = (1U << 0U),         // next instruction will not be processed
+    Sub = (1U << 1U),          // jump into a subroutine
+    ComputedGoto = (1U << 2U), // an instruction containing a computed goto
+    Illegal = (1U << 3U),      // illegal instruction
+    Noop = (1U << 4U),         // no operation
+    JumpAddr = (1U << 5U),     // return a jump target address
+    LabelAddr = (1U << 6U),    // return a label address
 };
 
 class AbstractDisassembler
 {
 
 public:
-    virtual ~AbstractDisassembler() { };
-    virtual int Disassemble(
-                  const Byte * const pMemory,
-                  DWord pc,
-                  InstFlg *pFlags,
-                  DWord *pJumpAddr,
-                  char **pCode,
-                  char **pMnemonic) = 0;
+    virtual ~AbstractDisassembler() = default;
+    virtual InstFlg Disassemble(
+                  const Byte *p_memory,
+                  DWord p_pc,
+                  DWord &p_jumpaddr,
+                  std::string &p_code,
+                  std::string &p_mnemonic,
+                  std::string &p_operands) = 0;
     virtual void set_use_undocumented(bool value) = 0;
-};  // class AbstractDisassembler
+    virtual unsigned getByteSize(const Byte *p_memory) = 0;
+}; // class AbstractDisassembler
 
 inline InstFlg operator| (InstFlg lhs, InstFlg rhs)
 {
-    using TYP = std::underlying_type<InstFlg>::type;
+    using TYP = std::underlying_type_t<InstFlg>;
 
     return static_cast<InstFlg>(static_cast<TYP>(lhs) | static_cast<TYP>(rhs));
 }
 
 inline InstFlg operator& (InstFlg lhs, InstFlg rhs)
 {
-    using TYP = std::underlying_type<InstFlg>::type;
+    using TYP = std::underlying_type_t<InstFlg>;
 
     return static_cast<InstFlg>(static_cast<TYP>(lhs) & static_cast<TYP>(rhs));
 }
@@ -66,14 +71,14 @@ inline InstFlg operator&= (InstFlg &lhs, InstFlg rhs)
 
 inline InstFlg operator~ (InstFlg rhs)
 {
-    using TYP = std::underlying_type<InstFlg>::type;
+    using TYP = std::underlying_type_t<InstFlg>;
 
     return static_cast<InstFlg>(~static_cast<TYP>(rhs));
 }
 
 inline bool operator! (InstFlg rhs)
 {
-    using TYP = std::underlying_type<InstFlg>::type;
+    using TYP = std::underlying_type_t<InstFlg>;
 
     return static_cast<TYP>(rhs) == 0;
 }

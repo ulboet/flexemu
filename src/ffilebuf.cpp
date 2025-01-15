@@ -2,8 +2,8 @@
     ffilebuf.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,24 +21,28 @@
 */
 
 #include "misc1.h"
-#include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#include <ctime>
 #include "bdate.h"
 #include "ffilebuf.h"
-#include "bfileptr.h"
 #include "flexerr.h"
 #include "fdirent.h"
 #include "filecntb.h"
+#include "rndcheck.h"
 #include <algorithm>
+#include <vector>
+#include <fstream>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
 // The format of a FLEX text file is described in the
 // FLEX Advanced Programmer's Guide in Chapter
 // DESCRIPTION OF A TEXT FILE.
 
-FlexFileBuffer::FlexFileBuffer() : capacity(0)
+FlexFileBuffer::FlexFileBuffer()
 {
     memset(&fileHeader, 0, sizeof(fileHeader));
     memcpy(fileHeader.magicNumber,
@@ -51,13 +55,11 @@ FlexFileBuffer::FlexFileBuffer(const FlexFileBuffer &src)
     copyFrom(src);
 }
 
-FlexFileBuffer::FlexFileBuffer(FlexFileBuffer &&src)
+FlexFileBuffer::FlexFileBuffer(FlexFileBuffer &&src) noexcept
+    : fileHeader(src.fileHeader)
+    , buffer(std::move(src.buffer))
 {
-    buffer = std::move(src.buffer);
-    capacity = src.capacity;
-    memcpy(&fileHeader, &src.fileHeader, sizeof(fileHeader));
     memset(&src.fileHeader, 0, sizeof(src.fileHeader));
-    src.capacity = 0;
 }
 
 FlexFileBuffer &FlexFileBuffer::operator=(const FlexFileBuffer &src)
@@ -70,15 +72,13 @@ FlexFileBuffer &FlexFileBuffer::operator=(const FlexFileBuffer &src)
     return *this;
 }
 
-FlexFileBuffer &FlexFileBuffer::operator=(FlexFileBuffer &&src)
+FlexFileBuffer &FlexFileBuffer::operator=(FlexFileBuffer &&src) noexcept
 {
     if (&src != this)
     {
         buffer = std::move(src.buffer);
-        capacity = src.capacity;
         memcpy(&fileHeader, &src.fileHeader, sizeof(fileHeader));
         memset(&src.fileHeader, 0, sizeof(src.fileHeader));
-        src.capacity = 0;
     }
 
     return *this;
@@ -86,25 +86,14 @@ FlexFileBuffer &FlexFileBuffer::operator=(FlexFileBuffer &&src)
 
 void FlexFileBuffer::copyFrom(const FlexFileBuffer &src)
 {
-    if (src.buffer != nullptr)
+    if (!src.buffer.empty())
     {
-        auto new_buffer = std::unique_ptr<Byte[]>(
-                              new Byte[src.fileHeader.fileSize]);
-        capacity = src.fileHeader.fileSize;
-        memcpy(new_buffer.get(), src.buffer.get(), src.fileHeader.fileSize);
-        buffer = std::move(new_buffer);
-        memcpy(&fileHeader, &src.fileHeader, sizeof(fileHeader));
+        buffer.resize(src.fileHeader.fileSize);
+        std::copy(src.buffer.cbegin(),
+                  src.buffer.cbegin() + src.fileHeader.fileSize,
+                  buffer.begin());
     }
-    else
-    {
-        buffer.reset(nullptr);
-        memcpy(&fileHeader, &src.fileHeader, sizeof(fileHeader));
-        capacity = 0;
-    }
-}
-
-FlexFileBuffer::~FlexFileBuffer()
-{
+    memcpy(&fileHeader, &src.fileHeader, sizeof(fileHeader));
 }
 
 const Byte *FlexFileBuffer::GetBuffer(DWord offset /* = 0*/,
@@ -115,57 +104,42 @@ const Byte *FlexFileBuffer::GetBuffer(DWord offset /* = 0*/,
         return nullptr;
     }
 
-    return buffer.get() + offset;
+    return buffer.data() + offset;
 }
 
-void FlexFileBuffer::SetFilename(const char *name)
+void FlexFileBuffer::SetFilename(const std::string &fileName)
 {
-    strncpy(fileHeader.fileName, name, FLEX_FILENAME_LENGTH - 1);
+    strncpy(fileHeader.fileName, fileName.c_str(), FLEX_FILENAME_LENGTH - 1);
     fileHeader.fileName[sizeof(fileHeader.fileName) - 1] = '\0';
 }
 
 // Reallocate the buffer with a different size.
 // Buffer will be initialized to zero or
 // optionally with a copy of the contents of the old buffer.
-void FlexFileBuffer::Realloc(DWord new_size,
+void FlexFileBuffer::Realloc(DWord newSize,
                              bool restoreContents /* = false*/)
 {
-    Byte *new_buffer;
-
-    if (new_size == 0)
+    if (newSize == 0U)
     {
         return;
     }
 
-    if (new_size <= capacity)
+    if (buffer.size() > fileHeader.fileSize)
     {
-        // Don't allocate memory if buffer capacity decreases.
-        if (new_size > fileHeader.fileSize)
-        {
-            memset(&buffer[fileHeader.fileSize], 0,
-                   new_size - fileHeader.fileSize);
-        }
-        fileHeader.fileSize = new_size;
-        return;
+        std::fill(buffer.begin() + fileHeader.fileSize, buffer.end(), '\0');
     }
-
-    new_buffer = new Byte[new_size];
-    memset(new_buffer, 0, new_size);
-
-    if (buffer != nullptr && restoreContents)
+    buffer.resize(newSize, '\0');
+    if (!restoreContents)
     {
-        memcpy(new_buffer, buffer.get(), fileHeader.fileSize);
+        std::fill(buffer.begin(), buffer.begin() + fileHeader.fileSize, '\0');
     }
-
-    buffer.reset(new_buffer);
-    fileHeader.fileSize = new_size;
-    capacity = new_size;
+    fileHeader.fileSize = newSize;
 }
 
 // Traverse through a given FLEX text file and call a function for each
 // converted character for converting to a host operating system text file.
 void FlexFileBuffer::TraverseForTextFileConversion(
-        std::function<void(char c)> fct) const
+        const std::function<void(Byte c)>& fct) const
 {
     for (DWord index = 0; index < fileHeader.fileSize; index++)
     {
@@ -186,7 +160,7 @@ void FlexFileBuffer::TraverseForTextFileConversion(
         }
         else if (c == 0x09)
         {
-            DWord spaces;
+            Byte spaces = 0;
 
             // Expand space compression.
             if (index < fileHeader.fileSize - 1)
@@ -203,9 +177,14 @@ void FlexFileBuffer::TraverseForTextFileConversion(
                 fct(' ');
             }
         }
+        else if (c == 0x1a)
+        {
+            break; // ASCII SUB is end of file marker
+        }
 
-        // Other control characters than ASCII TAB, ASCII CR are ignored.
-    } // for
+        // Other control characters than ASCII TAB, ASCII CR, ASCII SUB
+        // are ignored.
+    }
 }
 
 // Estimate the needed buffer size after converting
@@ -216,12 +195,12 @@ DWord FlexFileBuffer::SizeOfConvertedTextFile() const
 {
     DWord count = 0;
 
-    if (!buffer)
+    if (buffer.empty())
     {
         return count;
     }
 
-    TraverseForTextFileConversion([&count](char)
+    TraverseForTextFileConversion([&count](Byte)
         {
             count++;
         });
@@ -234,31 +213,46 @@ DWord FlexFileBuffer::SizeOfConvertedTextFile() const
 // Replace the buffer contents by the converted file contents.
 void FlexFileBuffer::ConvertToTextFile()
 {
-    if (!buffer || fileHeader.fileSize == 0)
+    if (buffer.empty() || fileHeader.fileSize == 0)
     {
         return;
     }
 
     DWord new_size = SizeOfConvertedTextFile();
-    Byte *new_buffer = new Byte[new_size];
+    std::vector<Byte> new_buffer(new_size);
     DWord new_index = 0;
 
-    TraverseForTextFileConversion([&new_buffer, &new_index](char c)
+    TraverseForTextFileConversion([&new_buffer, &new_index](Byte c)
         {
             new_buffer[new_index++] = c;
         });
 
-    buffer.reset(new_buffer);
+    buffer = std::move(new_buffer);
     fileHeader.fileSize = new_size;
-    capacity = new_size;
 }
 
 // Traverse through a given host operating system text file and call a function
 // for each converted character for converting to a FLEX text file.
 void FlexFileBuffer::TraverseForFlexTextFileConversion(
-        std::function<void(char c)> fct) const
+        const std::function<void(Byte c)>& fct) const
 {
-    DWord spaces = 0;
+    Byte spaces = 0;
+    auto process_spaces = [&](){
+        if (spaces)
+        {
+            if (spaces == 1)
+            {
+                fct(' ');
+            }
+            else
+            {
+                // Do space compression.
+                fct(0x09);
+                fct(spaces);
+            }
+            spaces = 0;
+        }
+    };
 
     for (DWord index = 0; index < fileHeader.fileSize; index++)
     {
@@ -268,29 +262,13 @@ void FlexFileBuffer::TraverseForFlexTextFileConversion(
         {
             if (++spaces == 127)
             {
-                // Expand space compression for a maximum of 127 characters.
-                fct(0x09);
-                fct(static_cast<Byte>(spaces));
-                spaces = 0;
+                // Do space compression for a maximum of 127 characters.
+                process_spaces();
             }
         }
         else
         {
-            if (spaces)
-            {
-                if (spaces == 1)
-                {
-                    fct(' ');
-                }
-                else
-                {
-                    // Expand space compression.
-                    fct(0x09);
-                    fct(static_cast<Byte>(spaces));
-                }
-                spaces = 0;
-            }
-
+            process_spaces();
             if (c > ' ')
             {
                 fct(c);
@@ -313,30 +291,32 @@ void FlexFileBuffer::TraverseForFlexTextFileConversion(
             // Other control characters than ASCII TAB or ASCII CR will be
             // ignored.
         }
-    } // for
+    }
+
+    // Process remaining spaces if file does not end with new line.
+    process_spaces();
 }
 
 // Convert a host operating system text file into a FLEX test file.
 // Replace the buffer contents by the converted file contents.
 void FlexFileBuffer::ConvertToFlexTextFile()
 {
-    if (!buffer)
+    if (buffer.empty())
     {
         return;
     }
 
     DWord new_size = SizeOfConvertedFlexTextFile();
-    Byte *new_buffer = new Byte[new_size];
+    std::vector<Byte> new_buffer(new_size);
     DWord new_index = 0;
 
-    TraverseForFlexTextFileConversion([&new_buffer, &new_index](char c)
+    TraverseForFlexTextFileConversion([&new_buffer, &new_index](Byte c)
         {
             new_buffer[new_index++] = c;
         });
 
-    buffer.reset(new_buffer);
+    buffer = std::move(new_buffer);
     fileHeader.fileSize = new_size;
-    capacity = new_size;
 }
 
 // Estimate the needed buffer size after converting
@@ -346,12 +326,12 @@ DWord FlexFileBuffer::SizeOfConvertedFlexTextFile() const
 {
     DWord count = 0;
 
-    if (!buffer)
+    if (buffer.empty())
     {
         return count;
     }
 
-    TraverseForFlexTextFileConversion([&count](char)
+    TraverseForFlexTextFileConversion([&count](Byte)
         {
             count++;
         });
@@ -387,10 +367,10 @@ bool FlexFileBuffer::IsFlexTextFile() const
         Byte c = buffer[i];
 
         // Allowed characters of a FLEX text file are:
-        // ASCII LF, ASCII CR, ASCII NUL, ASCII CANCEL, ASCII FF and
+        // ASCII LF, ASCII CR, ASCII NUL, ASCII CANCEL, ASCII FF, ASCII SUB and
         // any character >= ASCII Space.
         if (c >= ' ' || c == 0x0a || c == 0x0d || c == 0x00 || c == 0x18 ||
-            c == 0x0c)
+            c == 0x0c || c == 0x1a)
         {
             continue;
         }
@@ -412,11 +392,11 @@ bool FlexFileBuffer::IsFlexTextFile() const
 // for each converted character for converting to a ASCII dump file.
 void FlexFileBuffer::TraverseForDumpFileConversion(
         DWord bytesPerLine,
-        std::function<void(char c)> fct) const
+        const std::function<void(Byte c)>& fct) const
 {
     DWord offset;
     DWord index;
-    size_t width = 4;
+    int width = 4;
 
     width = (fileHeader.fileSize > 0xFFFF) ? 5 : width;
     width = (fileHeader.fileSize > 0xFFFFF) ? 6 : width;
@@ -424,13 +404,11 @@ void FlexFileBuffer::TraverseForDumpFileConversion(
     for (offset = 0; offset < fileHeader.fileSize; offset += bytesPerLine)
     {
         // File offset.
-        std::stringstream offsetstream;
 
-        offsetstream << std::setw(width) << std::setfill('0') <<
-                        std::hex << offset;
-        for (DWord i = 0; i < width; i++)
+        const auto offset_str = fmt::format("{0:0{1}X}", offset, width);
+        for (int i = 0; i < width; i++)
         {
-            fct(offsetstream.str()[i]);
+            fct(offset_str[i]);
         }
         fct(' ');
 
@@ -439,13 +417,10 @@ void FlexFileBuffer::TraverseForDumpFileConversion(
              index < bytesPerLine && (offset + index < fileHeader.fileSize);
              index++)
         {
-            std::stringstream bytestream;
-
-            auto c = buffer[offset + index] & 0xFF;
-            bytestream << std::setw(2) << std::setfill('0') <<
-                      std::hex << static_cast<Word>(c);
-            fct(bytestream.str()[0]);
-            fct(bytestream.str()[1]);
+            auto c = buffer[offset + index] & 0xFFU;
+            const auto byte_str = fmt::format("{:02X}", static_cast<Word>(c));
+            fct(byte_str[0]);
+            fct(byte_str[1]);
             fct(' ');
         }
 
@@ -465,7 +440,7 @@ void FlexFileBuffer::TraverseForDumpFileConversion(
              index < bytesPerLine && (offset + index < fileHeader.fileSize);
              index++)
         {
-            char c = buffer[offset + index] & 0xFF;
+            auto c = buffer[offset + index];
 
             if (c < ' ' || c >= '\x7F')
             {
@@ -485,12 +460,12 @@ DWord FlexFileBuffer::SizeOfConvertedDumpFile(DWord bytesPerLine) const
 {
     DWord count = 0;
 
-    if (!buffer)
+    if (buffer.empty())
     {
         return count;
     }
 
-    TraverseForDumpFileConversion(bytesPerLine, [&count](char)
+    TraverseForDumpFileConversion(bytesPerLine, [&count](Byte)
         {
             count++;
         });
@@ -500,102 +475,193 @@ DWord FlexFileBuffer::SizeOfConvertedDumpFile(DWord bytesPerLine) const
 
 void FlexFileBuffer::ConvertToDumpFile(DWord bytesPerLine)
 {
-    if (!buffer)
+    if (buffer.empty())
     {
         return;
     }
 
     DWord new_size = SizeOfConvertedDumpFile(bytesPerLine);
-    Byte *new_buffer = new Byte[new_size];
+    std::vector<Byte> new_buffer(new_size);
     DWord new_index = 0;
 
     TraverseForDumpFileConversion(bytesPerLine,
-                                  [&new_buffer, &new_index](char c)
+                                  [&new_buffer, &new_index](Byte c)
         {
             new_buffer[new_index++] = c;
         });
 
-    buffer.reset(new_buffer);
+    buffer = std::move(new_buffer);
     fileHeader.fileSize = new_size;
-    capacity = new_size;
 }
 
 // Estimate if the given file is a FLEX executable file.
-// Not implemented yet.
 bool FlexFileBuffer::IsFlexExecutableFile() const
 {
-    return false;
-}
+    ReadCmdState state = ReadCmdState::GetType;
+    int count = 0;
 
-bool FlexFileBuffer::WriteToFile(const char *path) const
-{
-    BFilePtr fp(path, "wb");
-
-    if (fp != nullptr)
+    for (DWord i = 0; i < fileHeader.fileSize; ++i)
     {
-        if (GetFileSize() != 0)
+        Byte byte = buffer[i];
+
+        switch (state)
         {
-            size_t blocks = fwrite(buffer.get(), GetFileSize(), 1, fp);
-            return (blocks == 1);
+            case ReadCmdState::GetType:
+                switch (byte)
+                {
+                    case '\x02':
+                        count = 2;
+                        state = ReadCmdState::GetDataAddress;
+                        continue;
+
+                    case '\x16':
+                        count = 2;
+                        state = ReadCmdState::GetStartAddress;
+                        continue;
+
+                    case '\x00':
+                        state = ReadCmdState::GetNUL;
+                        continue;
+
+                    default:
+                        return false;
+                }
+
+            case ReadCmdState::GetDataAddress:
+                state = (--count == 0) ? ReadCmdState::GetCount : state;
+                continue;
+
+            case ReadCmdState::GetCount:
+                count = byte;
+                state = ReadCmdState::GetData;
+                continue;
+
+            case ReadCmdState::GetData:
+            case ReadCmdState::GetStartAddress:
+                state = (--count == 0) ? ReadCmdState::GetType : state;
+                continue;
+
+            case ReadCmdState::GetNUL:
+                if (byte != '\0')
+                {
+                    return false;
+                }
+                continue;
         }
-        return true;
     }
 
-    return false;
+    return true;
 }
 
-bool FlexFileBuffer::ReadFromFile(const char *path)
+bool FlexFileBuffer::WriteToFile(const std::string &path,
+        FileTimeAccess fileTimeAccess, bool doRandomCheck) const
 {
-    struct stat sbuf;
+    auto mode = std::ios::out | std::ios::binary | std::ios::trunc;
+    std::ofstream ostream(path, mode);
+    struct stat sbuf{};
+    bool result = false;
 
-    if (!stat(path, &sbuf) && S_ISREG(sbuf.st_mode) && sbuf.st_size >= 0)
+    if (!ostream.is_open() || GetFileSize() == 0)
     {
-        BFilePtr fp(path, "rb");
+        return result;
+    }
+
+    ostream.write(reinterpret_cast<const char *>(buffer.data()),
+                  GetFileSize());
+    result = ostream.good();
+    ostream.close();
+
+    const auto directory = flx::getParentPath(path);
+    if (doRandomCheck)
+    {
+        RandomFileCheck randomFileCheck(directory);
+
+        randomFileCheck.CheckAllFilesAttributeAndUpdate();
+        if (IsRandom())
+        {
+            randomFileCheck.AddToRandomList(GetFilename());
+        }
+    }
+
+    const bool setFileTime =
+        (fileTimeAccess & FileTimeAccess::Set) == FileTimeAccess::Set;
+
+    if (result && stat(path.c_str(), &sbuf) == 0)
+    {
+        struct utimbuf timebuf{};
+        struct tm file_time{};
+
+        timebuf.actime = sbuf.st_atime;
+        file_time.tm_sec = 0;
+        file_time.tm_min = setFileTime ? fileHeader.minute : 0;
+        file_time.tm_hour = setFileTime ? fileHeader.hour : 0;
+        file_time.tm_mon = fileHeader.month - 1;
+        file_time.tm_mday = fileHeader.day;
+        file_time.tm_year = fileHeader.year - 1900;
+        file_time.tm_isdst = -1;
+        timebuf.modtime = mktime(&file_time);
+        return (timebuf.modtime >= 0 && utime(path.c_str(), &timebuf) == 0);
+    }
+
+    return result;
+}
+
+bool FlexFileBuffer::ReadFromFile(const std::string &path,
+        FileTimeAccess fileTimeAccess, bool doRandomCheck)
+{
+    struct stat sbuf{};
+
+    if (!stat(path.c_str(), &sbuf) && S_ISREG(sbuf.st_mode) &&
+         sbuf.st_size >= 0)
+    {
+        std::ifstream istream(path, std::ios::in | std::ios::binary);
 
         Realloc(sbuf.st_size);
 
-        if (fp != nullptr)
+        if (istream.is_open())
         {
-            size_t blocks = 0;
-
             if (GetFileSize() > 0)
             {
-                blocks = fread(buffer.get(), GetFileSize(), 1, fp);
+                istream.read(reinterpret_cast<char *>(buffer.data()),
+                             GetFileSize());
             }
 
-            if (blocks == 1 || GetFileSize() == 0)
+            if (GetFileSize() == 0 || istream.good())
             {
-                auto directory = getParentPath(path);
+                const auto fullPath = flx::toAbsolutePath(path);
+                const auto directory = flx::getParentPath(fullPath);
+                const auto filename = flx::getFileName(path);
 
                 SetAttributes(0);
                 SetSectorMap(0);
 
-                if(access(directory.c_str(), W_OK))
+                if (doRandomCheck)
                 {
-                    SetAttributes(FLX_READONLY);
-                    // CDFS-Support: look for file name in file 'random'
-                    if (isListedInFileRandom(directory.c_str(),
-                                             getFileName(path).c_str()))
+                    RandomFileCheck randomFileCheck(directory);
+
+                    randomFileCheck.CheckAllFilesAttributeAndUpdate();
+                    if (randomFileCheck.CheckForRandom(filename))
                     {
                         SetSectorMap(IS_RANDOM_FILE);
                     }
                 }
-                else if (hasRandomFileAttribute(directory.c_str(),
-                                                getFileName(path).c_str()))
-                {
-                    SetSectorMap(IS_RANDOM_FILE);
-                }
 
-                if(access(path, W_OK))
+                if(access(path.c_str(), W_OK))
                 {
                     SetAttributes(FLX_READONLY);
                 }
 
-                SetAdjustedFilename(getFileName(path).c_str());
-                struct tm *lt = localtime(&(sbuf.st_mtime));
-                SetDateTime(
-                        BDate(lt->tm_mday, lt->tm_mon + 1, lt->tm_year + 1900),
-                        BTime(lt->tm_hour, lt->tm_min));
+                SetAdjustedFilename(filename);
+                struct tm *lt = localtime(&sbuf.st_mtime);
+                const bool getFileTime =
+                (fileTimeAccess & FileTimeAccess::Get) == FileTimeAccess::Get;
+                if (!getFileTime)
+                {
+                    lt->tm_hour = 0U;
+                    lt->tm_min = 0U;
+                }
+                SetDateTime({lt->tm_mday, lt->tm_mon + 1, lt->tm_year + 1900},
+                            {lt->tm_hour, lt->tm_min});
 
                 return true;
             }
@@ -621,9 +687,10 @@ void FlexFileBuffer::SetAdjustedFilename(const std::string &fileName)
             adjustedFileName.append(".").append(extension);
         }
     }
-    strupper(adjustedFileName);
-    memset(fileHeader.fileName, '\0', sizeof(fileHeader.fileName));
-    strcpy(fileHeader.fileName, adjustedFileName.c_str());
+    flx::strupper(adjustedFileName);
+    strncpy(fileHeader.fileName, adjustedFileName.c_str(),
+            sizeof(fileHeader.fileName) - 1U);
+    fileHeader.fileName[sizeof(fileHeader.fileName) - 1U] = '\0';
 }
 
 void FlexFileBuffer::CopyHeaderBigEndianFrom(const tFlexFileHeader &src)
@@ -633,12 +700,14 @@ void FlexFileBuffer::CopyHeaderBigEndianFrom(const tFlexFileHeader &src)
     DWord oldSize = fileHeader.fileSize;
 
     memcpy(&fileHeader, &src, sizeof(tFlexFileHeader));
-    fileHeader.fileSize = fromBigEndian<DWord>(src.fileSize);
-    fileHeader.attributes = fromBigEndian<Word>(src.attributes);
-    fileHeader.sectorMap = fromBigEndian<Word>(src.sectorMap);
-    fileHeader.day = fromBigEndian<Word>(src.day);
-    fileHeader.month = fromBigEndian<Word>(src.month);
-    fileHeader.year = fromBigEndian<Word>(src.year);
+    fileHeader.fileSize = flx::fromBigEndian<DWord>(src.fileSize);
+    fileHeader.attributes = flx::fromBigEndian<Word>(src.attributes);
+    fileHeader.sectorMap = flx::fromBigEndian<Word>(src.sectorMap);
+    fileHeader.day = flx::fromBigEndian<Word>(src.day);
+    fileHeader.month = flx::fromBigEndian<Word>(src.month);
+    fileHeader.year = flx::fromBigEndian<Word>(src.year);
+    fileHeader.hour = flx::fromBigEndian<Word>(src.hour);
+    fileHeader.minute = flx::fromBigEndian<Word>(src.minute);
 
     for (unsigned index = 0; index < sizeof(fileHeader.magicNumber); ++index)
     {
@@ -646,13 +715,12 @@ void FlexFileBuffer::CopyHeaderBigEndianFrom(const tFlexFileHeader &src)
         {
             std::stringstream stream;
 
-            for (unsigned i = 0; i < sizeof(fileHeader.magicNumber); )
+            for (const auto byte : fileHeader.magicNumber)
             {
-                stream << std::hex <<
-                    (0xff & (unsigned)fileHeader.magicNumber[i++]);
+                stream << std::hex << static_cast<Word>(byte);
             }
             throw FlexException(FERR_INVALID_MAGIC_NUMBER,
-                                stream.str().c_str());
+                                stream.str());
         }
     }
 
@@ -661,72 +729,76 @@ void FlexFileBuffer::CopyHeaderBigEndianFrom(const tFlexFileHeader &src)
     Realloc(newSize);
 }
 
-bool FlexFileBuffer::CopyFrom(const Byte *from, DWord aSize,
+bool FlexFileBuffer::CopyFrom(const Byte *source, DWord size,
                               DWord offset /* = 0 */)
 {
-    if (offset + aSize > fileHeader.fileSize)
-    {
-        return false;
-    }
-
-    if (buffer != nullptr)
-    {
-        memcpy(&buffer[offset], from, aSize);
-    }
-    return true;
-}
-
-bool FlexFileBuffer::CopyTo(Byte *to, DWord aSize,
-                            DWord offset /* = 0 */,
-                            int stuffByte /* = -1 */) const
-{
-    if (to == nullptr)
+    if (source == nullptr)
     {
             throw FlexException(FERR_WRONG_PARAMETER);
     }
 
-    if (offset + aSize > fileHeader.fileSize)
+    if (offset + size > fileHeader.fileSize)
     {
-        if (stuffByte < 0 || offset >= fileHeader.fileSize)
-        {
-            return false;
-        }
-        else
-        {
-            memset(to, stuffByte, aSize);
-            if (buffer != nullptr)
-            {
-                memcpy(to, &buffer[offset], fileHeader.fileSize - offset);
-            }
-            return true;
-        }
+        return false;
     }
-    if (buffer != nullptr)
+
+    if (!buffer.empty())
     {
-        memcpy(to, &buffer[offset], aSize);
+        memcpy(&buffer[offset], source, size);
     }
     return true;
 }
 
-void FlexFileBuffer::FillWith(const Byte pattern /* = 0 */)
+bool FlexFileBuffer::CopyTo(Byte *target, DWord size,
+                            DWord offset /* = 0 */,
+                            std::optional<Byte> stuffByte
+                            /* = std::nullopt */) const
 {
-    for (DWord i = 0; i < GetFileSize(); i++)
+    if (target == nullptr)
     {
-        buffer[i] = pattern;
+            throw FlexException(FERR_WRONG_PARAMETER);
     }
+
+    if (offset + size > fileHeader.fileSize)
+    {
+        if (!stuffByte.has_value() || offset >= fileHeader.fileSize)
+        {
+            return false;
+        }
+
+        memset(target, stuffByte.value(), size);
+        if (!buffer.empty())
+        {
+            memcpy(target, &buffer[offset], fileHeader.fileSize - offset);
+        }
+
+        return true;
+    }
+    if (!buffer.empty())
+    {
+        memcpy(target, &buffer[offset], size);
+    }
+    return true;
+}
+
+void FlexFileBuffer::FillWith(Byte pattern /* = '\0' */)
+{
+    std::fill(buffer.begin(), buffer.begin() + GetFileSize(), pattern);
 }
 
 tFlexFileHeader FlexFileBuffer::GetHeaderBigEndian() const
 {
-    tFlexFileHeader result;
+    tFlexFileHeader result{};
 
     memcpy(&result, &fileHeader, sizeof(result));
-    result.fileSize = toBigEndian<DWord>(fileHeader.fileSize);
-    result.attributes = toBigEndian<Word>(fileHeader.attributes);
-    result.sectorMap = toBigEndian<Word>(fileHeader.sectorMap);
-    result.day = toBigEndian<Word>(fileHeader.day);
-    result.month = toBigEndian<Word>(fileHeader.month);
-    result.year = toBigEndian<Word>(fileHeader.year);
+    result.fileSize = flx::toBigEndian<DWord>(fileHeader.fileSize);
+    result.attributes = flx::toBigEndian<Word>(fileHeader.attributes);
+    result.sectorMap = flx::toBigEndian<Word>(fileHeader.sectorMap);
+    result.day = flx::toBigEndian<Word>(fileHeader.day);
+    result.month = flx::toBigEndian<Word>(fileHeader.month);
+    result.year = flx::toBigEndian<Word>(fileHeader.year);
+    result.hour = flx::toBigEndian<Word>(fileHeader.hour);
+    result.minute = flx::fromBigEndian<Word>(fileHeader.minute);
 
     return result;
 }
@@ -742,11 +814,30 @@ void FlexFileBuffer::SetDateTime(const BDate &new_date, const BTime &new_time)
 
 BDate FlexFileBuffer::GetDate() const
 {
-    return BDate(fileHeader.day, fileHeader.month, fileHeader.year);
+    return {fileHeader.day, fileHeader.month, fileHeader.year};
 }
 
 BTime FlexFileBuffer::GetTime() const
 {
-    return BTime(fileHeader.hour, fileHeader.minute, 0U);
+    return {fileHeader.hour, fileHeader.minute, 0U};
+}
+
+FlexDirEntry FlexFileBuffer::GetDirEntry() const
+{
+    FlexDirEntry dirEntry;
+
+    if (!buffer.empty())
+    {
+        dirEntry.SetTotalFileName(fileHeader.fileName);
+        dirEntry.SetFileSize(fileHeader.fileSize / DBPS * SECTOR_SIZE);
+        dirEntry.SetAttributes(static_cast<Byte>(fileHeader.attributes));
+        dirEntry.SetDate(GetDate());
+        dirEntry.SetTime(GetTime());
+        dirEntry.SetSectorMap(fileHeader.sectorMap);
+        // Start and end track/sector is not set in this case.
+        dirEntry.ClearEmpty();
+    }
+
+    return dirEntry;
 }
 

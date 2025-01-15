@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 */
 
 
+#include "misc1.h"
 #include "logfilui.h"
 #include "efslctle.h"
 #include "scpulog.h"
@@ -32,14 +33,17 @@
 #include <QLineEdit>
 #include <QFileInfo>
 #include <QFileDialog>
+#include <optional>
 #include "warnon.h"
 
-LogfileSettingsUi::LogfileSettingsUi() :
-    Ui_LogfileSettings(), dialog(nullptr)
+using OptionalWord = std::optional<Word>;
+
+Mc6809LoggerConfigUi::Mc6809LoggerConfigUi() :
+    Ui_LogfileSettings()
 {
 }
 
-void LogfileSettingsUi::setupUi(QDialog &p_dialog)
+void Mc6809LoggerConfigUi::setupUi(QDialog &p_dialog)
 {
     dialog = &p_dialog;
     Ui_LogfileSettings::setupUi(dialog);
@@ -49,23 +53,32 @@ void LogfileSettingsUi::setupUi(QDialog &p_dialog)
         c_reg_x, c_reg_y, c_reg_u, c_reg_s
     };
 
+    assert(g_enable != nullptr);
     assert(e_minAddress != nullptr);
     assert(e_maxAddress != nullptr);
     assert(e_startAddress != nullptr);
     assert(e_stopAddress != nullptr);
     assert(c_logCycleCount != nullptr);
+    assert(c_loopOptimization != nullptr);
     assert(e_logFilename != nullptr);
+    assert(r_semicolon != nullptr);
+    assert(r_space != nullptr);
+    assert(r_tab != nullptr);
+    assert(r_csv != nullptr);
+    assert(r_text != nullptr);
 
-    for (auto i = 0U; i < sizeof(regCheckBoxes) / sizeof(regCheckBoxes[0]); ++i)
+#if defined(_DEBUG) || defined(DEBUG)
+    for (const auto &regCheckBox : regCheckBoxes)
     {
-        assert(regCheckBoxes[i] != nullptr);
+        assert(regCheckBox != nullptr);
     }
+#endif
 
     InitializeWidgets();
     ConnectSignalsWithSlots();
 }
 
-void LogfileSettingsUi::InitializeWidgets()
+void Mc6809LoggerConfigUi::InitializeWidgets()
 {
     ::InstallSelectionEventFilter(*e_minAddress, this);
     ::InstallSelectionEventFilter(*e_maxAddress, this);
@@ -80,80 +93,141 @@ void LogfileSettingsUi::InitializeWidgets()
     e_stopAddress->setInputMask(inputMask);
 }
 
-void LogfileSettingsUi::SetData(const s_cpu_logfile &settings)
+void Mc6809LoggerConfigUi::SetData(const Mc6809LoggerConfig &loggerConfig)
 {
     if (dialog == nullptr)
     {
         throw std::logic_error("setupUi(dialog) has to be called before.");
     }
 
-    ::SetData(settings.minAddr, *e_minAddress);
-    ::SetData(settings.maxAddr, *e_maxAddress);
-    ::SetData(settings.startAddr, *e_startAddress);
-    ::SetData(settings.stopAddr, *e_stopAddress);
+    g_enable->setChecked(loggerConfig.isEnabled);
+    ::SetData(loggerConfig.minAddr, *e_minAddress);
+    ::SetData(loggerConfig.maxAddr, *e_maxAddress);
+    ::SetData(loggerConfig.startAddr, *e_startAddress);
+    ::SetData(loggerConfig.stopAddr, *e_stopAddress);
 
-    c_logCycleCount->setChecked(settings.logCycleCount);
-    e_logFilename->setText(settings.logFileName.c_str());
+    c_logCycleCount->setChecked(loggerConfig.logCycleCount);
+    c_loopOptimization->setChecked(loggerConfig.isLoopOptimization);
+
+    switch (loggerConfig.format)
+    {
+        case Mc6809LoggerConfig::Format::Text:
+            r_text->setChecked(true);
+            g_csvSeparator->setEnabled(false);
+            break;
+
+        case Mc6809LoggerConfig::Format::Csv:
+            r_csv->setChecked(true);
+            g_csvSeparator->setEnabled(true);
+            break;
+    }
+
+    switch (loggerConfig.csvSeparator)
+    {
+        case ' ':
+            r_space->setChecked(true);
+            break;
+
+        case '\t':
+            r_tab->setChecked(true);
+            break;
+
+        default:
+        case ';':
+            r_semicolon->setChecked(true);
+            break;
+    }
+
+    e_logFilename->setText(loggerConfig.logFileName.c_str());
 
     auto logRegister = LogRegister::CC;
-    for (auto regCheckBox : regCheckBoxes)
+    for (auto *regCheckBox : regCheckBoxes)
     {
         bool isChecked =
-            (settings.logRegisters & logRegister) != LogRegister::NONE;
+            (loggerConfig.logRegisters & logRegister) != LogRegister::NONE;
         regCheckBox->setChecked(isChecked);
         logRegister <<= 1;
     }
 }
 
-s_cpu_logfile LogfileSettingsUi::GetData() const
+Mc6809LoggerConfig Mc6809LoggerConfigUi::GetData() const
 {
-    s_cpu_logfile settings;
+    Mc6809LoggerConfig loggerConfig;
 
-    settings.minAddr = ::GetData<uint>(*e_minAddress);
-    settings.maxAddr = ::GetData<uint>(*e_maxAddress);
-    settings.startAddr = ::GetData<uint>(*e_startAddress);
-    settings.stopAddr = ::GetData<uint>(*e_stopAddress);
+    loggerConfig.minAddr = ::GetData<OptionalWord>(*e_minAddress);
+    loggerConfig.maxAddr = ::GetData<OptionalWord>(*e_maxAddress);
+    loggerConfig.startAddr = ::GetData<OptionalWord>(*e_startAddress);
+    loggerConfig.stopAddr = ::GetData<OptionalWord>(*e_stopAddress);
 
-    settings.logCycleCount = c_logCycleCount->isChecked();
-    settings.logFileName = e_logFilename->text().toUtf8().data();
+    loggerConfig.logCycleCount = c_logCycleCount->isChecked();
+    loggerConfig.isLoopOptimization = c_loopOptimization->isChecked();
+    loggerConfig.logFileName = e_logFilename->text().toStdString();
 
-    settings.logRegisters = LogRegister::NONE;
+    loggerConfig.logRegisters = LogRegister::NONE;
     auto logRegister = LogRegister::CC;
-    for (auto regCheckBox : regCheckBoxes)
+    for (auto *regCheckBox : regCheckBoxes)
     {
         if (regCheckBox->isChecked())
         {
-            settings.logRegisters |= logRegister;
+            loggerConfig.logRegisters |= logRegister;
         }
         logRegister <<= 1;
     }
 
-    return settings;
+    if (r_csv->isChecked())
+    {
+        loggerConfig.format = Mc6809LoggerConfig::Format::Csv;
+    }
+    else if (r_text->isChecked())
+    {
+        loggerConfig.format = Mc6809LoggerConfig::Format::Text;
+    }
+
+    if (r_space->isChecked())
+    {
+        loggerConfig.csvSeparator = ' ';
+    }
+    else if (r_tab->isChecked())
+    {
+        loggerConfig.csvSeparator = '\t';
+    }
+    else if (r_semicolon->isChecked())
+    {
+        loggerConfig.csvSeparator = ';';
+    }
+
+    loggerConfig.isEnabled = g_enable->isChecked();
+
+    return loggerConfig;
 }
 
-void LogfileSettingsUi::ConnectSignalsWithSlots()
+void Mc6809LoggerConfigUi::ConnectSignalsWithSlots()
 {
-    QObject::connect(c_buttonBox, &QDialogButtonBox::accepted,
-        this, &LogfileSettingsUi::OnAccepted);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::rejected,
-        this, &LogfileSettingsUi::OnRejected);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::clicked,
-        this, &LogfileSettingsUi::OnClicked);
-    QObject::connect(b_logFilename, &QAbstractButton::clicked,
-        [&](){ OnSelectFile(*e_logFilename); });
+    connect(c_buttonBox, &QDialogButtonBox::accepted,
+            this, &Mc6809LoggerConfigUi::OnAccepted);
+    connect(c_buttonBox, &QDialogButtonBox::rejected,
+            this, &Mc6809LoggerConfigUi::OnRejected);
+    connect(c_buttonBox, &QDialogButtonBox::clicked,
+            this, &Mc6809LoggerConfigUi::OnClicked);
+    connect(b_logFilename, &QAbstractButton::clicked,
+            [&](){ OnSelectFile(*e_logFilename); });
+    connect(r_text, &QRadioButton::clicked,
+            this, &Mc6809LoggerConfigUi::OnTextFormat);
+    connect(r_csv, &QRadioButton::clicked,
+            this, &Mc6809LoggerConfigUi::OnCsvFormat);
 }
 
-void LogfileSettingsUi::OnAccepted()
+void Mc6809LoggerConfigUi::OnAccepted()
 {
     dialog->done(QDialog::Accepted);
 }
 
-void LogfileSettingsUi::OnRejected()
+void Mc6809LoggerConfigUi::OnRejected()
 {
     dialog->done(QDialog::Rejected);
 }
 
-void LogfileSettingsUi::OnClicked(QAbstractButton *button)
+void Mc6809LoggerConfigUi::OnClicked(QAbstractButton *button)
 {
     assert(button != nullptr);
 
@@ -165,27 +239,62 @@ void LogfileSettingsUi::OnClicked(QAbstractButton *button)
         e_stopAddress->clear();
         c_logCycleCount->setChecked(false);
         e_logFilename->clear();
+        r_text->setChecked(true);
+        r_semicolon->setChecked(true);
+        g_csvSeparator->setEnabled(false);
 
-        for (auto regCheckBox : regCheckBoxes)
+        for (auto *regCheckBox : regCheckBoxes)
         {
             regCheckBox->setChecked(false);
         }
+
+        g_enable->setChecked(false);
     }
 }
 
-void LogfileSettingsUi::OnSelectFile(QLineEdit &lineEdit)
+void Mc6809LoggerConfigUi::OnTextFormat() const
+{
+    if (g_enable->isChecked())
+    {
+        const auto qPath = QDir::toNativeSeparators(e_logFilename->text());
+        auto path = qPath.toStdString();
+        path = flx::updateFilename(path, "mc6809", ".log");
+        e_logFilename->setText(path.c_str());
+        g_csvSeparator->setEnabled(false);
+    }
+}
+
+void Mc6809LoggerConfigUi::OnCsvFormat() const
+{
+    if (g_enable->isChecked())
+    {
+        const auto qPath = QDir::toNativeSeparators(e_logFilename->text());
+        auto path = qPath.toStdString();
+        path = flx::updateFilename(path, "mc6809", ".csv");
+        e_logFilename->setText(path.c_str());
+        g_csvSeparator->setEnabled(true);
+    }
+}
+
+void Mc6809LoggerConfigUi::OnSelectFile(QLineEdit &lineEdit)
 {
     auto path = QDir::currentPath();
     auto fileInfo = QFileInfo(lineEdit.text());
+    QString filter;
 
-    if (fileInfo.isAbsolute() && QFile::exists(lineEdit.text()))
+    path = lineEdit.text();
+
+    if (r_csv->isChecked())
     {
-        path = lineEdit.text();
+        filter = tr("CSV Logfiles (*.csv);;All files (*.*)");
+    }
+    else
+    {
+        filter = tr("Logfiles (*.log);;All files (*.*)");
     }
 
-    path = QFileDialog::getSaveFileName(
-           dialog, tr("Select a Logfile"), path,
-           tr("Logfiles (*.log);;All files (*.*)"));
+    const auto caption = tr("Set Logfile");
+    path = QFileDialog::getSaveFileName(dialog, caption, path, filter);
 
     if  (!path.isEmpty())
     {

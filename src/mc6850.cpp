@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,45 +23,35 @@
 
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "iodevice.h"
 #include "mc6850.h"
 
-Mc6850::Mc6850()
-{
-}
-
-Mc6850::~Mc6850()
-{
-}
 
 void Mc6850::resetIo()
 {
-    cr  = 0;    // control register
-    sr  = 0;    // status register
-    tdr = 0;    // transmit data register
-    rdr = 0;    // receive data register
+    cr = 0; // control register
+    sr = 0; // status register
+    tdr = 0; // transmit data register
+    rdr = 0; // receive data register
 }
 
 Byte Mc6850::readIo(Word offset)
 {
-    switch (offset & 0x01)
+    switch (offset & 0x01U)
     {
         case 0:
-            sr &= 0x80;     // only receive data register full
-            BSET1(sr);
-            requestInput();     // and interrupt request is set
-            // the other status bits are always 0
-            return sr;      // return status register
+            sr &= 0x80U; // reset all bits except interrupt request
+            BSET<Byte>(sr, 1U); // Transmit data register empty is always 1
+            requestInput(); // On input data set receive data register bit
+            return sr; // return status register
 
         case 1:
-            rdr = readInput();  // read character
-            BCLR7(cr);      // reset interrupt flag
-            return rdr;     // return receive data register
+            rdr = readInput(); // read character
+            BCLR<Byte>(cr, 7U); // reset interrupt flag
+            return rdr; // return receive data register
     }
 
-    return 0;       // should never happen
+    return 0; // should never happen
 }
 
 // read data from serial line (should be overwritten by subclass)
@@ -83,7 +73,7 @@ void Mc6850::requestInput()
 
 void Mc6850::writeIo(Word offset, Byte val)
 {
-    switch (offset & 0x01)
+    switch (offset & 0x01U)
     {
         case 0:
             cr = val;
@@ -91,12 +81,12 @@ void Mc6850::writeIo(Word offset, Byte val)
 
         case 1:
             tdr = val;
-            BCLR7(cr);      // reset interrupt flag
-            writeOutput(tdr);   // write output to serial line
+            BCLR<Byte>(cr, 7U); // reset interrupt flag
+            writeOutput(tdr); // write output to serial line
 
-            if ((cr & 0x60) == 0x20)// if enabled
+            if ((cr & 0x60U) == 0x20U)// if enabled
             {
-                set_irq();    // set transmitting interrupt
+                set_irq(); // set transmitting interrupt
             }
 
             break;
@@ -105,7 +95,7 @@ void Mc6850::writeIo(Word offset, Byte val)
 
 // write output to port-Pins (should be overwritten by subclass)
 
-void Mc6850::writeOutput(Byte)
+void Mc6850::writeOutput(Byte /*value*/)
 {
 }
 
@@ -113,16 +103,16 @@ void Mc6850::writeOutput(Byte)
 
 void Mc6850::set_irq()
 {
-    BSET7(sr);
+    BSET<Byte>(sr, 7U);
 }
 
 // actions when a character is ready to be received
 
 void Mc6850::activeTransition()
 {
-    BSET0(sr);
+    BSET<Byte>(sr, 0U);
 
-    if (BTST7(cr))
+    if (BTST<Byte>(cr, 7U))
     {
         set_irq();
     }

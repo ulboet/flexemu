@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,13 +33,14 @@ class IoDeviceDebug : public IoDevice
 public:
 
     IoDeviceDebug() = delete;
-    IoDeviceDebug(const IoDeviceDebug &) = delete;
-    IoDeviceDebug(IoDevice &x_device, const std::string &x_logFilePath);
-    IoDeviceDebug(IoDeviceDebug &&);
+    ~IoDeviceDebug() override = default;
+    IoDeviceDebug(IoDevice &p_device, std::string p_logFilePath);
+    IoDeviceDebug(const IoDeviceDebug &src) = default;
+    IoDeviceDebug(IoDeviceDebug &&src) noexcept;
     // Avoid using copy or move assignment because of device reference
     // which can not be reassigned.
-    IoDeviceDebug& operator=(const IoDeviceDebug &) = delete;
-    IoDeviceDebug& operator=(IoDeviceDebug &&) = delete;
+    IoDeviceDebug& operator=(const IoDeviceDebug &src) = delete;
+    IoDeviceDebug& operator=(IoDeviceDebug &&src) = delete;
 
     // IoDevice interface
     Byte readIo(Word offset) override;
@@ -49,6 +50,8 @@ public:
     Word sizeOfIo() override;
 
 private:
+    // Intentionally use a reference.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     IoDevice &device;
     std::string logFilePath;
 };

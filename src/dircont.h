@@ -2,8 +2,8 @@
     dircont.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,86 +24,86 @@
 #define DIRCONT_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "efiletim.h"
+#include "filecntb.h"
 #include "filecont.h"
 #include "fdirent.h"
 #include "flexerr.h"
+#include "rndcheck.h"
 #include <string>
 
 
-class FlexContainerInfo;
+class FlexDiskAttributes;
 class FlexDirEntry;
 class BDate;
-class DirectoryContainerIteratorImp;
+class FlexDirectoryDiskIteratorImp;
 
-
-class DirectoryContainer : public FileContainerIf
+// class FlexDirectoryDiskByFile implements a file oriented access
+// to a FLEX disk by mapping a host directory emulating a FLEX disk.
+//
+// Rename: DirectoryContainer => FlexDirectoryDiskByFile.
+class FlexDirectoryDiskByFile : public IFlexDiskByFile
 {
-    friend class DirectoryContainerIteratorImp;  // corresponding iterator class
+    friend class FlexDirectoryDiskIteratorImp; // corresponding iterator class
 
 private:
     std::string directory;
-    Byte attributes;
-    Word disk_number;
-    const FileTimeAccess &ft_access;
+    RandomFileCheck randomFileCheck;
+    Byte attributes{};
+    Word disk_number{};
+    const FileTimeAccess &ft_access{};
 
 public:
-    DirectoryContainer() = delete;
-    DirectoryContainer(const DirectoryContainer &) = delete;
-    DirectoryContainer(DirectoryContainer &&) = delete;
-    DirectoryContainer(const char *path, const FileTimeAccess &fileTimeAccess);
-    virtual ~DirectoryContainer();      // public destructor
+    FlexDirectoryDiskByFile() = delete;
+    FlexDirectoryDiskByFile(const FlexDirectoryDiskByFile &) = delete;
+    FlexDirectoryDiskByFile(FlexDirectoryDiskByFile &&) = delete;
+    FlexDirectoryDiskByFile(const std::string &path,
+                            const FileTimeAccess &fileTimeAccess);
+    ~FlexDirectoryDiskByFile() override = default;
 
-    DirectoryContainer &operator= (const DirectoryContainer &) = delete;
-    DirectoryContainer &operator= (DirectoryContainer &&) = delete;
+    FlexDirectoryDiskByFile &operator= (
+            const FlexDirectoryDiskByFile &) = delete;
+    FlexDirectoryDiskByFile &operator= (FlexDirectoryDiskByFile &&) = delete;
 
-    // basic interface
-public:
-    static DirectoryContainer *Create(const char *dir, const char *name,
-                                      int t, int s,
-                                      const FileTimeAccess &fileTimeAccess,
-                                      int fmt = TYPE_DSK_CONTAINER);
-    bool IsWriteProtected() const;
-    bool GetInfo(FlexContainerInfo &info) const;
-    int  GetContainerType() const;
-    std::string GetPath() const;
-    bool CheckFilename(const char *) const;
+    static FlexDirectoryDiskByFile *Create(const std::string &directory,
+            const std::string &name, int tracks, int sectors,
+            const FileTimeAccess &fileTimeAccess,
+            DiskType disk_type);
 
-    // file oriented interface (to be used within flexdisk)
-public:
-    FileContainerIf *begin()
+    // IFlexDiskBase interface declaration.
+    bool IsWriteProtected() const override;
+    bool GetDiskAttributes(FlexDiskAttributes &diskAttributes) const override;
+    DiskType GetFlexDiskType() const override;
+    DiskOptions GetFlexDiskOptions() const override;
+    std::string GetPath() const override;
+
+    // IFlexDiskByFile interface declaration (to be used within flexplorer).
+    IFlexDiskByFile *begin() override
     {
         return this;
     };
-    FileContainerIf *end() const
+    IFlexDiskByFile *end() const override
     {
         return nullptr;
     };
-    FileContainerIteratorImpPtr IteratorFactory();
-    bool    FindFile(const char *fileName, FlexDirEntry &entry);
-    bool    DeleteFile(const char *fileName);
-    bool    RenameFile(const char *oldName, const char *newName);
-    bool    SetAttributes(const char *fileName, Byte setMask,
-                          Byte clearMask = ~0);
-    FlexFileBuffer ReadToBuffer(const char *fileName);
+    bool FindFile(const std::string &wildcard, FlexDirEntry &dirEntry) override;
+    bool DeleteFile(const std::string &wildcard) override;
+    bool RenameFile(const std::string &oldName,
+                    const std::string &newName) override;
+    bool SetAttributes(const std::string &wildcard, unsigned setMask,
+                       unsigned clearMask = ~0U) override;
+    FlexFileBuffer ReadToBuffer(const std::string &fileName) override;
     bool WriteFromBuffer(const FlexFileBuffer &buffer,
-                         const char *fileName = nullptr);
-    bool    FileCopy(const char *sourceName, const char *destName,
-                     FileContainerIf &destination);
-    std::string GetSupportedAttributes() const;
+                         const char *fileName = nullptr) override;
+    bool FileCopy(const std::string &sourceName, const std::string &destName,
+                  IFlexDiskByFile &destination) override;
+    std::string GetSupportedAttributes() const override;
 
-    // private interface
 private:
-    bool IsFlexFilename(const char *pfilename,
-                        char *pname = nullptr,
-                        char *pext = nullptr) const;
-    bool SetDateTime(const char *fileName, const BDate &date,
+    IFlexDiskIteratorImpPtr IteratorFactory() override;
+    bool SetDateTime(const std::string &fileName, const BDate &date,
                      const BTime &time);
-    bool    SetRandom(const char *fileName);
-    void Initialize_header(Byte wp);
-
-};  // class DirectoryContainer
+    void Initialize_header();
+};
 
 #endif // DIRCONT_INCLUDED

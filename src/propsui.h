@@ -1,9 +1,9 @@
-/*                                                                              
+/*
     propsui.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -37,15 +37,16 @@
 #include "warnon.h"
 #include <numeric>
 #include "drawnwid.h"
+#include "qtfree.h"
 
 class Ui_Properties
 {
 private:
-    QHBoxLayout *mainLayout;
-    DrawnWidget *w_drawn;
-    QTableWidget *w_table;
-    QDialogButtonBox *g_buttons;
-    const int space = 2;
+    QHBoxLayout *mainLayout{};
+    DrawnWidget *w_drawn{};
+    QTableWidget *w_table{};
+    QDialogButtonBox *g_buttons{};
+    static const int space{2};
     int tableWidth = 80;
 
 public:
@@ -94,11 +95,11 @@ public:
         w_drawn->SetPixmap(pixmap);
     }
 
-    void SetDriveInfo(Word driveNumber, const FlexContainerInfo &info) const
+    void SetDiskAttributes(const FlexDiskAttributes &diskAttributes) const
     {
         assert(w_drawn != nullptr);
 
-        w_drawn->SetDriveInfo(driveNumber, info);
+        w_drawn->SetDiskAttributes(diskAttributes);
     }
 
     void SetModel(const QStandardItemModel &model,
@@ -142,10 +143,7 @@ public:
 #else
                 int width = fontMetrics.width(text);
 #endif
-                if (width > columnWidth[column])
-                {
-                    columnWidth[column] = width;
-                }
+                columnWidth[column] = std::max(width, columnWidth[column]);
                 auto *newItem = new QTableWidgetItem(text);
                 newItem->setFlags(newItem->flags() & ~Qt::ItemIsEditable);
                 w_table->setItem(row, column, newItem);
@@ -153,12 +151,8 @@ public:
         }
 
         tableWidth = std::accumulate(columnWidth.begin(), columnWidth.end(), 0);
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-        tableWidth = std::min(tableWidth + static_cast<int>(columnWidth.size())
-                              * 22, 800);
-#else
-        tableWidth = std::min(tableWidth + columnWidth.size() * 22, 800);
-#endif
+        tableWidth += cast_from_qsizetype(columnWidth.size() * 22);
+        tableWidth = std::min(tableWidth, 800);
     }
 
     void SetMinimumSize(QDialog *dialog) const
@@ -171,7 +165,7 @@ public:
         dialog->setMinimumSize(QSize(width, height));
     }
 
-    void retranslateUi(QDialog *dialog)
+    static void retranslateUi(QDialog *dialog)
     {
         dialog->setWindowTitle(
                 QApplication::translate("PropertiesDialog", "Dialog", nullptr));

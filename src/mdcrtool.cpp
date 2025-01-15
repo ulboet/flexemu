@@ -2,8 +2,8 @@
     mdcrtool.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2018-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,22 +28,19 @@
 #include "fileread.h"
 #include "flexerr.h"
 #include "bdir.h"
-#include <ctype.h>
-#include <limits>
+#include <cctype>
 #include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <algorithm>
 #include <vector>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
-void version()
+static void version()
 {
-    std::cout <<
-        "mdcrtool " << VERSION << "\n" <<
-        "mdcrtool " << COPYRIGHT_MESSAGE;
+    flx::print_versions(std::cout, "mdcrtool");
 }
 
-void syntax()
+static void syntax()
 {
     std::cout << "mdcrtool syntax:\n"
               << " Write/Append files to a MDCR file."
@@ -69,9 +66,8 @@ void syntax()
 
 }
 
-int WriteAppendToMdcrFile(const std::vector<const char *> &ifiles,
-                      const char *ofile,
-                      bool isTruncate, bool toUppercase)
+static int WriteAppendToMdcrFile(const std::vector<const char *> &ifiles,
+        const char *ofile, bool isTruncate, bool toUppercase)
 {
     MiniDcrTapePtr mdcr;
     BMemoryBuffer memory(65536);
@@ -104,16 +100,15 @@ int WriteAppendToMdcrFile(const std::vector<const char *> &ifiles,
 
     for (const char *ifile : ifiles)
     {
-        size_t startAddress = 0;
+        DWord startAddress = 0;
 
         memory.Reset();
         auto result = load_hexfile(ifile, memory, startAddress);
         if (result < 0)
         {
-            std::cerr << "*** Error in \"" << ifile << "\":"
-                      << std::endl << "    ";
+            std::cerr << "*** Error in \"" << ifile << "\":\n    ";
             print_hexfile_error(std::cerr, result);
-            std::cerr << " Ignored." << std::endl;
+            std::cerr << " Ignored.\n";
             continue; // ignore reading input file. Continue with next one.
         }
 
@@ -131,29 +126,27 @@ int WriteAppendToMdcrFile(const std::vector<const char *> &ifiles,
 
         if (status != MdcrStatus::Success)
         {
-            using T = std::underlying_type<MdcrStatus>::type;
+            using T = std::underlying_type_t<MdcrStatus>;
 
             if (status == MdcrStatus::DoubleName)
             {
                 std::cerr << "*** Warning: "
-                          << mdcrErrors[static_cast<T>(status)]
+                          << GetMdcrError(static_cast<T>(status))
                           << ". Ignored.\n";
                 continue; // Double name error is ignored.
             }
-            else
-            {
-                std::cerr << "*** Error: "
-                          << mdcrErrors[static_cast<T>(status)]
-                          << ". Mdcr file: " << ofile << ".\n";
-                return 1;
-            }
+
+            std::cerr << "*** Error: "
+                      << GetMdcrError(static_cast<T>(status))
+                      << ". Mdcr file: " << ofile << ".\n";
+            return 1;
         }
     }
 
     return 0;
 }
 
-int CreateMdcrFile(const char *ofile)
+static int CreateMdcrFile(const char *ofile)
 {
     MiniDcrTapePtr mdcr;
 
@@ -170,7 +163,7 @@ int CreateMdcrFile(const char *ofile)
     return 0;
 }
 
-int ExtractFromMdcrFile(const char *targetDir, const char *ifile)
+static int ExtractFromMdcrFile(const char *targetDir, const char *ifile)
 {
     MiniDcrTapePtr mdcr;
 
@@ -211,13 +204,12 @@ int ExtractFromMdcrFile(const char *targetDir, const char *ifile)
         std::string outFilename(filename.c_str(), pos+1);
         outFilename = sTargetDir + outFilename;
 
-        auto result = write_flex_binary(outFilename.c_str(), memory);
+        auto result = write_flex_binary(outFilename, memory);
         if (result < 0)
         {
-            std::cerr << "*** Error in \"" << outFilename << "\":"
-                      << std::endl << "    ";
+            std::cerr << "*** Error in \"" << outFilename << "\":\n    ";
             print_hexfile_error(std::cerr, result);
-            std::cerr << " Ignored." << std::endl;
+            std::cerr << " Ignored.\n";
         }
 
         return MdcrStatus::Success;
@@ -225,10 +217,10 @@ int ExtractFromMdcrFile(const char *targetDir, const char *ifile)
 
     if (status != MdcrStatus::Success)
     {
-        using T = std::underlying_type<MdcrStatus>::type;
+        using T = std::underlying_type_t<MdcrStatus>;
 
         std::cerr << "*** Error: "
-                  << mdcrErrors[static_cast<T>(status)]
+                  << GetMdcrError(static_cast<T>(status))
                   << ". Mdcr file: " << ifile << ".\n";
         return 1;
     }
@@ -236,7 +228,7 @@ int ExtractFromMdcrFile(const char *targetDir, const char *ifile)
     return 0;
 }
 
-int ListContentOfMdcrFile(const char *ifile)
+static int ListContentOfMdcrFile(const char *ifile)
 {
     MiniDcrTapePtr mdcr;
 
@@ -263,21 +255,18 @@ int ListContentOfMdcrFile(const char *ifile)
         else
         {
             const auto addrRange = memory.GetAddressRanges()[0];
-            std::cout
-                << filename << std::hex << std::uppercase
-                << " " << std::setw(4) << std::setfill('0') << addrRange.lower()
-                << " " << std::setw(4) << std::setfill('0') << addrRange.upper()
-                << "\n";
+            std::cout << fmt::format("{} {:04X} {:04X}\n", filename,
+                addrRange.lower(), addrRange.upper());
         }
         return MdcrStatus::Success;
     });
 
     if (status != MdcrStatus::Success)
     {
-        using T = std::underlying_type<MdcrStatus>::type;
+        using T = std::underlying_type_t<MdcrStatus>;
 
         std::cerr << "*** Error: "
-                  << mdcrErrors[static_cast<T>(status)]
+                  << GetMdcrError(static_cast<T>(status))
                   << ". Mdcr file: " << ifile << ".\n";
         return 1;
     }
@@ -302,15 +291,11 @@ int main(int argc, char *argv[])
     {
         switch (result)
         {
-            case 'o': ofile = optarg;
-                      command = result;
-                      break;
+            case 'o':
             case 'c': ofile = optarg;
                       command = result;
                       break;
-            case 'x': ifile = optarg;
-                      command = result;
-                      break;
+            case 'x':
             case 'l': ifile = optarg;
                       command = result;
                       break;

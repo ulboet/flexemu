@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,38 +25,29 @@
 
 #include "wd1793.h"
 
-Wd1793::Wd1793() : dr(0), tr(0), sr(0), cr(0), str(0), stepOffset(1),
-    isDataRequest(false), isInterrupt(false), side(false), byteCount(0),
-    strRead(0), indexPulse(0)
-{
-}
-
-Wd1793::~Wd1793()
-{
-}
 
 void Wd1793::resetIo()
 {
     resetIrq();
-    stepOffset  = 1;
+    stepOffset = 1;
     isDataRequest = false;
-    side      = false;
+    side = false;
     byteCount = 0;
-    strRead   = 0;
-    str       = 0;
-    cr        = 0;  // clear previous command
+    strRead = 0;
+    str = 0;
+    cr = 0; // clear previous command
     indexPulse= 0;
     command(0); //execute RESTORE after a reset
 }
 
 Byte Wd1793::readIo(Word offset)
 {
-    switch (offset & 0x03)
+    switch (offset & 0x03U)
     {
         case 0:
             resetIrq();
 
-            if (((cr & 0xe0) == CMD_READSECTOR) && (++strRead == 32))
+            if (((cr & 0xE0U) == CMD_READSECTOR) && (++strRead == 32))
             {
                 isDataRequest = false;
                 str &= ~(STR_DATAREQUEST | STR_BUSY); // read finished
@@ -70,19 +61,17 @@ Byte Wd1793::readIo(Word offset)
                 str &= ~STR_NOTREADY;
             }
 
-            if ((str & STR_NOTREADY))
+            if (str & STR_NOTREADY)
             {
                 return str;
             }
 
-            if (!indexPulse && !(cr & 0x80))
+            if (!indexPulse && !(cr & 0x80U))
             {
                 return str | STR_DATAREQUEST;
             }
-            else
-            {
-                return str;
-            }
+
+            return str;
 
         case 1:
             return tr;
@@ -95,14 +84,14 @@ Byte Wd1793::readIo(Word offset)
 
             if (byteCount)
             {
-                dr = readByte(byteCount, cr & 0xf0);
+                dr = readByte(byteCount, cr & 0xF0U);
                 if (byteCount != 0)
                 {
                     byteCount--;
                 }
             }
 
-            if (!byteCount && (cr & 0xF0) == CMD_READSECTOR_MULT)
+            if (!byteCount && (cr & 0xF0U) == CMD_READSECTOR_MULT)
             {
                 // When reading multiple sectors read next sector,
                 // until record not found.
@@ -127,13 +116,13 @@ Byte Wd1793::readIo(Word offset)
             return dr;
     }
 
-    return 0;   // default, should never be used!
-}   // readIo
+    return 0; // default, should never be used!
+}
 
 
 void Wd1793::writeIo(Word offset, Byte val)
 {
-    switch (offset & 0x03)
+    switch (offset & 0x03U)
     {
         case 0:
             resetIrq();
@@ -141,26 +130,26 @@ void Wd1793::writeIo(Word offset, Byte val)
             break;
 
         case 1:
-            tr  = val;
+            tr = val;
             break;
 
         case 2:
-            sr  = val;
+            sr = val;
             break;
 
         case 3:
-            dr  = val;
+            dr = val;
 
             if (byteCount)
             {
-                writeByte(byteCount, cr & 0xf0);
+                writeByte(byteCount, cr & 0xF0U);
                 if (byteCount != 0)
                 {
                     byteCount--;
                 }
             }
 
-            if (!byteCount && (cr & 0xF0) == CMD_WRITESECTOR_MULT)
+            if (!byteCount && (cr & 0xF0U) == CMD_WRITESECTOR_MULT)
             {
                 // When writing multiple sectors write next sector,
                 // until record not found.
@@ -184,11 +173,11 @@ void Wd1793::writeIo(Word offset, Byte val)
 
             break;
     }
-}   // writeIo
+}
 
 void Wd1793::do_seek(Byte new_track)
 {
-    str = STR_HEADLOADED;     // SEEK
+    str = STR_HEADLOADED; // SEEK
 
     if (isSeekError(new_track))
     {
@@ -205,19 +194,19 @@ void Wd1793::do_seek(Byte new_track)
     }
 
     setIrq();
-} // do_seek
+}
 
 
 void Wd1793::command(Byte command)
 {
-    bool isType1Command = !(command & 0x80);
+    bool isType1Command = !(command & 0x80U);
 
-    if (!(str & STR_BUSY) || (command & 0xf0) == CMD_FORCEIRQ)
+    if (!(str & STR_BUSY) || (command & 0xF0U) == CMD_FORCEIRQ)
     {
         cr = command;
         byteCount = 0;
 
-        switch (cr & 0xf0)
+        switch (cr & 0xF0U)
         {
             case CMD_RESTORE:
                 do_seek(0);
@@ -315,7 +304,7 @@ void Wd1793::command(Byte command)
                     break;
                 }
 
-                if (startCommand(cr & 0xf0))
+                if (startCommand(cr & 0xF0U))
                 {
                     byteCount = 256;
                     isDataRequest = true;
@@ -350,7 +339,7 @@ void Wd1793::command(Byte command)
                 byteCount = 0;
                 setIrq();
                 break;
-        } // switch
+        }
 
         if (isType1Command)
         {
@@ -370,27 +359,27 @@ void Wd1793::command(Byte command)
             }
             else
             {
-                tr  = 1; // ALWAYS SET TRACK TO 1
+                tr = 1; // ALWAYS SET TRACK TO 1
                 // so system info sector never will be found
                 str = STR_NOTREADY;
             }
-        } // if
-    } // if
+        }
+    }
 }// command
 
 // should be reimplemented by subclass.
-bool Wd1793::startCommand(Byte)
+bool Wd1793::startCommand(Byte /*command_un*/)
 {
     return true;
 }
 
-Byte Wd1793::readByte(Word index, Byte)
+Byte Wd1793::readByte(Word index, Byte /*command_un*/)
 {
-    return (Byte) index;
+    return static_cast<Byte>(index);
 }
 
 // should be reimplemented by subclass.
-void Wd1793::writeByte(Word &, Byte)
+void Wd1793::writeByte(Word & /*index*/, Byte /*command_un*/)
 {
 }
 
@@ -400,7 +389,7 @@ bool Wd1793::isDriveReady() const
 }
 
 
-bool Wd1793::isSeekError(Byte) const
+bool Wd1793::isSeekError(Byte /*new_track*/) const
 {
     return false;
 }

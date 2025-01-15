@@ -2,8 +2,8 @@
     mdcrfs.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2018-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,14 +30,14 @@ class BMemoryBuffer;
 class MiniDcrTape;
 
 
-enum class MdcrWriteMode
+enum class MdcrWriteMode : uint8_t
 {
     Truncate, // Write the file at the beginning of the tape.
               // Any existing file is overwritten.
     Append,   // Append the file at the end of the tape.
 };
 
-enum class MdcrStatus
+enum class MdcrStatus : uint8_t
 {
     Success,       // The function call was successfull.
     InvalidData,   // The input data is empty, invalid or could not be evaluated.
@@ -48,7 +48,7 @@ enum class MdcrStatus
     WriteError,    // An error occurred when writing a record.
 };
 
-extern const std::vector<std::string> mdcrErrors;
+extern const std::string &GetMdcrError(int index);
 
 class MdcrFileSystem
 {
@@ -59,27 +59,27 @@ class MdcrFileSystem
         static Byte CalculateChecksum(std::vector<Byte>::const_iterator &iter,
                                size_t size);
 
-        const size_t MaxRecordSize = 1024;
+        static const int MaxRecordSize{1024};
 
     public:
-        static std::string CreateMdcrFilename(const char *string,
+        static std::string CreateMdcrFilename(const char *name,
                                               bool toUppercase);
 
-        MdcrStatus ReadFile(
+        static MdcrStatus ReadFile(
                       std::string &filename,
                       BMemoryBuffer &memory,
                       MiniDcrTape &mdcr);
         MdcrStatus WriteFile(
-                       const char *filename,
+                       const char *filepath,
                        const BMemoryBuffer &memory,
                        MiniDcrTape &mdcr,
                        MdcrWriteMode mode,
                        bool toUppercase = true);
         MdcrStatus ForEachFile(MiniDcrTape &mdcr,
-                          std::function<MdcrStatus (const std::string&,
-                                                    BMemoryBuffer &memory)>);
+                const std::function<MdcrStatus (const std::string&,
+                BMemoryBuffer &memory)>& iterateFunction);
 
     public:
-        MdcrFileSystem();
+        MdcrFileSystem() = default;
 };
 

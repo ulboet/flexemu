@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -57,8 +57,13 @@ public:
     };
 
 public:
-    Mmu(Memory &x_memory);
-    virtual ~Mmu();
+    Mmu() = delete;
+    explicit Mmu(Memory &p_memory);
+    ~Mmu() override = default;
+    Mmu(const Mmu &src) = delete;
+    Mmu(Mmu &&src) = delete;
+    Mmu &operator=(const Mmu &src) = delete;
+    Mmu &operator=(Mmu &&src) = delete;
 };
 
 #endif // MMU_INCLUDED

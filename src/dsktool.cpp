@@ -2,7 +2,7 @@
     dsktool.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@
 #include "flexerr.h"
 #include "efiletim.h"
 #include "fdirent.h"
+#include "filecntb.h"
 #include "rfilecnt.h"
 #include "dircont.h"
 #include "ifilecnt.h"
@@ -42,13 +43,15 @@
 #include "filfschk.h"
 #include "ffilebuf.h"
 #include "filecnts.h"
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
-std::vector<std::string> GetMatchingFilenames(
-    FlexFileContainer &container,
-    const std::vector<std::regex> &regexs)
+static std::vector<std::string> GetMatchingFilenames(FlexDisk &container,
+        const std::vector<std::regex> &regexs)
 {
-    FileContainerIterator iter;
+    FlexDiskIterator iter;
     std::vector<std::string> allFilenames;
 
     for (iter = container.begin(); iter != container.end(); ++iter)
@@ -82,11 +85,11 @@ std::vector<std::string> GetMatchingFilenames(
     return result;
 }
 
-int FormatFlexDiskFile(const std::string &dsk_file, int disk_format,
-                       int tracks, int sectors, char default_answer,
-                       bool verbose)
+static int FormatFlexDiskFile(const std::string &dsk_file, DiskType disk_type,
+        int tracks, int sectors, char default_answer, bool verbose,
+        const char *bsFile)
 {
-    struct stat sbuf;
+    struct stat sbuf{};
 
     if (!stat(dsk_file.c_str(), &sbuf))
     {
@@ -100,13 +103,13 @@ int FormatFlexDiskFile(const std::string &dsk_file, int disk_format,
         std::string question(dsk_file);
 
         question += " already exists. Overwrite?";
-        if (AskForInput(question, "yn", default_answer))
+        if (flx::askForInput(question, "yn", default_answer))
         {
             unlink(dsk_file.c_str());
         }
         else
         {
-            if (verbose)
+            if (default_answer != '?')
             {
                 std::cout << dsk_file << " already exists. Skipped.\n";
             }
@@ -116,18 +119,20 @@ int FormatFlexDiskFile(const std::string &dsk_file, int disk_format,
 
     try
     {
-        std::unique_ptr<FlexFileContainer> container;
+        std::unique_ptr<FlexDisk> container;
         auto fileTimeAccess = FileTimeAccess::NONE;
 
-        container.reset(FlexFileContainer::Create(
-                        getParentPath(dsk_file).c_str(),
-                        getFileName(dsk_file).c_str(),
-                        tracks, sectors, fileTimeAccess, disk_format));
+        container.reset(FlexDisk::Create(
+                        dsk_file,
+                        fileTimeAccess,
+                        tracks, sectors,
+                        disk_type,
+                        bsFile));
 
         if (container && verbose)
         {
             std::cout << "Successfully created " <<
-                getFileName(dsk_file) << " with " <<
+                flx::getFileName(dsk_file) << " with " <<
                 tracks << "-" << sectors << " tracks-sectors.\n";
         }
     }
@@ -141,40 +146,20 @@ int FormatFlexDiskFile(const std::string &dsk_file, int disk_format,
     return 0;
 }
 
-int ExtractDskFile(const std::string &target_dir, bool verbose,
-                   bool convert_text, const std::string &dsk_file,
-                   const std::vector<std::regex> &regexs,
-                   FileTimeAccess fileTimeAccess)
+static int ExtractDskFile(const std::string &target_dir, bool verbose,
+        bool convert_text, char default_answer, const std::string &dsk_file,
+        const std::vector<std::regex> &regexs, FileTimeAccess fileTimeAccess)
 {
-    std::string subdir = target_dir + getFileStem(getFileName(dsk_file));
-
     if (verbose)
     {
-        std::cout << "Extracting " << dsk_file << " into " << subdir <<
-                     " ... " << std::endl;
-    }
-
-    if (regexs.empty() && BDirectory::Exists(subdir))
-    {
-        std::cerr << "  *** Error: '" << subdir << "' already exists.\n" <<
-                     "    Extraction from '" << dsk_file << "' aborted.\n";
-        return 0;
-    }
-
-    // If there are regular expressions subdir may already exist.
-    // If subdir does not exist create it.
-    if ((regexs.empty() ||
-        (!regexs.empty() && !BDirectory::Exists(subdir))) &&
-        !BDirectory::Create(subdir))
-    {
-        std::cerr << "  *** Error creating '" << subdir << "'.\n" <<
-                     "    Extraction from '" << dsk_file << "' aborted.\n";
-        return 0;
+        std::cout << "Extracting from '" << dsk_file << "' into '" <<
+                     target_dir << "' ... \n";
     }
 
     FlexCopyManager::autoTextConversion = convert_text;
-    FlexRamFileContainer src{dsk_file.c_str(), "rb", fileTimeAccess};
-    DirectoryContainer dest{subdir.c_str(), fileTimeAccess};
+    const auto mode = std::ios::in | std::ios::binary;
+    FlexRamDisk src{dsk_file, mode, fileTimeAccess};
+    FlexDirectoryDiskByFile dest{target_dir, fileTimeAccess};
     size_t count = 0;
     size_t random_count = 0;
     size_t byte_size = 0;
@@ -182,7 +167,7 @@ int ExtractDskFile(const std::string &target_dir, bool verbose,
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
 
     auto matchedFilenames = GetMatchingFilenames(src, regexs);
@@ -191,18 +176,36 @@ int ExtractDskFile(const std::string &target_dir, bool verbose,
     {
         std::string result = "ok";
         std::string what;
+        bool isText = false;
 
         try
         {
-            FlexDirEntry dir_entry;
+            FlexDirEntry dirEntry;
 
-            src.FileCopy(filename.c_str(), filename.c_str(), dest);
+            if (dest.FindFile(filename, dirEntry))
+            {
+                auto question = filename + " already exists. Overwrite?";
+                if (flx::askForInput(question, "yn", default_answer))
+                {
+                    dest.DeleteFile(dirEntry.GetTotalFileName());
+                }
+                else
+                {
+                    if (default_answer != '?')
+                    {
+                        std::cout << filename << " already exists. Skipped.\n";
+                    }
+                    continue;
+                }
+            }
+
+            isText = src.FileCopy(filename, filename, dest);
 
             ++count;
-            if (src.FindFile(filename.c_str(), dir_entry))
+            if (src.FindFile(filename, dirEntry))
             {
-                byte_size += dir_entry.GetFileSize();
-                random_count += dir_entry.IsRandom() ? 1 : 0;
+                byte_size += dirEntry.GetFileSize();
+                random_count += dirEntry.IsRandom() ? 1 : 0;
             }
         }
         catch (FlexException &ex)
@@ -214,12 +217,19 @@ int ExtractDskFile(const std::string &target_dir, bool verbose,
 
         if (verbose)
         {
-            std::cout << " extracting " << filename << " ... " << result <<
-                         std::endl;
+            std::string fileType;
+
+            if (what.empty())
+            {
+                fileType = isText ? "text file" : "binary file";
+            }
+
+            std::cout << " extracting " << fileType << " " << filename <<
+                         " ... " << result << '\n';
         }
         if (!what.empty())
         {
-            std::cerr << "   *** Error: " << what << std::endl;
+            std::cerr << "   *** Error: " << what << '\n';
         }
     }
 
@@ -231,17 +241,17 @@ int ExtractDskFile(const std::string &target_dir, bool verbose,
         {
             std::cout << errors << " errors, ";
         }
-        auto kbyte_size = byte_size / 1024.0;
-        std::cout << "total size: " << kbyte_size << " KByte." << std::endl; 
+        auto kbyte_size = byte_size / 1024;
+        std::cout << "total size: " << kbyte_size << " KByte.\n";
     }
 
     return 0;
 }
 
-int ExtractDskFiles(std::string target_dir, bool verbose, bool convert_text,
-                    const std::vector<std::string> &dsk_files,
-                    const std::vector<std::regex> &regexs,
-                    FileTimeAccess fileTimeAccess)
+static int ExtractDskFiles(std::string target_dir, bool verbose,
+        bool convert_text, char default_answer,
+        const std::vector<std::string> &dsk_files,
+        const std::vector<std::regex> &regexs, FileTimeAccess fileTimeAccess)
 {
     if (target_dir.empty())
     {
@@ -250,14 +260,11 @@ int ExtractDskFiles(std::string target_dir, bool verbose, bool convert_text,
 
     if (!BDirectory::Exists(target_dir))
     {
-        std::cerr << "*** Error: '" << target_dir << "' does not exist or is"
-        " no directory.\n";
+        std::cerr <<
+            "*** Error: '" << target_dir << "' does not exist or is"
+            " no directory.\n" <<
+            "    Extraction aborted.\n";
         return 1;
-    }
-
-    if (target_dir.at(target_dir.size() - 1) != PATHSEPARATOR)
-    {
-        target_dir += PATHSEPARATORSTRING;
     }
 
     for (const auto &dsk_file : dsk_files)
@@ -265,7 +272,8 @@ int ExtractDskFiles(std::string target_dir, bool verbose, bool convert_text,
         try
         {
             int result = ExtractDskFile(target_dir, verbose, convert_text,
-                                        dsk_file, regexs, fileTimeAccess);
+                                        default_answer, dsk_file, regexs,
+                                        fileTimeAccess);
             if (result != 0)
             {
                 // Abort after fatal error.
@@ -276,7 +284,7 @@ int ExtractDskFiles(std::string target_dir, bool verbose, bool convert_text,
         {
             if (verbose)
             {
-                std::cout << " failed." << std::endl;
+                std::cout << " failed.\n";
             }
             std::cerr <<
                 "   *** Error: " << ex.what() << ".\n" <<
@@ -287,38 +295,38 @@ int ExtractDskFiles(std::string target_dir, bool verbose, bool convert_text,
     return 0;
 }
 
-int ListDirectoryOfDskFile(const std::string &dsk_file,
-                           const std::vector<std::regex> &regexs,
-                           FileTimeAccess fileTimeAccess)
+static int ListDirectoryOfDskFile(const std::string &dsk_file,
+        const std::vector<std::regex> &regexs, FileTimeAccess fileTimeAccess)
 {
-    FlexRamFileContainer src{dsk_file.c_str(), "rb", fileTimeAccess};
-    FileContainerIterator iter;
-    FlexContainerInfo info;
+    const auto mode = std::ios::in | std::ios::binary;
+    FlexRamDisk src{dsk_file, mode, fileTimeAccess};
+    FlexDiskIterator iter;
+    FlexDiskAttributes diskAttributes;
     unsigned int number = 0;
-    bool hasInfo = false;
+    bool hasAttributes = false;
     int sumSectors = 0;
     int largest = 0;
     const auto format = BDate::Format::D2MSU3Y4;
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
 
-    if (src.GetInfo(info))
+    if (src.GetDiskAttributes(diskAttributes))
     {
-        hasInfo = true;
+        hasAttributes = true;
         std::cout <<
-            "FILE: " << getFileName(dsk_file) << "  " <<
-            "DISK: " << info.GetName() <<
-            " #" << info.GetNumber() <<
-            "  CREATED: " << info.GetDate().GetDateString(format) <<
+            "FILE: " << flx::getFileName(dsk_file) << "  " <<
+            "DISK: " << diskAttributes.GetName() <<
+            " #" << diskAttributes.GetNumber() <<
+            "  CREATED: " << diskAttributes.GetDate().GetDateString(format) <<
             "\n";
     }
     else
     {
-        std::cerr << "Error reading Container info " <<
-                     getFileName(dsk_file) << "\n";
+        std::cerr << "Error reading disk image attributes from " <<
+                     flx::getFileName(dsk_file) << "\n";
     }
 
     std::cout << "FILE#   NAME   TYPE  BEGIN   END   SIZE    DATE      ";
@@ -326,70 +334,60 @@ int ListDirectoryOfDskFile(const std::string &dsk_file,
     {
         std::cout << " TIME ";
     }
-    std::cout << " PRT   RND" << std::endl << std::endl;
+    std::cout << " PRT   RND\n\n";
 
     auto matchedFilenames = GetMatchingFilenames(src, regexs);
 
     for (const auto &filename : matchedFilenames)
     {
-        FlexDirEntry dir_entry;
-        int startTrack, startSector;
-        int endTrack, endSector;
+        FlexDirEntry dirEntry;
+        int startTrack;
+        int startSector;
+        int endTrack;
+        int endSector;
 
-        if (!src.FindFile(filename.c_str(), dir_entry))
+        if (!src.FindFile(filename, dirEntry))
         {
             continue;
         }
         ++number;
-        dir_entry.GetStartTrkSec(startTrack, startSector);
-        dir_entry.GetEndTrkSec(endTrack, endSector);
+        dirEntry.GetStartTrkSec(startTrack, startSector);
+        dirEntry.GetEndTrkSec(endTrack, endSector);
 
-        int sectors = static_cast<int>(dir_entry.GetFileSize() / SECTOR_SIZE);
+        int sectors = static_cast<int>(dirEntry.GetFileSize() / SECTOR_SIZE);
         sumSectors += sectors;
-        if (sectors > largest)
-        {
-            largest = sectors;
-        }
+        largest = std::max(sectors, largest);
 
-        std::cout <<
-            std::right << std::setw(5) << number << "  " <<
-            std::left << std::setw(8) << dir_entry.GetFileName() << "." <<
-            std::left << std::setw(3) << dir_entry.GetFileExt() << "  " <<
-            std::right << std::uppercase << std::hex << std::setfill('0') <<
-            std::setw(2) << startTrack << "-" <<
-            std::setw(2) << startSector << "  " <<
-            std::setw(2) << endTrack << "-" <<
-            std::setw(2) << endSector << " " <<
-            std::dec << std::setfill(' ') <<
-            std::setw(5) << sectors << "  " <<
-            std::setw(11) << dir_entry.GetDate().GetDateString(format) << " ";
+        std::cout << fmt::format(
+                  "{:5}  {:<8}.{:<3}  {:02X}-{:02X}  {:02X}-{:02X} {:5}  {:11} ",
+                    number, dirEntry.GetFileName(),
+                    dirEntry.GetFileExt(), startTrack, startSector,
+                    endTrack, endSector, sectors,
+                    dirEntry.GetDate().GetDateString(format));
         if ((fileTimeAccess & FileTimeAccess::Get) == FileTimeAccess::Get)
         {
             std::cout <<
-                dir_entry.GetTime().AsString(BTime::Format::HHMM) << " ";
+                dirEntry.GetTime().AsString(BTime::Format::HHMM) << " ";
         }
-        std::cout <<
-            std::left << std::setw(4) <<
-            dir_entry.GetAttributesString() << " " <<
-            (dir_entry.IsRandom() ? "R" : "") << std::endl;
+        std::cout << fmt::format("{:<4} {}\n", dirEntry.GetAttributesString(),
+                     (dirEntry.IsRandom() ? "R" : ""));
     }
 
-    if (hasInfo)
+    if (hasAttributes)
     {
-        std::cout << std::endl << "    " <<
+        std::cout << "\n    " <<
                      "FILES=" << number <<
                      ", SECTORS=" << sumSectors <<
                      ", LARGEST=" << largest <<
-                     ", FREE=" << (info.GetFree() / SECTOR_SIZE) <<
-                     std::endl << std::endl;
+                     ", FREE=" << (diskAttributes.GetFree() / SECTOR_SIZE) <<
+                     "\n\n";
     }
 
     return 0;
 }
 
-int ListDirectoryOfDskFiles(const std::vector<std::string> &dsk_files,
-                            const std::vector<std::regex> &regexs,
-                            FileTimeAccess fileTimeAccess)
+static int ListDirectoryOfDskFiles(const std::vector<std::string> &dsk_files,
+        const std::vector<std::regex> &regexs, FileTimeAccess fileTimeAccess)
 {
     for (const auto &dsk_file : dsk_files)
     {
@@ -408,28 +406,29 @@ int ListDirectoryOfDskFiles(const std::vector<std::string> &dsk_files,
     return 0;
 }
 
-int SummaryOfDskFile(const std::string &dsk_file,
-                     uint64_t &sum_files, uint64_t&sum_size, uint64_t&sum_free,
-                     bool verbose)
+static int SummaryOfDskFile(const std::string &dsk_file,
+        uint64_t &sum_files, uint64_t&sum_size, uint64_t&sum_free,
+        bool verbose)
 {
     auto fileTimeAccess = FileTimeAccess::NONE;
-    FlexRamFileContainer src{dsk_file.c_str(), "rb", fileTimeAccess};
-    FileContainerIterator iter;
-    FlexContainerInfo info;
+    const auto mode = std::ios::in | std::ios::binary;
+    FlexRamDisk src{dsk_file, mode, fileTimeAccess};
+    FlexDiskIterator iter;
+    FlexDiskAttributes diskAttributes;
     const auto format = BDate::Format::D2MSU3Y4;
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
 
-    if (src.GetInfo(info))
+    if (src.GetDiskAttributes(diskAttributes))
     {
         uint64_t file_count = 0;
         int tracks;
         int sectors;
 
-        info.GetTrackSector(tracks, sectors);
+        diskAttributes.GetTrackSector(tracks, sectors);
 
         for (iter = src.begin(); iter != src.end(); ++iter)
         {
@@ -437,37 +436,35 @@ int SummaryOfDskFile(const std::string &dsk_file,
         }
         sum_files += file_count;
 
-        auto name = info.GetName();
+        auto name = diskAttributes.GetName();
         if (name.empty())
         {
             name = "\"\"";
         }
 
-        std::string file = verbose ? dsk_file : getFileName(dsk_file);
+        std::string file = verbose ? dsk_file : flx::getFileName(dsk_file);
 
-        std::cout <<
-            std::left <<
-            info.GetDate().GetDateString(format) << " " <<
-            std::setw(12) << name << " " <<
-            std::setw(5) << info.GetNumber() << " " <<
-            std::setw(2) << tracks << "-" << std::setw(2) << sectors << " " <<
-            std::setw(5) << file_count << " " <<
-            std::setw(5) << (info.GetTotalSize() / SECTOR_SIZE) << " " <<
-            std::setw(5) << (info.GetFree() / SECTOR_SIZE) << " " <<
-            file << "\n";
-        sum_size += (info.GetTotalSize() / SECTOR_SIZE);
-        sum_free += (info.GetFree() / SECTOR_SIZE);
+        std::cout << fmt::format(
+            "{} {:<12} {:<5} {:<2}-{:<2} {:<5} {:<5} {:<5} {}\n",
+            diskAttributes.GetDate().GetDateString(format), name,
+            diskAttributes.GetNumber(),
+            tracks, sectors, file_count,
+            diskAttributes.GetTotalSize() / SECTOR_SIZE,
+            diskAttributes.GetFree() / SECTOR_SIZE, file);
+        sum_size += (diskAttributes.GetTotalSize() / SECTOR_SIZE);
+        sum_free += (diskAttributes.GetFree() / SECTOR_SIZE);
     }
     else
     {
-        std::cerr << "Error reading Container info for " <<
-                     getFileName(dsk_file) << "\n";
+        std::cerr << "Error reading disk image attributes for " <<
+                     flx::getFileName(dsk_file) << "\n";
     }
 
     return 0;
 }
 
-int SummaryOfDskFiles(const std::vector<std::string> &dsk_files, bool verbose)
+static int SummaryOfDskFiles(const std::vector<std::string> &dsk_files,
+        bool verbose)
 {
     uint64_t sum_files = 0U;
     uint64_t sum_size = 0U;
@@ -496,32 +493,34 @@ int SummaryOfDskFiles(const std::vector<std::string> &dsk_files, bool verbose)
         std::cout <<
             "FILES: " << sum_files <<
             " SIZE: " << sum_size << " Sectors/" <<
-            (sum_size / 4.0) << " KByte" <<
+            (sum_size / 4) << " KByte" <<
             " FREE: " << sum_free << " Sectors/" <<
-            (sum_free / 4.0) << " KByte\n";
+            (sum_free / 4) << " KByte\n";
     }
 
     return 0;
 }
 
-int InjectToDskFile(const std::string &dsk_file, bool verbose,
-                    const std::vector<std::string> &files,
-                    char default_answer, bool isConvertText,
-                    FileTimeAccess fileTimeAccess)
+static int InjectToDskFile(const std::string &dsk_file, bool verbose,
+        const std::vector<std::string> &files, char default_answer,
+        bool isConvertText, FileTimeAccess fileTimeAccess)
 {
-    FlexRamFileContainer dst{dsk_file.c_str(), "rb+", fileTimeAccess};
+    FlexCopyManager::autoTextConversion = isConvertText;
+    const auto mode = std::ios::in | std::ios::out | std::ios::binary;
+    FlexRamDisk dst{dsk_file, mode, fileTimeAccess};
 
     if (!dst.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, dst.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, dst.GetPath());
     }
 
-    for (auto &file : files)
+    for (const auto &file : files)
     {
         bool isSuccess = true;
+        bool isText = false;
         FlexFileBuffer fileBuffer;
 
-        if (!fileBuffer.ReadFromFile(file.c_str()))
+        if (!fileBuffer.ReadFromFile(file, fileTimeAccess, true))
         {
             std::cerr <<
                 "   *** Error: Reading from " << file << ". Aborted.\n";
@@ -531,24 +530,25 @@ int InjectToDskFile(const std::string &dsk_file, bool verbose,
         if (isConvertText && fileBuffer.IsTextFile())
         {
             fileBuffer.ConvertToFlexTextFile();
+            isText = true;
         }
 
         try
         {
-            FlexDirEntry dir_entry;
+            FlexDirEntry dirEntry;
 
-            if (dst.FindFile(fileBuffer.GetFilename(), dir_entry))
+            if (dst.FindFile(fileBuffer.GetFilename(), dirEntry))
             {
                 std::string question(fileBuffer.GetFilename());
 
                 question += " already exists. Overwrite?";
-                if (AskForInput(question, "yn", default_answer))
+                if (flx::askForInput(question, "yn", default_answer))
                 {
-                    dst.DeleteFile(dir_entry.GetTotalFileName().c_str());
+                    dst.DeleteFile(dirEntry.GetTotalFileName());
                 }
                 else
                 {
-                    if (verbose)
+                    if (default_answer != '?')
                     {
                         std::cout << fileBuffer.GetFilename() <<
                             " already exists. Skipped.\n";
@@ -569,23 +569,25 @@ int InjectToDskFile(const std::string &dsk_file, bool verbose,
 
         if (isSuccess && verbose)
         {
-            std::cout << "Injecting " << file << " ... Ok\n";
+            std::string fileType = isText ? "text file" : "binary file";
+
+            std::cout << "Injecting " << fileType << " " << file << " ... Ok\n";
         }
     }
 
     return 0;
 }
 
-int DeleteFromDskFile(const std::string &dsk_file, bool verbose,
-                      const std::vector<std::regex> &regexs,
-                      char default_answer)
+static int DeleteFromDskFile(const std::string &dsk_file, bool verbose,
+        const std::vector<std::regex> &regexs, char default_answer)
 {
     auto fileTimeAccess = FileTimeAccess::NONE;
-    FlexRamFileContainer src{dsk_file.c_str(), "rb+", fileTimeAccess};
+    const auto mode = std::ios::in | std::ios::out | std::ios::binary;
+    FlexRamDisk src{dsk_file, mode, fileTimeAccess};
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
 
     if (regexs.empty())
@@ -601,16 +603,16 @@ int DeleteFromDskFile(const std::string &dsk_file, bool verbose,
 
         try
         {
-            FlexDirEntry dir_entry;
+            FlexDirEntry dirEntry;
 
-            if (src.FindFile(flex_file.c_str(), dir_entry))
+            if (src.FindFile(flex_file, dirEntry))
             {
                 std::stringstream question;
 
                 question << "Delete " << flex_file << "?";
-                if (AskForInput(question.str(), "yn", default_answer))
+                if (flx::askForInput(question.str(), "yn", default_answer))
                 {
-                    src.DeleteFile(flex_file.c_str());
+                    src.DeleteFile(flex_file);
                 }
                 else
                 {
@@ -644,68 +646,33 @@ int DeleteFromDskFile(const std::string &dsk_file, bool verbose,
     return 0;
 }
 
-int CheckConsistencyOfDskFile(const std::string &dsk_file, bool verbose,
-                              bool debug_output, FileTimeAccess fileTimeAccess)
+static int CheckConsistencyOfDskFile(const std::string &dsk_file,
+        bool verbose, bool debug_output, FileTimeAccess fileTimeAccess)
 {
-    FlexRamFileContainer src{dsk_file.c_str(), "rb", fileTimeAccess};
+    const auto mode = std::ios::in | std::ios::binary;
+    FlexRamDisk src{dsk_file, mode, fileTimeAccess};
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
 
-    FileContainerCheck check(src, fileTimeAccess);
+    FlexDiskCheck check(src, fileTimeAccess);
 
     std::cout << "Check " << dsk_file << " ...";
     if (check.CheckFileSystem())
     {
-        std::cout << " Ok" << std::endl;
+        std::cout << " Ok\n";
     }
     else
     {
-        std::string separator;
-        size_t infos = 0;
-        size_t warnings = 0;
-        size_t errors = 0;
-        const auto &results = check.GetResult();
-
-        for (const auto &result : results)
-        {
-            switch (result->type)
-            {
-                case ContainerCheckResultItem::Type::Info:
-                    ++infos;
-                    break;
-                case ContainerCheckResultItem::Type::Warning:
-                    ++warnings;
-                    break;
-                case ContainerCheckResultItem::Type::Error:
-                    ++errors;
-                    break;
-            }
-        }
-
-        if (errors != 0)
-        {
-            std::cout << " " << errors << " error(s)";
-            separator = ",";
-        }
-        if (warnings != 0)
-        {
-            std::cout << separator << " " << warnings << " warning(s)";
-            separator = " and";
-        }
-        if (infos != 0)
-        {
-            std::cout << separator << " " << infos << " info(s)";
-        }
-        std::cout << std::endl;
+        std::cout << " " << check.GetStatisticsString() << "\n";
 
         if (verbose)
         {
-            for (const auto &result : results)
+            for (const auto &result : check.GetResult())
             {
-                std::cout << "  " << result << std::endl;
+                std::cout << "  " << result << '\n';
             }
         }
     }
@@ -718,9 +685,8 @@ int CheckConsistencyOfDskFile(const std::string &dsk_file, bool verbose,
     return 0;
 }
 
-int CheckConsistencyOfDskFiles(const std::vector<std::string> &dsk_files,
-                               bool verbose, bool debug_output,
-                               FileTimeAccess fileTimeAccess)
+static int CheckConsistencyOfDskFiles(const std::vector<std::string> &dsk_files,
+        bool verbose, bool debug_output, FileTimeAccess fileTimeAccess)
 {
     for (const auto &dsk_file : dsk_files)
     {
@@ -740,21 +706,23 @@ int CheckConsistencyOfDskFiles(const std::vector<std::string> &dsk_files,
     return 0;
 }
 
-int CopyFromToDskFile(const std::string &src_dsk_file,
+static int CopyFromToDskFile(const std::string &src_dsk_file,
         const std::string &dst_dsk_file, bool verbose,
         const std::vector<std::regex> &regexs, char default_answer,
         FileTimeAccess fileTimeAccess)
 {
-    FlexRamFileContainer src{src_dsk_file.c_str(), "rb", fileTimeAccess};
-    FlexRamFileContainer dst{dst_dsk_file.c_str(), "rb+", fileTimeAccess};
+    auto mode = std::ios::in | std::ios::binary;
+    FlexRamDisk src{src_dsk_file, mode, fileTimeAccess};
+    mode |= std::ios::out;
+    FlexRamDisk dst{dst_dsk_file, mode, fileTimeAccess};
 
     if (!src.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, src.GetPath());
     }
     if (!dst.IsFlexFormat())
     {
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, dst.GetPath().c_str());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, dst.GetPath());
     }
 
     size_t count = 0;
@@ -770,20 +738,20 @@ int CopyFromToDskFile(const std::string &src_dsk_file,
 
         try
         {
-            FlexDirEntry dir_entry;
+            FlexDirEntry dirEntry;
 
-            if (dst.FindFile(filename.c_str(), dir_entry))
+            if (dst.FindFile(filename, dirEntry))
             {
                 std::string question(filename);
 
                 question += " already exists. Overwrite?";
-                if (AskForInput(question, "yn", default_answer))
+                if (flx::askForInput(question, "yn", default_answer))
                 {
-                    dst.DeleteFile(filename.c_str());
+                    dst.DeleteFile(filename);
                 }
                 else
                 {
-                    if (verbose)
+                    if (default_answer != '?')
                     {
                         std::cout << filename << " already exists. Skipped.\n";
                     }
@@ -791,13 +759,13 @@ int CopyFromToDskFile(const std::string &src_dsk_file,
                 }
             }
 
-            src.FileCopy(filename.c_str(), filename.c_str(), dst);
+            src.FileCopy(filename, filename, dst);
 
             ++count;
-            if (src.FindFile(filename.c_str(), dir_entry))
+            if (src.FindFile(filename, dirEntry))
             {
-                byte_size += dir_entry.GetFileSize();
-                random_count += dir_entry.IsRandom() ? 1 : 0;
+                byte_size += dirEntry.GetFileSize();
+                random_count += dirEntry.IsRandom() ? 1 : 0;
             }
         }
         catch (FlexException &ex)
@@ -810,10 +778,8 @@ int CopyFromToDskFile(const std::string &src_dsk_file,
                 std::cerr << "    Copying aborted.\n";
                 break;
             }
-            else
-            {
-                std::cerr << "    Copying of " << filename << " aborted.\n";
-            }
+
+            std::cerr << "    Copying of " << filename << " aborted.\n";
         }
 
         if (isSuccess && verbose)
@@ -830,15 +796,15 @@ int CopyFromToDskFile(const std::string &src_dsk_file,
         {
             std::cout << errors << " errors, ";
         }
-        auto kbyte_size = byte_size / 1024.0;
-        std::cout << "total size: " << kbyte_size << " KByte." << std::endl;
+        auto kbyte_size = byte_size / 1024;
+        std::cout << "total size: " << kbyte_size << " KByte.\n";
     }
 
     return 0;
 }
 
 
-void helpOnDiskSize()
+static void helpOnDiskSize()
 {
     std::cout <<
         "The following FLEX disk size parameters are supported:\n\n" <<
@@ -856,131 +822,138 @@ void helpOnDiskSize()
     }
 }
 
-void version()
+static void version()
 {
-    std::cout <<
-        "dsktool " << VERSION << "\n" <<
-        "dsktool " << COPYRIGHT_MESSAGE;
+    flx::print_versions(std::cout, "dsktool");
 }
 
-void usage()
+static void usage()
 {
     std::cout <<
-        "Usage: dsktool -c <dsk-file> [-v][-D] [<dsk-file>...]\n" <<
+        "Usage: dsktool -c <dsk-file> [-v][-D] [<dsk-file>...]\n"
         "Usage: dsktool -C <dsk-file> -T<tgt-dsk-file> [-v][-z][-y|-n][-m]"
-        "[-R<file>...][<regex>...]\n" <<
-        "Usage: dsktool -f <dsk-file> [-v][-F(dsk|flx)][-y|-n] -S<size>\n" <<
-        "Usage: dsktool -h\n" <<
-        "Usage: dsktool -i <dsk-file> [-v][-t][-z][-y|-n] <file> [<file>...]\n" <<
-        "Usage: dsktool -l <dsk-file> [-z][<dsk-file>...]\n" <<
-        "Usage: dsktool -L <dsk-file> [-z][-m][-R<file>...][<regex>...]\n" <<
+        "[-R<file>...]\n"
+        "                  [<regex>...]\n"
+        "Usage: dsktool -f <dsk-file> [-v][-F(dsk|flx)][-y|-n] -S<size>\n"
+        "                  -B<boot-sector-file>\n"
+        "Usage: dsktool -h\n"
+        "Usage: dsktool -i <dsk-file> [-v][-t][-z][-y|-n] <file> [<file>...]\n"
+        "Usage: dsktool -l <dsk-file> [-z][<dsk-file>...]\n"
+        "Usage: dsktool -L <dsk-file> [-z][-m][-R<file>...][<regex>...]\n"
         "Usage: dsktool -r <dsk-file> [-v][-y|-n][-m][-R<file>...][<regex>...]"
-        "\n" <<
-        "Usage: dsktool -s <dsk-file> [-v] [<dsk-file>...]\n" <<
-        "Usage: dsktool -S help\n" <<
-        "Usage: dsktool -V\n" <<
-        "Usage: dsktool -x <dsk-file> [-d<directory>][-t][-v][-z][-m]"  <<
-        "[-R<file>...][<regex>...]\n" <<
+        "\n"
+        "Usage: dsktool -s <dsk-file> [-v] [<dsk-file>...]\n"
+        "Usage: dsktool -S help\n"
+        "Usage: dsktool -V\n"
+        "Usage: dsktool -x <dsk-file> [-d<directory>][-t][-v][-z][-m]"
+        "[-y|-n][-R<file>...]\n"
+        "                  [<regex>...]\n"
         "Usage: dsktool -X <dsk-file> [-d<directory>][-t][-v][-z] "
-        "[<dsk-file>...]\n\n" <<
-        "Commands:\n" <<
-        "  -c: Check consistency of FLEX file container.\n" <<
-        "  -C: Copy files from a FLEX file container into another one.\n" <<
-        "      If no regex is specified, all files are copied.\n" <<
-        "  -f: Create a new FLEX file container.\n" <<
-        "  -h: Print this help.\n" <<
-        "  -i: Inject FLEX-files to a FLEX file container.\n" <<
-        "  -l: List directory contents of FLEX file container(s).\n" <<
-        "  -L: List directory contents of a FLEX file container using regex."
-        "\n" <<
-        "      If no regex is specified, all files are listed.\n" <<
-        "  -r: Delete files from a FLEX file container using regex.\n" <<
-        "  -s: One line summary of a FLEX file container.\n" <<
-        "  -V: Print version number and exit.\n" <<
-        "  -x: Extract files from a FLEX file container using regex.\n" <<
-        "      If no regex is specified, all files are extracted.\n" <<
-        "  -X: Extract all files from FLEX file container(s).\n\n" <<
-        "Parameters:\n" <<
-        "  -d<directory> The target directory.\n" <<
-        "                For each dsk-file a subdirectory is created.\n" <<
-        "                Default: current directory.\n" <<
-        "  -D            Additional debug output.\n" <<
-        "  -F(dsk|flx)   Use *.dsk or *.flx file container format.\n" <<
-        "                If not set it is determined from the file extension"
-        "\n" <<
-        "                or finally the default is *.dsk\n" <<
-        "  -m            Regex is case sensitive (case has meaning).\n" <<
-        "  -n            Answer no to all questions.\n" <<
-        "  -t            Automatic detection and conversion of text files.\n" <<
-        "  -v            More verbose output.\n" <<
-        "  -y            Answer yes to all questions.\n" <<
-        "  -z            Use file time (FLEX extension).\n" <<
-        "  -R<file>      A file containing regular expressions, one per line."
-        "\n" <<
-        "  -S<size>      Size of FLEX file container. Use -S help for help."
-        "\n" <<
-        "  -T<dsk-file>  A target FLEX file container with *.dsk or *.flx "
-        "format.\n" <<
-        "  <dsk-file>    A FLEX file container with *.dsk or *.flx format.\n" <<
-        "  <FLEX-file>   A FLEX text or binary file.\n" <<
-        "  <file>        A text file or FLEX text or binary file.\n" <<
-        "  <regex>       A regular expression specifying FLEX file(s).\n" <<
-        "                Extended POSIX regular expression grammar is\n" <<
-        "                supported. <regex> parameters are processed after\n" <<
-        "                all -R<file> parameters. By default it is case\n" <<
-        "                insensitive. See also -m.\n\n" <<
-        "Environment Variables:\n" <<
-        "  DSKTOOL_USE_FILETIME     Same a option -z.\n";
+        "[-y|-n][<dsk-file>...]\n\n"
+        "Commands:\n"
+        "  -c: Check consistency of FLEX disk image file.\n"
+        "  -C: Copy files from a FLEX disk image file into another one.\n"
+        "      If no regex is specified, all files are copied.\n"
+        "  -f: Create a new FLEX disk image file.\n"
+        "  -h: Print this help.\n"
+        "  -i: Inject FLEX-files to a FLEX disk image file.\n"
+        "  -l: List directory contents of FLEX disk image file(s).\n"
+        "  -L: List directory contents of a FLEX disk image file using regex."
+        "\n"
+        "      If no regex is specified, all files are listed.\n"
+        "  -r: Delete files from a FLEX disk image file using regex.\n"
+        "  -s: One line summary of a FLEX disk image file.\n"
+        "  -V: Print version number and exit.\n"
+        "  -x: Extract files from a FLEX disk image file using regex.\n"
+        "      If no regex is specified, all files are extracted.\n"
+        "  -X: Extract all files from FLEX disk image file(s).\n\n"
+        "Parameters:\n"
+        "  -d<directory> The target directory.\n"
+        "                Default: current directory.\n"
+        "  -D            Additional debug output.\n"
+        "  -F(dsk|flx)   Use *.dsk or *.flx disk image file format.\n"
+        "                *.wta extension is handled as *.dsk format.\n"
+        "                If not set it is determined from the file extension\n"
+        "                or finally the default is *.dsk\n"
+        "  -m            Regex is case sensitive (case has meaning).\n"
+        "  -n            Answer no to all questions.\n"
+        "  -t            Automatic detection and conversion of text files.\n"
+        "  -v            More verbose output.\n"
+        "  -y            Answer yes to all questions.\n"
+        "  -z            Use file time (FLEX extension).\n"
+        "  -R<file>      A file containing regular expressions, one per line.\n"
+        "  -S<size>      Size of FLEX disk image file. Use -S help for help.\n"
+        "  -B<boot-sector-file> Read contents of boot sector(s) from file.\n" <<
+        "                It has a size of one or two sectors"
+        " (" << SECTOR_SIZE << " or " << 2*SECTOR_SIZE << " Byte).\n"
+        "  -T<dsk-file>  A target FLEX disk image file with *.dsk or *.flx "
+        "format.\n"
+        "                *.wta extension is handled as *.dsk format.\n"
+        "  <dsk-file>    A FLEX disk image file with *.dsk or *.flx "
+        "format.\n"
+        "                *.wta extension is handled as *.dsk format.\n"
+        "  <FLEX-file>   A FLEX text or binary file.\n"
+        "  <file>        A text file or FLEX text or binary file.\n"
+        "  <regex>       A regular expression specifying FLEX file(s).\n"
+        "                Extended POSIX regular expression grammar is\n"
+        "                supported. <regex> parameters are processed after\n"
+        "                all -R<file> parameters. By default it is case\n"
+        "                insensitive. See also -m.\n\n"
+        "Environment Variables:\n\n"
+        "  DSKTOOL_USE_FILETIME\n"
+        "                Same a option -z.\n"
+        "  DSKTOOL_TRACK0_ACCESS\n"
+        "                Defines which sectors on track 0 are accessible.\n"
+        "                If set to DIRECTORY (=default) only directory\n"
+        "                sectors (within the directory sector chain) are\n"
+        "                accessible. If set to FULL all sectors are\n"
+        "                accessible.\n";
 }
 
-bool estimateDiskFormat(const char *format, int &disk_format)
+static bool getDiskTypeFromExtension(std::string ext, DiskType &disk_type)
 {
-    if (format != nullptr)
+    static const std::string strDsk{"dsk"};
+    static const std::string strWta{"wta"};
+    static const std::string strFlx{"flx"};
+    ext = flx::tolower(ext);
+
+    if (strDsk.compare(ext) == 0 || strWta.compare(ext) == 0)
     {
-        if (strcmp(format, "dsk") == 0)
-        {
-            disk_format = TYPE_DSK_CONTAINER;
-            return true;
-        }
-        else if (strcmp(format, "flx") == 0)
-        {
-            disk_format = TYPE_FLX_CONTAINER;
-            return true;
-        }
+        disk_type = DiskType::DSK;
+        return true;
+    }
+
+    if (strFlx.compare(ext) == 0)
+    {
+        disk_type = DiskType::FLX;
+        return true;
     }
 
     return false;
 }
 
-void estimateDiskFormat(const std::string &dsk_file, int &disk_format)
+static void estimateDiskType(const std::string &dsk_file, DiskType &disk_type)
 {
     std::string extension;
 
     if (!dsk_file.empty())
-    { 
-        extension = getFileExtension(dsk_file);
+    {
+        extension = flx::getFileExtension(dsk_file);
         if (!extension.empty())
         {
             extension = extension.substr(1);
         }
     }
 
-    strlower(extension);
-    if (!estimateDiskFormat(extension.c_str(), disk_format))
+    if (!getDiskTypeFromExtension(extension, disk_type))
     {
-        disk_format = TYPE_DSK_CONTAINER;
+        disk_type = DiskType::DSK;
     }
 }
 
-bool checkDiskFormat(const char *format, int &disk_format)
+static bool checkDiskType(const std::string &format, DiskType &disk_type)
 {
-    if (disk_format != 0)
-    {
-        std::cerr << "*** Error: -F can be specified only once\n";
-        return false;
-    }
-
-    if (format != nullptr && estimateDiskFormat(format, disk_format))
+    if (getDiskTypeFromExtension(format, disk_type))
     {
         return true;
     }
@@ -989,34 +962,34 @@ bool checkDiskFormat(const char *format, int &disk_format)
     return false;
 }
 
-int checkDiskSize(const char *disk_size, int &tracks, int &sectors)
+static int checkDiskSize(const std::string &disk_size, int &tracks,
+        int &sectors)
 {
-    if (disk_size != nullptr)
+    static const std::string strHelp{"help"};
+
+    if (strHelp.compare(disk_size) == 0)
     {
-        if (strcmp(disk_size, "help") == 0)
-        {
-            helpOnDiskSize();
-            return 0;
-        }
+        helpOnDiskSize();
+        return 0;
+    }
 
-        if (tracks != 0)
-        {
-            std::cerr << "*** Error: -S can be specified only once\n";
-            return 1;
-        }
+    if (tracks != 0)
+    {
+        std::cerr << "*** Error: -S can be specified only once\n";
+        return 1;
+    }
 
-        static_assert(flex_formats.size() == flex_format_shortcuts.size(),
-                      "flex_formats and flex_format_shortcuts have different "
-                      "size");
+    static_assert(flex_formats.size() == flex_format_shortcuts.size(),
+                  "flex_formats and flex_format_shortcuts have different "
+                  "size");
 
-        for (size_t i = 0; i < flex_format_shortcuts.size(); ++i)
+    for (size_t i = 0; i < flex_format_shortcuts.size(); ++i)
+    {
+        if (disk_size.compare(flex_format_shortcuts[i]) == 0)
         {
-            if (strcmp(disk_size, flex_format_shortcuts[i]) == 0)
-            {
-                tracks = flex_formats[i].trk;
-                sectors = flex_formats[i].sec;
-                return 2;
-            }
+            tracks = flex_formats[i].trk + 1;
+            sectors = flex_formats[i].sec;
+            return 2;
         }
     }
 
@@ -1024,7 +997,46 @@ int checkDiskSize(const char *disk_size, int &tracks, int &sectors)
     return 1;
 }
 
-char checkCommand(char oldCommand, int result)
+static bool checkBootSectorFile(const char *opt, const char **bsFile)
+{
+    struct stat sbuf{};
+
+    if (*bsFile != nullptr)
+    {
+        std::cerr << "*** Error: -B can be specified only once\n";
+        return false;
+    }
+
+    if (!stat(opt, &sbuf))
+    {
+        if (!S_ISREG(sbuf.st_mode))
+        {
+            std::cerr << "*** Error: " << opt <<
+                         " is no regular file. Aborted.\n";
+            return false;
+        }
+
+        if (sbuf.st_size != SECTOR_SIZE && sbuf.st_size != 2*SECTOR_SIZE)
+        {
+            std::cerr << "*** Error: Boot sector file " << opt <<
+                         "\n    has to have a size of " << SECTOR_SIZE <<
+                         " or " << 2*SECTOR_SIZE <<
+                         " Byte (= one or two sectors). Aborted.\n";
+            return false;
+        }
+
+        *bsFile = opt;
+        return true;
+    }
+
+    std::cerr <<
+        "*** Error: Boot sector file " << opt <<
+        " not found. Aborted.\n";
+
+    return false;
+}
+
+static char checkCommand(char oldCommand, int result)
 {
     if (oldCommand == '\0')
     {
@@ -1036,8 +1048,38 @@ char checkCommand(char oldCommand, int result)
     return 0;
 }
 
-std::tuple<bool, std::vector<std::string> >
-readFile(const std::string &fileName)
+static int checkTrack0Access()
+{
+    const std::string key("DSKTOOL_TRACK0_ACCESS");
+    auto *track0Access = getenv(key.c_str());
+
+    if (track0Access != nullptr)
+    {
+        static const std::string strDirectory{"DIRECTORY"};
+        static const std::string strFull{"FULL"};
+
+        if (strDirectory.compare(track0Access) == 0)
+        {
+            FlexDisk::onTrack0OnlyDirSectors = true;
+        }
+        else if (strFull.compare(track0Access) == 0)
+        {
+            FlexDisk::onTrack0OnlyDirSectors = false;
+        }
+        else
+        {
+            std::cerr << "*** Error: " << key << " has unspecified"
+                         " value \"" << track0Access << "\"\n\n";
+            usage();
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static std::tuple<bool, std::vector<std::string> >
+        readFile(const std::string &fileName)
 {
     std::ifstream file(fileName);
     std::vector<std::string> lines;
@@ -1057,8 +1099,8 @@ readFile(const std::string &fileName)
     return std::make_tuple(true, lines);
 }
 
-bool addToRegexList(const std::vector<std::string> &regexLines,
-                    std::vector<std::regex> &regexs, bool isCaseSensitive)
+static bool addToRegexList(const std::vector<std::string> &regexLines,
+        std::vector<std::regex> &regexs, bool isCaseSensitive)
 {
     bool result = true;
 
@@ -1072,13 +1114,13 @@ bool addToRegexList(const std::vector<std::string> &regexLines,
     {
         try
         {
-            regexs.push_back(std::regex(regex, flags));
+            regexs.emplace_back(regex, flags);
         }
         catch(const std::regex_error &ex)
         {
             std::cerr <<
                 "    *** Error in regex \"" << regex << "\": " << ex.what() <<
-                std::endl;
+                '\n';
             result = false;
         }
     }
@@ -1088,7 +1130,7 @@ bool addToRegexList(const std::vector<std::string> &regexLines,
 
 int main(int argc, char *argv[])
 {
-    std::string optstr("f:X:x:L:l:s:c:C:i:r:R:T:d:o:S:F:DhmntvVyz");
+    std::string optstr("f:X:x:L:l:s:c:C:i:r:R:T:d:o:S:F:B:DhmntvVyz");
     std::string target_dir;
     std::vector<std::string> dsk_files;
     std::vector<std::string> files;
@@ -1096,8 +1138,9 @@ int main(int argc, char *argv[])
     std::vector<std::regex> regexs;
     std::string dsk_file;
     std::string dst_dsk_file;
-    std::string size;
-    int disk_format = 0;
+    const char *bsFile = nullptr;
+    DiskType disk_type{};
+    bool is_disk_type_valid = false;
     int tracks = 0;
     int sectors = 0;
     bool verbose = false;
@@ -1111,6 +1154,8 @@ int main(int argc, char *argv[])
     char command = '\0';
     int index;
 
+    FlexDisk::InitializeClass();
+
     while ((result = getopt(argc, argv, optstr.c_str())) != -1)
     {
         switch (result)
@@ -1119,7 +1164,7 @@ int main(int argc, char *argv[])
             case 'l':
             case 's':
             case 'c':
-                      dsk_files.push_back(optarg);
+                      dsk_files.emplace_back(optarg);
                       command = checkCommand(command, result);
                       if (command == '\0')
                       {
@@ -1150,7 +1195,7 @@ int main(int argc, char *argv[])
             case 'R': has_regex_file = true;
                       if (command == 'C' || command == 'x')
                       {
-                          regexFiles.push_back(optarg);
+                          regexFiles.emplace_back(optarg);
                       }
                       break;
 
@@ -1180,16 +1225,28 @@ int main(int argc, char *argv[])
 
             case 'S':
                     {
-                        int s;
-
-                        if ((s = checkDiskSize(optarg, tracks, sectors)) < 2)
+                        const auto s = checkDiskSize(optarg, tracks, sectors);
+                        if (s < 2)
                         {
                             return s;
                         }
                         break;
                     }
 
-            case 'F': if (!checkDiskFormat(optarg, disk_format))
+            case 'F': if (is_disk_type_valid)
+                      {
+                          std::cerr << "*** Error: -F can be specified only "
+                              "once\n";
+                          return 1;
+                      }
+                      if (!checkDiskType(optarg, disk_type))
+                      {
+                          return 1;
+                      }
+                      is_disk_type_valid = true;
+                      break;
+
+            case 'B': if (!checkBootSectorFile(optarg, &bsFile))
                       {
                           return 1;
                       }
@@ -1219,9 +1276,10 @@ int main(int argc, char *argv[])
     bool isRegexCommand = (command == 'C' || command == 'x' ||
                            command == 'L' || command == 'r');
 
-    if (disk_format == 0)
+    if (!is_disk_type_valid)
     {
-        estimateDiskFormat(dsk_file, disk_format);
+        estimateDiskType(dsk_file, disk_type);
+        is_disk_type_valid = true;
     }
 
     for (const auto &regexFile : regexFiles)
@@ -1242,7 +1300,7 @@ int main(int argc, char *argv[])
     {
         for (index = optind; index < argc; index++)
         {
-            files.push_back(argv[index]);
+            files.emplace_back(argv[index]);
         }
     }
     else if (command == 'c' || command == 'l' ||
@@ -1250,7 +1308,7 @@ int main(int argc, char *argv[])
     {
         for (index = optind; index < argc; index++)
         {
-            dsk_files.push_back(argv[index]);
+            dsk_files.emplace_back(argv[index]);
         }
     }
     else if (isRegexCommand)
@@ -1259,7 +1317,7 @@ int main(int argc, char *argv[])
 
         for (index = optind; index < argc; index++)
         {
-            regexLines.push_back(argv[index]);
+            regexLines.emplace_back(argv[index]);
         }
 
         if (!addToRegexList(regexLines, regexs, regexCaseSense))
@@ -1284,12 +1342,13 @@ int main(int argc, char *argv[])
         (!isRegexCommand && regexCaseSense) ||
         (!isRegexCommand && has_regex_file) ||
         (!isRegexCommand && !regexs.empty()) ||
-        (std::string("firC").find_first_of(command) == std::string::npos &&
+        (std::string("firCxX").find_first_of(command) == std::string::npos &&
          (default_answer != '?')) ||
         (command != 'i' && command != 'X' && command != 'x' && convert_text) ||
         (command != 'c' && debug_output) ||
         (std::string("cCilLxX").find_first_of(command) == std::string::npos &&
-            (fileTimeAccess != FileTimeAccess::NONE)))
+            (fileTimeAccess != FileTimeAccess::NONE)) ||
+        (command != 'f' && bsFile != nullptr))
     {
         std::cerr << "*** Error: Wrong syntax\n";
         usage();
@@ -1302,6 +1361,12 @@ int main(int argc, char *argv[])
         fileTimeAccess = FileTimeAccess::Get | FileTimeAccess::Set;
     }
 
+    result = checkTrack0Access();
+    if (result != 0)
+    {
+        return result;
+    }
+
     try
     {
         switch(command)
@@ -1312,8 +1377,9 @@ int main(int argc, char *argv[])
                                                   fileTimeAccess);
 
             case 'f':
-                return FormatFlexDiskFile(dsk_file, disk_format, tracks,
-                                          sectors, default_answer, verbose);
+                return FormatFlexDiskFile(dsk_file, disk_type, tracks,
+                                          sectors, default_answer, verbose,
+                                          bsFile);
 
             case 'i':
                 return InjectToDskFile(dsk_file, verbose, files,
@@ -1322,7 +1388,8 @@ int main(int argc, char *argv[])
 
             case 'L':
                 dsk_files.push_back(dsk_file);
-                // fall through
+                FALLTHROUGH;
+
             case 'l':
                 return ListDirectoryOfDskFiles(dsk_files, regexs,
                                                fileTimeAccess);
@@ -1336,10 +1403,12 @@ int main(int argc, char *argv[])
 
             case 'x':
                 dsk_files.push_back(dsk_file);
-                // fall through
+                FALLTHROUGH;
+
             case 'X':
                 return ExtractDskFiles(target_dir, verbose, convert_text,
-                                       dsk_files, regexs, fileTimeAccess);
+                                       default_answer, dsk_files, regexs,
+                                       fileTimeAccess);
 
             case 'C':
                 return CopyFromToDskFile(dsk_file, dst_dsk_file, verbose,

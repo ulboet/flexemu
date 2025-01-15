@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,13 +25,11 @@
 #define BYTEREG_INCLUDED
 
 #include "misc1.h"
-#include <stdio.h>
-
 #include "iodevice.h"
 
 // ByteRegister is a single byte general purpose
 // I/O mapped read/write register.
-// It can be specialized by a sub class overwriting 
+// It can be specialized by a sub class overwriting
 // requestReadValue() and requestWriteValue() methods.
 
 class ByteRegister : public IoDevice
@@ -58,8 +56,8 @@ public:
 
 public:
 
-    ByteRegister();
-    virtual ~ByteRegister();
+    ByteRegister() = default;
+    ~ByteRegister() override = default;
 };
 
 #endif

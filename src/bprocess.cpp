@@ -3,7 +3,7 @@
 
 
     flexemu, a MC6809 emulator running FLEX
-    Copyright (C) 2004-2022  W. Schwotzer
+    Copyright (C) 2004-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,40 +22,32 @@
 
 #include "misc1.h"
 #ifdef UNIX
-    #include <signal.h>
+    #include <csignal>
     #include <sys/types.h>
     #include <sys/wait.h>
+    #include <string>
+    #include <vector>
 #endif
 #include "bprocess.h"
 #include "cvtwchar.h"
-#include <memory>
 
-BProcess::BProcess(const std::string &x_exec,
-                   const std::string &x_dir /* = "" */,
-                   const std::string &x_arg /* = "" */) :
-    executable(x_exec), arguments(x_arg), directory(x_dir)
-#ifdef _WIN32
-    , hProcess(nullptr)
-#endif
-#ifdef UNIX
-    , pid(-1)
-#endif
+BProcess::BProcess(std::string p_executable,
+                   std::string p_directory /* = "" */,
+                   std::vector<std::string> p_arguments /* = {} */)
+    : executable(std::move(p_executable))
+    , directory(std::move(p_directory))
+    , arguments(std::move(p_arguments))
 {
 }
 
-void BProcess::AddArgument(const std::string &x_arg)
+void BProcess::AddArgument(const std::string &argument)
 {
-    if (!arguments.empty())
-    {
-        arguments += " ";
-    }
-
-    arguments += x_arg;
+    arguments.push_back(argument);
 }
 
-void BProcess::SetDirectory(const std::string &x_dir)
+void BProcess::SetDirectory(const std::string &p_directory)
 {
-    directory = x_dir;
+    directory = p_directory;
 }
 
 //***********************************************
@@ -70,19 +62,29 @@ BProcess::~BProcess()
 
 bool BProcess::Start()
 {
-    STARTUPINFO             si;
-    PROCESS_INFORMATION     pi;
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
 
     const auto wExecutable(ConvertToUtf16String(executable));
-    auto wArguments(ConvertToUtf16String(arguments));
     const auto wDirectory(ConvertToUtf16String(directory));
+    std::wstring wArguments;
+
     memset((void *)&si, 0, sizeof(STARTUPINFO));
     si.cb = sizeof(STARTUPINFO);
+
+    for (const auto &argument : arguments)
+    {
+        if (!wArguments.empty())
+        {
+            wArguments += L" ";
+        }
+        wArguments += ConvertToUtf16String(argument);
+    }
 
     // For CreateProcessW parameter wArguments must not be const
     auto result = CreateProcess(
         wExecutable.c_str(), // Name/path of executable
-        &wArguments[0], // Command line arguments
+        wArguments.data(), // All command line arguments in one string
         nullptr, // Security attributes, handle can not be inherited
         nullptr, // Thread attributes, handle can not be inherited
         FALSE, // Handles are not inherited
@@ -101,21 +103,41 @@ bool BProcess::Start()
     return result != 0;
 }
 
-bool BProcess::IsRunning()
+bool BProcess::IsRunning() const
 {
     if (hProcess == nullptr)
     {
         return false;
     }
 
-    DWORD status;
+    DWORD exitCode;
 
-    if (GetExitCodeProcess(hProcess, &status) == 0)
+    if (GetExitCodeProcess(hProcess, &exitCode) == 0)
     {
         return false;
     }
 
-    return (status == STILL_ACTIVE);
+    return (exitCode == STILL_ACTIVE);
+}
+
+int BProcess::Wait()
+{
+    if (hProcess == nullptr)
+    {
+        return 0;
+    }
+
+    DWORD exitCode;
+
+    WaitForSingleObject(hProcess, INFINITE);
+    if (GetExitCodeProcess(hProcess, &exitCode) == 0)
+    {
+        hProcess = nullptr;
+        return 0;
+    }
+
+    hProcess = nullptr;
+    return static_cast<int>(exitCode);
 }
 #endif
 
@@ -123,25 +145,25 @@ bool BProcess::IsRunning()
 // UNIX specific implementation
 //***********************************************
 #ifdef UNIX
-BProcess::~BProcess()
-{
-    // nothing to clean up
-}
 
-// ATTENTION: multiple arguments are not supported yet!
 bool BProcess::Start()
 {
-    const char *args[3];
-    struct sigaction default_action;
+    std::vector<char *> argv;
+    struct sigaction default_action{};
 
-    args[0] = executable.c_str();
-    args[1] = arguments.c_str();
-    args[2] = nullptr;
+    argv.push_back(executable.data());
+    for (auto &argument : arguments)
+    {
+        argv.push_back(argument.data());
+    }
+    argv.push_back(nullptr);
+
     default_action.sa_handler = SIG_DFL;
-    default_action.sa_flags   = 0;
+    default_action.sa_flags = 0;
     sigemptyset(&default_action.sa_mask);
 
-    if ((pid = fork()) == 0)
+    pid = fork();
+    if (pid == 0)
     {
         sigaction(SIGPIPE, &default_action, nullptr);
 
@@ -153,7 +175,7 @@ bool BProcess::Start()
                 }
         }
 
-        execvp(args[0], (char *const *)args);
+        execvp(argv[0], argv.data());
         // if we come here an error has occured
         _exit(1);
     }
@@ -161,7 +183,7 @@ bool BProcess::Start()
     return IsRunning();
 }
 
-bool BProcess::IsRunning()
+bool BProcess::IsRunning() const
 {
     if (pid == -1)
     {
@@ -170,12 +192,25 @@ bool BProcess::IsRunning()
 
     int status = 0;
 
-    if (waitpid(pid, &status, WNOHANG) == 0)
+    return waitpid(pid, &status, WNOHANG) == 0;
+}
+
+int BProcess::Wait()
+{
+    if (pid == -1)
     {
-        return true;
+        return 0;
     }
 
-    return false;
+    int status = 0;
+
+    if (waitpid(pid, &status, 0) == pid && WIFEXITED(status))
+    {
+        return WEXITSTATUS(status);
+    }
+
+    pid = -1;
+    return 0;
 }
 #endif
 

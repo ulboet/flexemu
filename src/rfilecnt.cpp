@@ -2,8 +2,8 @@
     rfilecnt.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,42 +20,44 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <string.h>     // needed for memcpy
 #include "rfilecnt.h"
 #include "flexerr.h"
+#include <cstring>
 
 
-FlexRamFileContainer::FlexRamFileContainer(const char *path, const char *mode,
-                                           const FileTimeAccess
-                                           &p_fileTimeAccess) :
-    FlexFileContainer(path, mode, p_fileTimeAccess), is_dirty(false)
+FlexRamDisk::FlexRamDisk(const std::string &p_path, std::ios::openmode mode,
+                         const FileTimeAccess &p_fileTimeAccess)
+    : FlexDisk(p_path, mode, p_fileTimeAccess)
 {
     unsigned int sectors;
 
     if (!is_flex_format)
     {
         // This file container only supports compatible FLEX file formats.
-        throw FlexException(FERR_CONTAINER_UNFORMATTED, fp.GetPath());
+        throw FlexException(FERR_CONTAINER_UNFORMATTED, path);
     }
 
+    param.options |= DiskOptions::RAM;
     sectors = (file_size - param.offset) / param.byte_p_sector;
-    file_buffer =
-        std::unique_ptr<Byte[]>(new Byte[sectors * param.byte_p_sector]);
+    file_buffer.resize(sectors * param.byte_p_sector);
 
     // For FLX file format skip the header, it will never be changed.
-    if (fseek(fp, param.offset, SEEK_SET))
+    fstream.seekg(param.offset);
+    if (fstream.fail())
     {
-        throw FlexException(FERR_READING_FROM, fp.GetPath());
+        throw FlexException(FERR_READING_FROM, path);
     }
 
-    // read total disk into memory
-    if (fread(file_buffer.get(), param.byte_p_sector, sectors, fp) != sectors)
+    // read whole disk content into memory.
+    fstream.read(reinterpret_cast<char *>(file_buffer.data()),
+                 param.byte_p_sector * sectors);
+    if (fstream.fail())
     {
-        throw FlexException(FERR_READING_FROM, fp.GetPath());
+        throw FlexException(FERR_READING_FROM, path);
     }
 }
 
-FlexRamFileContainer::~FlexRamFileContainer()
+FlexRamDisk::~FlexRamDisk()
 {
     // final cleanup: close if not already done
     try
@@ -69,65 +71,51 @@ FlexRamFileContainer::~FlexRamFileContainer()
     }
 }
 
-FlexRamFileContainer::FlexRamFileContainer(FlexRamFileContainer &&src) :
-    FlexFileContainer(std::move(src)), file_buffer(std::move(src.file_buffer))
-{
-}
-
-FlexRamFileContainer &FlexRamFileContainer::operator=
-                                         (FlexRamFileContainer &&src)
-{
-    file_buffer = std::move(src.file_buffer);
-
-    FlexFileContainer::operator=(std::move(src));
-
-    return *this;
-}
-
-bool FlexRamFileContainer::close()
+bool FlexRamDisk::close()
 {
     bool throwException = false;
-    std::string path = fp.GetPath();
 
-    if (fp != nullptr)
+    if (fstream.is_open())
     {
         // Only if the buffer contents has been changed it
         // will be written to file.
-        if (is_dirty && (file_buffer.get() != nullptr))
+        if (is_dirty && !file_buffer.empty())
         {
             unsigned int sectors;
 
             sectors = (file_size - param.offset) / param.byte_p_sector;
 
-            if (fseek(fp, param.offset, SEEK_SET))
+            fstream.seekg(param.offset);
+            if (fstream.fail())
             {
                 throwException = true;
             }
 
-            if (fwrite(file_buffer.get(), param.byte_p_sector, sectors, fp)
-                    != sectors)
+            fstream.write(reinterpret_cast<const char *>(file_buffer.data()),
+                          param.byte_p_sector * sectors);
+            if (fstream.fail())
             {
                 throwException = true;
             }
         }
 
-        fp.Close();
+        fstream.close();
     }
 
-    file_buffer.reset(nullptr);
+    file_buffer.clear();
 
     if (throwException)
     {
-        throw FlexException(FERR_WRITING_TO, path.c_str());
+        throw FlexException(FERR_WRITING_TO, path);
     }
 
     return true;
 }
 
-bool FlexRamFileContainer::ReadSector(Byte *pbuffer, int trk, int sec,
-                                      int side /* = -1 */) const
+bool FlexRamDisk::ReadSector(Byte *pbuffer, int trk, int sec,
+                             int side /* = -1 */) const
 {
-    if (file_buffer.get() == nullptr)
+    if (file_buffer.empty())
     {
         return false;
     }
@@ -144,14 +132,14 @@ bool FlexRamFileContainer::ReadSector(Byte *pbuffer, int trk, int sec,
         return false;
     }
 
-    memcpy(pbuffer, &file_buffer[pos], param.byte_p_sector);
+    std::memcpy(pbuffer, file_buffer.data() + pos, param.byte_p_sector);
     return true;
 }
 
-bool FlexRamFileContainer::WriteSector(const Byte *pbuffer, int trk, int sec,
-                                       int side /* = -1 */)
+bool FlexRamDisk::WriteSector(const Byte *pbuffer, int trk, int sec,
+                              int side /* = -1 */)
 {
-    if (file_buffer.get() == nullptr)
+    if (file_buffer.empty())
     {
         return false;
     }
@@ -168,27 +156,14 @@ bool FlexRamFileContainer::WriteSector(const Byte *pbuffer, int trk, int sec,
         return false;
     }
 
-    if (param.write_protect)
+    if (IsWriteProtected())
     {
         return false;
     }
 
     is_dirty = true;
-    memcpy(&file_buffer[pos], pbuffer, param.byte_p_sector);
+    std::memcpy(&file_buffer[pos], pbuffer, param.byte_p_sector);
 
     return true;
 }
 
-void FlexRamFileContainer::Initialize_for_flx_format(
-    const s_flex_header &header, bool write_protected)
-{
-    FlexFileContainer::Initialize_for_flx_format(header, write_protected);
-    param.type |= TYPE_RAM_CONTAINER;
-}
-
-void FlexRamFileContainer::Initialize_for_dsk_format(
-    const s_formats &format, bool write_protected)
-{
-    FlexFileContainer::Initialize_for_dsk_format(format, write_protected);
-    param.type |= TYPE_RAM_CONTAINER;
-}

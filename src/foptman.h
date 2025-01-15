@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 
 #include "misc1.h"
 #include "soptions.h"
+#include <iostream>
 
 
 static constexpr std::array<FlexemuOptionId, 4> canFormatDriveOptionId
@@ -38,12 +39,14 @@ static constexpr std::array<FlexemuOptionId, 4> canFormatDriveOptionId
 class FlexemuOptions
 {
 public:
-    static void PrintHelp(FILE *fp);
+    static void PrintHelp(std::ostream &os);
     static void InitOptions(struct sOptions &options);
     static void GetOptions(struct sOptions &options);
     static void GetCommandlineOptions(
         struct sOptions &options,
         int argc,
+        /* Parameter comes from main(). */
+        /* NOLINTNEXTLINE(modernize-avoid-c-arrays) */
         char *const argv[]);
     static void WriteOptions(
         const struct sOptions &options,

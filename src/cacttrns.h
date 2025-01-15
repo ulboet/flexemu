@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2003-2022  W. Schwotzer
+    Copyright (C) 2003-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,7 +32,14 @@ class CActiveTransition : public BCommand
 {
 
 public:
-    CActiveTransition(Mc6821 &x_mc6821, Mc6821::ControlLine control_line);
+    CActiveTransition(Mc6821 &p_mc6821, Mc6821::ControlLine control_line);
+    CActiveTransition() = delete;
+    ~CActiveTransition() override = default;
+    CActiveTransition(const CActiveTransition &src) = delete;
+    CActiveTransition(CActiveTransition &&src) = delete;
+    CActiveTransition &operator=(const CActiveTransition &src) = delete;
+    CActiveTransition &operator=(CActiveTransition &&src) = delete;
+
     void Execute() override;
 
 protected:

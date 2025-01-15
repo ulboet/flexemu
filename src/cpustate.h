@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 #include <memory>
 #include "typedefs.h"
 
-enum class CpuState : Byte
+enum class CpuState : uint8_t
 {
     NONE,
     Run,
@@ -44,17 +44,20 @@ enum class CpuState : Byte
     _count
 };
 
-#define TIME_BASE               10000
+// The time in micro-seconds on which a timer get's a timeout
+// to execute updates.
+enum : uint16_t {
+TIME_BASE = 10000,
+};
 
 
-class CpuStatus
+struct CpuStatus
 {
-public:
-    CpuStatus() : freq(0.0), state(CpuState::NONE) { };
-    ~CpuStatus() { };
+    CpuStatus()  = default;
+    virtual ~CpuStatus() = default;
 
-    float freq;
-    CpuState state;
+    float freq{0.0};
+    CpuState state{CpuState::NONE};
 };
 
 using CpuStatusPtr = std::unique_ptr<CpuStatus>;

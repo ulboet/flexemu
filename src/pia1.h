@@ -2,7 +2,7 @@
     pia1.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ protected:
     Scheduler &scheduler;
     KeyboardIO &keyboardIO;
     const struct sOptions &options;
-    bool request_a_updated;
+    bool request_a_updated{false};
 
 protected:
 
@@ -54,8 +54,15 @@ protected:
     void set_irq_B() override;
 
 public:
-    Pia1(Scheduler &x_scheduler, KeyboardIO &x_keyboardIO,
-         const struct sOptions &x_options);
+    Pia1() = delete;
+    ~Pia1() override = default;
+    Pia1(Scheduler &p_scheduler, KeyboardIO &p_keyboardIO,
+         const struct sOptions &p_options);
+    Pia1(const Pia1 &src) = delete;
+    Pia1(Pia1 &&src) = delete;
+    Pia1 &operator=(const Pia1 &src) = delete;
+    Pia1 &operator=(Pia1 &&src) = delete;
+
     void resetIo() override;
     const char *getName() override
     {

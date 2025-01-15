@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,6 +24,9 @@
 #include "misc1.h"
 #include "e2.h"
 #include "soptions.h"
+#include "filecnts.h"
+#include "termimpf.h"
+#include "colors.h"
 #include <string>
 #include <memory>
 #include <stdexcept>
@@ -32,7 +35,10 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QFontMetrics>
+#include <QDir>
 #include "warnon.h"
+#include <cassert>
+#include <array>
 
 #ifdef _MSC_VER
     #include <direct.h>
@@ -43,69 +49,97 @@
 
 void FlexemuOptionsUi::ConnectSignalsWithSlots()
 {
-    QObject::connect(b_diskMonitorDir, &QAbstractButton::clicked,
+    connect(b_diskMonitorDir, &QAbstractButton::clicked,
             this, &FlexemuOptionsUi::OnSelectDiskMonitorDir);
-    QObject::connect(b_monitorPgm, &QAbstractButton::clicked,
+    connect(b_monitorPgm, &QAbstractButton::clicked,
             [&](){ OnSelectFile(*e_monitorPgm, FileType::HexBinaryFile); });
 
-    QObject::connect(b_drive0, &QAbstractButton::clicked,
-            [&](){ OnSelectFile(*e_drive0, FileType::DiskContainerFile); });
-    QObject::connect(b_drive1, &QAbstractButton::clicked,
-            [&](){ OnSelectFile(*e_drive1, FileType::DiskContainerFile); });
-    QObject::connect(b_drive2, &QAbstractButton::clicked,
-            [&](){ OnSelectFile(*e_drive2, FileType::DiskContainerFile); });
-    QObject::connect(b_drive3, &QAbstractButton::clicked,
-            [&](){ OnSelectFile(*e_drive3, FileType::DiskContainerFile); });
+    connect(b_drive0, &QAbstractButton::clicked,
+            [&](){ OnSelectFile(*e_drive0, FileType::FlexDiskFile); });
+    connect(b_drive1, &QAbstractButton::clicked,
+            [&](){ OnSelectFile(*e_drive1, FileType::FlexDiskFile); });
+    connect(b_drive2, &QAbstractButton::clicked,
+            [&](){ OnSelectFile(*e_drive2, FileType::FlexDiskFile); });
+    connect(b_drive3, &QAbstractButton::clicked,
+            [&](){ OnSelectFile(*e_drive3, FileType::FlexDiskFile); });
 
-    QObject::connect(b_mdcrDrive0, &QAbstractButton::clicked,
+    connect(b_mdcrDrive0, &QAbstractButton::clicked,
             [&](){ OnSelectFile(*e_mdcrDrive0, FileType::CassetteFile); });
-    QObject::connect(b_mdcrDrive1, &QAbstractButton::clicked,
+    connect(b_mdcrDrive1, &QAbstractButton::clicked,
             [&](){ OnSelectFile(*e_mdcrDrive1, FileType::CassetteFile); });
 
-    QObject::connect(r_ramExtNone, &QAbstractButton::toggled,
+    connect(r_ramExtNone, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::UpdateRamDependencies);
-    QObject::connect(r_ramExt2x96, &QAbstractButton::toggled,
+    connect(r_ramExt2x96, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::UpdateRamDependencies);
-    QObject::connect(r_ramExt2x288, &QAbstractButton::toggled,
+    connect(r_ramExt2x288, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::UpdateRamDependencies);
 
-    QObject::connect(r_eurocom2v5, &QAbstractButton::toggled,
+    connect(r_eurocom2v5, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::UpdateHardwareDependencies);
-    QObject::connect(r_eurocom2v7, &QAbstractButton::toggled,
+    connect(r_eurocom2v7, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::UpdateHardwareDependencies);
 
-    QObject::connect(r_frequencyOriginal, &QAbstractButton::toggled,
+    connect(r_frequencyOriginal, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::OnFrequencyOriginal);
-    QObject::connect(r_frequencyFast, &QAbstractButton::toggled,
+    connect(r_frequencyFast, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::OnFrequencyFast);
-    QObject::connect(r_frequencySet, &QAbstractButton::toggled,
+    connect(r_frequencySet, &QAbstractButton::toggled,
             this, &FlexemuOptionsUi::OnFrequencySet);
 
-    QObject::connect(c_multiColorScheme, &QCheckBox::stateChanged,
+    connect(c_multiColorScheme, &QCheckBox::stateChanged,
             this, &FlexemuOptionsUi::OnMultiColorSchemeChanged);
-    QObject::connect(cb_nColors,
+    connect(cb_nColors,
 #if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
-                     static_cast<void (QComboBox::*)(int)>(
-                         &QComboBox::currentIndexChanged),
+            static_cast<void (QComboBox::*)(int)>(
+                &QComboBox::currentIndexChanged),
 #else
-                     QOverload<int>::of(&QComboBox::currentIndexChanged),
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
 #endif
             this, &FlexemuOptionsUi::OnNColorsChanged);
 
-    QObject::connect(c_buttonBox, &QDialogButtonBox::accepted,
+    connect(c_buttonBox, &QDialogButtonBox::accepted,
             this, &FlexemuOptionsUi::OnAccepted);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::rejected,
+    connect(c_buttonBox, &QDialogButtonBox::rejected,
             this, &FlexemuOptionsUi::OnRejected);
+
+    connect(e_tracks,
+#if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
+            static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+#else
+            QOverload<int>::of(&QSpinBox::valueChanged),
+#endif
+            this, &FlexemuOptionsUi::OnTrackChanged);
+    connect(e_sectors,
+#if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
+            static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+#else
+            QOverload<int>::of(&QSpinBox::valueChanged),
+#endif
+            this, &FlexemuOptionsUi::OnSectorChanged);
+
+    connect(cb_diskFormat,
+#if (QT_VERSION <= QT_VERSION_CHECK(5, 7, 0))
+            static_cast<void (QComboBox::*)(int)>(
+                &QComboBox::currentIndexChanged),
+#else
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+#endif
+            this, &FlexemuOptionsUi::OnFormatChanged);
+
+    connect(c_isDirectoryDiskActive, &QCheckBox::toggled,
+            this, &FlexemuOptionsUi::OnDirectoryDiskActiveChanged);
+
+    connect(r_scrollingTerminal, &QAbstractButton::toggled,
+            [&](){ OnTerminalTypeChanged(TerminalType::Scrolling); });
+
+    connect(r_ncursesTerminal, &QAbstractButton::toggled,
+            [&](){ OnTerminalTypeChanged(TerminalType::NCurses); });
 }
 
 FlexemuOptionsUi::FlexemuOptionsUi()
     : Ui_FlexemuSetup()
-    , dialog(nullptr)
-    , englishUS(QLocale::English, QLocale::UnitedStates)
-{
-}
 
-FlexemuOptionsUi::~FlexemuOptionsUi()
 {
 }
 
@@ -125,13 +159,12 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
 
     InitializeHardwareHyperlink(options.doc_dir.c_str());
 
-    for (int x = 1; x <= MAX_PIXELSIZE; ++x)
+    for (int x = 1; x <= SCREEN_SIZES; ++x)
     {
-        const auto iconPath =
-            QString::asprintf(":/resource/screen%u.png", x);
+        const auto iconPath = QString(":/resource/screen%1.png").arg(x);
         const auto screenSizeIcon = QIcon(iconPath);
 
-        auto text = QString::asprintf("x%u", x);
+        auto text = QString("x%1").arg(x);
 
         cb_screenSize->addItem(screenSizeIcon, text);
 
@@ -145,10 +178,10 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
 
     index = -1;
     int n = 0;
-    static int ncolor_count[] = { 2, 8, 64 };
+    constexpr static std::array<int, 3> ncolor_count{ 2, 8, 64 };
     for (auto nColors : ncolor_count)
     {
-        auto text = QString::asprintf("%d", nColors);
+        auto text = QString("%1").arg(nColors);
         cb_nColors->addItem(text);
 
         if (options.nColors == nColors)
@@ -160,19 +193,20 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
     cb_nColors->setCurrentIndex(std::max(index, 0));
 
     index = -1;
-    for (int i = 0; i < static_cast<int>(color_count); i++)
+    const auto lcOptionColor = flx::tolower(options.color);
+    for (int i = 0; i < static_cast<int>(flx::color_count); i++)
     {
         DWord colorRGBValue;
 
-        auto colorName = colors[i].colorName;
-        getColorForName(colors[i].colorName, &colorRGBValue);
+        const auto *colorName = flx::colors[i].colorName;
+        flx::getColorForName(colorName, colorRGBValue);
         cb_color->addItem(tr(colorName));
         QPixmap pixmap(16,16);
-        pixmap.fill(QColor(colors[i].colorName));
+        pixmap.fill(QColor(colorName));
         QIcon colorIcon(pixmap);
         cb_color->setItemIcon(i, colorIcon);
 
-        if (!stricmp(options.color.c_str(), colors[i].colorName))
+        if (!lcOptionColor.compare(colorName))
         {
             index = i;
         }
@@ -181,29 +215,30 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
     cb_color->setCurrentIndex(std::max(index, 0));
 
     bool isMultiColorSchemeChecked =
-	    (0 == stricmp(options.color.c_str(), "default"));
+        (0 == lcOptionColor.compare("default"));
 
     c_multiColorScheme->setChecked(isMultiColorSchemeChecked);
 
     c_isInverse->setChecked(options.isInverse != 0);
+    c_isConfirmExit->setChecked(options.isConfirmExit != 0);
 
     c_undocumented->setChecked(options.use_undocumented);
 
     e_monitorPgm->setText(QString(options.hex_file.c_str()));
     e_diskMonitorDir->setText(QString(options.disk_dir.c_str()));
 
-    e_drive0->setText(QString(options.drive[0].c_str()));
-    e_drive1->setText(QString(options.drive[1].c_str()));
-    e_drive2->setText(QString(options.drive[2].c_str()));
-    e_drive3->setText(QString(options.drive[3].c_str()));
+    e_drive0->setText(QString(options.drives[0].c_str()));
+    e_drive1->setText(QString(options.drives[1].c_str()));
+    e_drive2->setText(QString(options.drives[2].c_str()));
+    e_drive3->setText(QString(options.drives[3].c_str()));
 
     e_mdcrDrive0->setText(QString(options.mdcrDrives[0].c_str()));
     e_mdcrDrive1->setText(QString(options.mdcrDrives[1].c_str()));
 
-    c_canFormatDrive0->setChecked(options.canFormatDrive[0]);
-    c_canFormatDrive1->setChecked(options.canFormatDrive[1]);
-    c_canFormatDrive2->setChecked(options.canFormatDrive[2]);
-    c_canFormatDrive3->setChecked(options.canFormatDrive[3]);
+    c_canFormatDrive0->setChecked(options.canFormatDrives[0]);
+    c_canFormatDrive1->setChecked(options.canFormatDrives[1]);
+    c_canFormatDrive2->setChecked(options.canFormatDrives[2]);
+    c_canFormatDrive3->setChecked(options.canFormatDrives[3]);
 
     if (options.isRamExtension)
     {
@@ -234,17 +269,17 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
     r_eurocom2v7->setChecked(!options.isEurocom2V5);
 
     r_frequencySet->setChecked(true);
-    if (options.frequency < 0.0f)
+    if (options.frequency < 0.0F)
     {
         r_frequencyOriginal->setChecked(true);
     }
-    else if (options.frequency == 0.0f)
+    else if (options.frequency == 0.0F)
     {
         r_frequencyFast->setChecked(true);
     }
     else
     {
-        QString frequency_string = englishUS.toString(options.frequency);
+        QString frequency_string = QLocale::c().toString(options.frequency);
 
         r_frequencySet->setChecked(true);
         e_frequency->setText(frequency_string);
@@ -256,8 +291,32 @@ void FlexemuOptionsUi::TransferDataToDialog(const struct sOptions &options)
 
     c_isDisplaySmooth->setChecked(options.isSmooth != 0);
 
+    r_scrollingTerminal->setChecked(options.terminalType == 1);
+    r_ncursesTerminal->setChecked(options.terminalType == 2);
     c_terminalIgnoreNUL->setChecked(options.isTerminalIgnoreNUL);
     c_terminalIgnoreESC->setChecked(options.isTerminalIgnoreESC);
+
+    index = 0;
+    int selected_index = 0;
+    cb_diskFormat->addItem(tr("[Set Tracks and Sectors]"), index);
+    for (const auto *description : flex_format_descriptions)
+    {
+        if (flex_formats[index].trk + 1 == options.directoryDiskTracks &&
+            flex_formats[index].sec == options.directoryDiskSectors)
+        {
+            selected_index = index + 1;
+        }
+
+        cb_diskFormat->addItem(description, ++index);
+    }
+    cb_diskFormat->setMaxVisibleItems(cb_diskFormat->count());
+    cb_diskFormat->setCurrentIndex(selected_index);
+
+    e_tracks->setValue(options.directoryDiskTracks);
+    e_sectors->setValue(options.directoryDiskSectors);
+
+    c_isDirectoryDiskActive->setChecked(true);
+    c_isDirectoryDiskActive->setChecked(options.isDirectoryDiskActive);
 
     SetOptionsReadOnly(readOnlyOptions);
 }
@@ -388,6 +447,33 @@ void FlexemuOptionsUi::SetOptionsReadOnly(const std::vector<FlexemuOptionId>
             case FlexemuOptionId::IsTerminalIgnoreNUL:
                 c_terminalIgnoreNUL->setEnabled(false);
                 break;
+
+            case FlexemuOptionId::TerminalType:
+                r_scrollingTerminal->setEnabled(false);
+                r_ncursesTerminal->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::IsDirectoryDiskActive:
+                c_isDirectoryDiskActive->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::DirectoryDiskTrkSec:
+                e_tracks->setEnabled(false);
+                e_sectors->setEnabled(false);
+                break;
+
+            case FlexemuOptionId::PrintFont:
+            case FlexemuOptionId::IsPrintPageBreakDetected:
+            case FlexemuOptionId::PrintOrientation:
+            case FlexemuOptionId::PrintPageSize:
+            case FlexemuOptionId::PrintUnit:
+            case FlexemuOptionId::PrintOutputWindowGeometry:
+            case FlexemuOptionId::PrintPreviewDialogGeometry:
+            case FlexemuOptionId::PrintConfigs:
+            case FlexemuOptionId::IconSize:
+            case FlexemuOptionId::IsStatusBarVisible:
+            case FlexemuOptionId::IsConfirmExit:
+                break;
         }
     }
 }
@@ -405,7 +491,10 @@ std::vector<FlexemuOptionId> FlexemuOptionsUi::AddDependentReadOnlyOptions(
         }
     };
 
-    do {
+    // Loop at least has to be executed once.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
+    do
+    {
         for (auto readOnlyOptionId : result)
         {
             dependents.clear();
@@ -440,6 +529,8 @@ std::vector<FlexemuOptionId> FlexemuOptionsUi::AddDependentReadOnlyOptions(
                 case FlexemuOptionId::MdcrDrive0:
                 case FlexemuOptionId::MdcrDrive1:
                 case FlexemuOptionId::IsUseRtc:
+                case FlexemuOptionId::IsDirectoryDiskActive:
+                case FlexemuOptionId::DirectoryDiskTrkSec:
                     addDependent(FlexemuOptionId::IsEurocom2V5);
                     break;
 
@@ -455,6 +546,11 @@ std::vector<FlexemuOptionId> FlexemuOptionsUi::AddDependentReadOnlyOptions(
                     addDependent(FlexemuOptionId::IsRamExt2x288);
                     break;
 
+                case FlexemuOptionId::TerminalType:
+                    addDependent(FlexemuOptionId::IsTerminalIgnoreESC);
+                    addDependent(FlexemuOptionId::IsTerminalIgnoreNUL);
+                    break;
+
                 case FlexemuOptionId::DiskDirectory:
                 case FlexemuOptionId::HexFile:
                 case FlexemuOptionId::IsEurocom2V5:
@@ -464,15 +560,25 @@ std::vector<FlexemuOptionId> FlexemuOptionsUi::AddDependentReadOnlyOptions(
                 case FlexemuOptionId::PixelSize:
                 case FlexemuOptionId::FileTimeAccess:
                 case FlexemuOptionId::IsDisplaySmooth:
+                case FlexemuOptionId::IsConfirmExit:
                 case FlexemuOptionId::IsTerminalIgnoreESC:
                 case FlexemuOptionId::IsTerminalIgnoreNUL:
+                case FlexemuOptionId::PrintFont:
+                case FlexemuOptionId::IsPrintPageBreakDetected:
+                case FlexemuOptionId::PrintOrientation:
+                case FlexemuOptionId::PrintPageSize:
+                case FlexemuOptionId::PrintUnit:
+                case FlexemuOptionId::PrintOutputWindowGeometry:
+                case FlexemuOptionId::PrintPreviewDialogGeometry:
+                case FlexemuOptionId::PrintConfigs:
+                case FlexemuOptionId::IconSize:
+                case FlexemuOptionId::IsStatusBarVisible:
                     break;
             }
         }
 
         std::copy(dependents.begin(), dependents.end(),
                 std::back_inserter(result));
-
     } while (!dependents.empty());
 
     return result;
@@ -495,8 +601,17 @@ void FlexemuOptionsUi::setupUi(QDialog *p_dialog)
     // visible. It is just a rough estimation.
     QFontMetrics metrics(dialog->font());
     e_drive2->setMinimumWidth(metrics.boundingRect('x').width() * 52);
+
 #ifdef _WIN32
-    c_tabWidget->removeTab(4); // On Windows there is no terminal mode
+    // On Windows hide terminal Tab because there is no terminal mode.
+    for (int index = 0; index < c_tabWidget->count(); ++index)
+    {
+        if (c_tabWidget->tabText(index) == "Terminal")
+        {
+            c_tabWidget->setTabVisible(index, false);
+            break;
+        }
+    }
 #endif
 }
 
@@ -521,13 +636,14 @@ bool FlexemuOptionsUi::Validate()
         c_tabWidget->setCurrentIndex(0);
         e_frequency->setFocus(Qt::OtherFocusReason);
         e_frequency->setSelection(0, 20);
-        auto validator =
-            static_cast<const QDoubleValidator *>(e_frequency->validator());
+        const auto *validator =
+            dynamic_cast<const QDoubleValidator *>(e_frequency->validator());
 
-        auto message = QString::asprintf(
-                              "CPU Frequency is not in the valid\n"
-                              "range of %.1f ... %.1f MHz",
-                              validator->bottom(), validator->top());
+        assert(validator != nullptr);
+        auto message = tr("CPU Frequency is not in the valid\n"
+                          "range of %1 ... %2 MHz")
+                          .arg(validator->bottom(), 0, 'f', 1)
+                          .arg(validator->top(), 0, 'f', 1);
         QMessageBox::critical(dialog, tr("FSetup Error"), message);
 
         return false;
@@ -563,7 +679,7 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
     if (!IsReadOnly(FlexemuOptionId::NColors) &&
         !IsReadOnly(FlexemuOptionId::Color))
     {
-        auto n = cb_nColors->currentText().toUInt(&success);
+        auto n = cb_nColors->currentText().toInt(&success);
         options.nColors = (success ? n : 2);
 
         if (c_multiColorScheme->isChecked() && cb_nColors->currentIndex() > 0)
@@ -574,21 +690,26 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
         {
             options.color = cb_color->currentText().toStdString();
 
-            for (size_t i = 0; i < color_count; i++)
+            for (size_t i = 0; i < flx::color_count; i++)
             {
-                auto colorName = tr(colors[i].colorName);
+                auto colorName = tr(flx::colors[i].colorName);
 
                 if (colorName == cb_color->currentText())
                 {
-                    options.color = colors[i].colorName;
+                    options.color = flx::colors[i].colorName;
                 }
             }
         }
     }
 
-    if (!IsReadOnly(FlexemuOptionId::PixelSize))
+    if (!IsReadOnly(FlexemuOptionId::IsInverse))
     {
         options.isInverse = c_isInverse->isChecked();
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::IsConfirmExit))
+    {
+        options.isConfirmExit = c_isConfirmExit->isChecked();
     }
 
     if (!IsReadOnly(FlexemuOptionId::IsUseUndocumented))
@@ -598,55 +719,63 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
 
     if (!IsReadOnly(FlexemuOptionId::DiskDirectory))
     {
-        options.disk_dir = e_diskMonitorDir->text().toStdString();
+        options.disk_dir =
+            QDir::toNativeSeparators(e_diskMonitorDir->text()).toStdString();
     }
 
     if (!IsReadOnly(FlexemuOptionId::DiskDirectory))
     {
-        options.hex_file = e_monitorPgm->text().toStdString();
+        options.hex_file =
+            QDir::toNativeSeparators(e_monitorPgm->text()).toStdString();
     }
 
     if (!IsReadOnly(FlexemuOptionId::Drive0))
     {
-        options.drive[0] = e_drive0->text().toStdString();
+        options.drives[0] =
+            QDir::toNativeSeparators(e_drive0->text()).toStdString();
     }
     if (!IsReadOnly(FlexemuOptionId::Drive1))
     {
-        options.drive[1] = e_drive1->text().toStdString();
+        options.drives[1] =
+            QDir::toNativeSeparators(e_drive1->text()).toStdString();
     }
     if (!IsReadOnly(FlexemuOptionId::Drive2))
     {
-        options.drive[2] = e_drive2->text().toStdString();
+        options.drives[2] =
+            QDir::toNativeSeparators(e_drive2->text()).toStdString();
     }
     if (!IsReadOnly(FlexemuOptionId::Drive3))
     {
-        options.drive[3] = e_drive3->text().toStdString();
+        options.drives[3] =
+            QDir::toNativeSeparators(e_drive3->text()).toStdString();
     }
 
     if (!IsReadOnly(FlexemuOptionId::CanFormatDrive0))
     {
-        options.canFormatDrive[0] = c_canFormatDrive0->isChecked();
+        options.canFormatDrives[0] = c_canFormatDrive0->isChecked();
     }
     if (!IsReadOnly(FlexemuOptionId::CanFormatDrive1))
     {
-        options.canFormatDrive[1] = c_canFormatDrive1->isChecked();
+        options.canFormatDrives[1] = c_canFormatDrive1->isChecked();
     }
     if (!IsReadOnly(FlexemuOptionId::CanFormatDrive2))
     {
-        options.canFormatDrive[2] = c_canFormatDrive2->isChecked();
+        options.canFormatDrives[2] = c_canFormatDrive2->isChecked();
     }
     if (!IsReadOnly(FlexemuOptionId::CanFormatDrive3))
     {
-        options.canFormatDrive[3] = c_canFormatDrive3->isChecked();
+        options.canFormatDrives[3] = c_canFormatDrive3->isChecked();
     }
 
     if (!IsReadOnly(FlexemuOptionId::MdcrDrive0))
     {
-        options.mdcrDrives[0] = e_mdcrDrive0->text().toStdString();
+        options.mdcrDrives[0] =
+            QDir::toNativeSeparators(e_mdcrDrive0->text()).toStdString();
     }
     if (!IsReadOnly(FlexemuOptionId::MdcrDrive1))
     {
-        options.mdcrDrives[1] = e_mdcrDrive1->text().toStdString();
+        options.mdcrDrives[1] =
+            QDir::toNativeSeparators(e_mdcrDrive1->text()).toStdString();
     }
 
     if (!IsReadOnly(FlexemuOptionId::IsRamExt2x96) &&
@@ -681,17 +810,18 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
     {
         if (r_frequencyOriginal->isChecked())
         {
-                options.frequency = -1.0f;
+                options.frequency = -1.0F;
         }
         else if (r_frequencyFast->isChecked())
         {
-                options.frequency = 0.0f;
+                options.frequency = 0.0F;
         }
         else if (r_frequencySet->isChecked())
         {
             // success == false should be prevented by Validate().
-            auto frequency = englishUS.toFloat(e_frequency->text(), &success);
-            options.frequency = (success ? frequency : -1.0f);
+            auto frequency =
+                QLocale::c().toFloat(e_frequency->text(), &success);
+            options.frequency = (success ? frequency : -1.0F);
         }
     }
 
@@ -706,6 +836,21 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
         options.isSmooth = c_isDisplaySmooth->isChecked();
     }
 
+    if (!IsReadOnly(FlexemuOptionId::TerminalType))
+    {
+        options.terminalType = 0;
+
+        if (r_scrollingTerminal->isChecked())
+        {
+            options.terminalType = 1;
+        }
+        else if (r_ncursesTerminal->isChecked())
+        {
+            options.terminalType = 2;
+        }
+    }
+
+
     if (!IsReadOnly(FlexemuOptionId::IsTerminalIgnoreNUL))
     {
         options.isTerminalIgnoreNUL = c_terminalIgnoreNUL->isChecked();
@@ -714,6 +859,17 @@ void FlexemuOptionsUi::TransferDataFromDialog(struct sOptions &options)
     if (!IsReadOnly(FlexemuOptionId::IsTerminalIgnoreESC))
     {
         options.isTerminalIgnoreESC = c_terminalIgnoreESC->isChecked();
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::DirectoryDiskTrkSec))
+    {
+        options.directoryDiskTracks = e_tracks->value();
+        options.directoryDiskSectors = e_sectors->value();
+    }
+
+    if (!IsReadOnly(FlexemuOptionId::IsDirectoryDiskActive))
+    {
+        options.isDirectoryDiskActive = c_isDirectoryDiskActive->isChecked();
     }
 }
 
@@ -755,11 +911,12 @@ void FlexemuOptionsUi::OnSelectFile(QLineEdit &lineEdit, FileType type)
 
     switch (type)
     {
-        case FileType::DiskContainerFile:
+        case FileType::FlexDiskFile:
             filter = "*.dsk";
             path = QFileDialog::getOpenFileName(
-                dialog, tr("Select a Disk file"), path,
-                tr("FLEX file containers (*.dsk *.flx *.wta);;All files (*.*)"),
+                dialog, tr("Select a Disk image file"), path,
+                tr("FLEX disk image files (*.dsk *.flx *.wta);;"
+                   "All files (*.*)"),
                 &filter);
             break;
 
@@ -775,7 +932,8 @@ void FlexemuOptionsUi::OnSelectFile(QLineEdit &lineEdit, FileType type)
             filter = "*.hex";
             path = QFileDialog::getOpenFileName(
                 dialog, tr("Select a monitor program"), path,
-                tr("Intel HEX files (*.hex);;"
+                tr("All monitor files (*.hex *.s19 *.srec *.mot *.cmd *.bin);;"
+                    "Intel HEX files (*.hex);;"
                     "Motorola S-Record files (*.s19 *.srec *.mot);;"
                     "FLEX binary files (*.cmd *.bin);;"
                     "All files (*.*)"),
@@ -783,6 +941,7 @@ void FlexemuOptionsUi::OnSelectFile(QLineEdit &lineEdit, FileType type)
             break;
     }
 
+    path = QDir::toNativeSeparators(path);
     path = GetRelativePath(diskDir, path);
 
     if (!path.isEmpty())
@@ -828,6 +987,9 @@ void FlexemuOptionsUi::UpdateHardwareDependencies()
     c_canFormatDrive2->setEnabled(r_eurocom2v7->isChecked());
     c_canFormatDrive3->setEnabled(r_eurocom2v7->isChecked());
 
+    c_isDirectoryDiskActive->setEnabled(r_eurocom2v7->isChecked());
+    cb_diskFormat->setEnabled(r_eurocom2v7->isChecked());
+
     UpdateRamDependencies();
 }
 
@@ -868,7 +1030,9 @@ void FlexemuOptionsUi::OnFrequencyOriginal(bool value)
 {
     if (value)
     {
-        auto text = QString(std::to_string(ORIGINAL_FREQUENCY).c_str());
+        bool ok;
+        auto text = QString::fromStdString(
+                    flx::toString<float>(ORIGINAL_FREQUENCY, ok));
 
         e_frequency->setText(text);
     }
@@ -900,9 +1064,9 @@ void FlexemuOptionsUi::OnNColorsChanged(int /* index */)
 
 void FlexemuOptionsUi::AddFrequencyValidator(QLineEdit &lineEdit)
 {
-    auto validator = new QDoubleValidator(0.1, 10000.0, 6, &lineEdit);
+    auto *validator = new QDoubleValidator(0.1, 10000.0, 6, &lineEdit);
 
-    validator->setLocale(englishUS);
+    validator->setLocale(QLocale::c());
     validator->setNotation(QDoubleValidator::StandardNotation);
     lineEdit.setValidator(validator);
 }
@@ -970,5 +1134,80 @@ int FlexemuOptionsUi::GetTabIndex() const
     }
 
     return c_tabWidget->currentIndex();
+}
+
+void FlexemuOptionsUi::OnFormatChanged(int index)
+{
+    bool isFreeDiskFormat = (index == 0);
+
+    if (!isFreeDiskFormat)
+    {
+        auto trk_sec = flex_formats[index - 1];
+        e_tracks->setValue(trk_sec.trk + 1);
+        e_sectors->setValue(trk_sec.sec);
+    }
+
+    e_tracks->setEnabled(isFreeDiskFormat);
+    e_sectors->setEnabled(isFreeDiskFormat);
+}
+
+void FlexemuOptionsUi::OnSectorChanged(int sectors)
+{
+    OnTrkSecChanged(e_tracks->value(), sectors);
+}
+
+void FlexemuOptionsUi::OnTrackChanged(int tracks)
+{
+    OnTrkSecChanged(tracks, e_sectors->value());
+}
+
+void FlexemuOptionsUi::OnTrkSecChanged(int tracks, int sectors)
+{
+    bool isWarning = true;
+    for (const auto &st : flex_formats)
+    {
+        if ((st.trk + 1) == tracks && st.sec == sectors)
+        {
+            isWarning = false;
+            break;
+        }
+    }
+
+    static const auto msg = tr("Uncommon FLEX disk format. "
+                               "This may cause compatibility issues!");
+    auto richText = QString("<p style=\"color:orange\">%1</p>").arg(msg);
+    l_formatWarning->setText(isWarning ? richText : "");
+}
+
+void FlexemuOptionsUi::OnDirectoryDiskActiveChanged(bool isActive)
+{
+    cb_diskFormat->setEnabled(isActive);
+
+    if (isActive)
+    {
+        OnFormatChanged(cb_diskFormat->currentIndex());
+    }
+    else
+    {
+        e_tracks->setEnabled(isActive);
+        e_sectors->setEnabled(isActive);
+    }
+}
+
+void FlexemuOptionsUi::OnTerminalTypeChanged(TerminalType type)
+{
+    switch (type)
+    {
+        case TerminalType::Scrolling:
+            c_terminalIgnoreESC->setEnabled(true);
+            break;
+
+        case TerminalType::NCurses:
+            c_terminalIgnoreESC->setEnabled(false);
+            break;
+
+        case TerminalType::Dummy:
+            break;
+    }
 }
 

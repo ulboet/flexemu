@@ -66,7 +66,16 @@
     <ClCompile Include="efslctle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="fdoptman.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="flblfile.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="foptman.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fversion.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="inout.cpp">
@@ -94,6 +103,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="mc6809in.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mc6809lg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="mc6809st.cpp">
@@ -126,6 +138,9 @@
     <ClCompile Include="sodiff.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="soptions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="terminal.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -147,10 +162,37 @@
     <ClCompile Include="fsetupui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="qtfree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="qtgui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pagedet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pagedetd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="poutwin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="poverhlp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="termimpc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="termimpd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="termimpf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="termimps.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -165,6 +207,9 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="asciictl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="absdisas.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -187,9 +232,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="benv.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="bfileptr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="binifile.h">
@@ -222,6 +264,9 @@
     <ClInclude Include="bregistr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="bscopeex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="btime.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -234,7 +279,13 @@
     <ClInclude Include="cacttrns.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cistring.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="clogfile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="colors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="command.h">
@@ -276,6 +327,9 @@
     <ClInclude Include="efiletim.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fattrib.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="fcinfo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -286,6 +340,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fdirent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fdoptman.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ffilebuf.h">
@@ -306,6 +363,9 @@
     <ClInclude Include="fileread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="flblfile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="flexemu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -313,6 +373,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="foptman.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fversion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="idircnt.h">
@@ -328,9 +391,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="inout.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ioaccess.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="iodevdbg.h">
@@ -349,6 +409,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mc6809.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mc6809lg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mc6809st.h">
@@ -399,6 +462,9 @@
     <ClInclude Include="rfilecnt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="rndcheck.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="schedcpu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -414,7 +480,19 @@
     <ClInclude Include="soptions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sprinter.h">
+    <ClInclude Include="termimpc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="termimpd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="termimpf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="termimpi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="termimps.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="terminal.h">
@@ -447,6 +525,18 @@
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="pagedet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pagedetd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="poverhlp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="qtfree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="brkptui.h">
@@ -467,6 +557,9 @@
     <CustomBuild Include="qtgui.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="about.ui">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
     <CustomBuild Include="brkpt.ui">
       <Filter>Resource Files</Filter>
     </CustomBuild>
@@ -482,7 +575,13 @@
     <CustomBuild Include="logfil.ui">
       <Filter>Resource Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="pprev.ui">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
     <CustomBuild Include="fsetupui.h">
+      <Filter>Header Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="poutwin.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
   </ItemGroup>

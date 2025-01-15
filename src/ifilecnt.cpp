@@ -2,7 +2,7 @@
     ifilecnt.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "misc1.h"  // needed for nullptr
 #include "filecont.h"
 #include "ifilecnt.h"
 #include "ifilcnti.h"
@@ -34,29 +33,24 @@
 
    Example:
 
-   FileContainerIf *m_container = new FlexFileContainer(...);
-   FileContainerIterator it("*.*");
+   IFlexDiskByFile *diskImage = new FlexDisk(...);
+   FlexDiskIterator it("*.*");
    std::string fileName;
    int i = 0;
 
-   for (it = m_container->begin(); it != m_container->end(); ++it)
+   for (it = diskImage->begin(); it != diskImage->end(); ++it)
    {
       fileName = (*it).GetTotalFileName();
       printf("%d. file: %s\n", ++i, fileName);
    }
 */
 
-FileContainerIterator::FileContainerIterator(const char
-        *aFilePattern/* = "*.*" */) :
-    filePattern(aFilePattern)
+FlexDiskIterator::FlexDiskIterator(std::string p_wildcard /* = "*.*" */)
+    : wildcard(std::move(p_wildcard))
 {
 }
 
-FileContainerIterator::~FileContainerIterator()
-{
-}
-
-FlexDirEntry &FileContainerIterator::operator*()
+FlexDirEntry &FlexDiskIterator::operator*()
 {
     if (imp != nullptr)
     {
@@ -67,7 +61,7 @@ FlexDirEntry &FileContainerIterator::operator*()
     throw FlexException(FERR_INVALID_ITERATOR_USE);
 }
 
-FlexDirEntry *FileContainerIterator::operator->()
+FlexDirEntry *FlexDiskIterator::operator->()
 {
     if (imp != nullptr)
     {
@@ -79,40 +73,42 @@ FlexDirEntry *FileContainerIterator::operator->()
 
 }
 
-bool FileContainerIterator::operator==(const FileContainerIf *aBase) const
+bool FlexDiskIterator::operator==(const IFlexDiskByFile *base) const
 {
     if (imp == nullptr)
     {
-        return aBase == nullptr;
+        return base == nullptr;
     }
 
-    return imp->operator==(aBase);
+    return imp->operator==(base);
 }
 
-bool FileContainerIterator::operator!=(const FileContainerIf *aBase) const
+bool FlexDiskIterator::operator!=(const IFlexDiskByFile *base) const
 {
     if (imp == nullptr)
     {
-        return aBase != nullptr;
+        return base != nullptr;
     }
 
-    return !(imp->operator==(aBase));
+    return !(imp->operator==(base));
 }
 
-FileContainerIterator &FileContainerIterator::operator++()
+FlexDiskIterator &FlexDiskIterator::operator++()
 {
     if (imp != nullptr)
-        if (!imp->NextDirEntry(filePattern.c_str()))
+    {
+        if (!imp->NextDirEntry(wildcard))
         {
             imp->AtEnd();
         }
+    }
 
     return *this;
 }
 
-FileContainerIterator &FileContainerIterator::operator=(FileContainerIf *aBase)
+FlexDiskIterator &FlexDiskIterator::operator=(IFlexDiskByFile *base)
 {
-    if (aBase == nullptr)
+    if (base == nullptr)
     {
         throw FlexException(FERR_INVALID_ITERATOR_USE);
     }
@@ -122,9 +118,9 @@ FileContainerIterator &FileContainerIterator::operator=(FileContainerIf *aBase)
         imp->AtEnd();
     }
 
-    imp = aBase->IteratorFactory();
+    imp = base->IteratorFactory();
 
-    if (!imp->NextDirEntry(filePattern.c_str()))
+    if (!imp->NextDirEntry(wildcard))
     {
         imp->AtEnd();
     }
@@ -132,7 +128,7 @@ FileContainerIterator &FileContainerIterator::operator=(FileContainerIf *aBase)
     return *this;
 }
 
-bool FileContainerIterator::DeleteCurrent()
+bool FlexDiskIterator::DeleteCurrent()
 {
     if (imp == nullptr)
     {
@@ -142,7 +138,7 @@ bool FileContainerIterator::DeleteCurrent()
     return imp->DeleteCurrent();
 }
 
-bool FileContainerIterator::RenameCurrent(const char *newName)
+bool FlexDiskIterator::RenameCurrent(const std::string &newName)
 {
     if (imp == nullptr)
     {
@@ -152,7 +148,7 @@ bool FileContainerIterator::RenameCurrent(const char *newName)
     return imp->RenameCurrent(newName);
 }
 
-bool FileContainerIterator::SetDateCurrent(const BDate &date)
+bool FlexDiskIterator::SetDateCurrent(const BDate &date)
 {
     if (imp == nullptr)
     {
@@ -162,7 +158,7 @@ bool FileContainerIterator::SetDateCurrent(const BDate &date)
     return imp->SetDateCurrent(date);
 }
 
-bool FileContainerIterator::SetAttributesCurrent(Byte attributes)
+bool FlexDiskIterator::SetAttributesCurrent(Byte attributes)
 {
     if (imp == nullptr)
     {

@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,10 +38,11 @@ class SelectAllOnFocusInLE : public QObject
 
 public:
     SelectAllOnFocusInLE() = delete;
-    SelectAllOnFocusInLE(QLineEdit &p_widget, QObject *parent = Q_NULLPTR);
+    explicit SelectAllOnFocusInLE(QLineEdit &p_widget,
+            QObject *parent = Q_NULLPTR);
 
 protected:
-    bool eventFilter(QObject *object, QEvent *event);
+    bool eventFilter(QObject *object, QEvent *event) override;
     void DoSelectAll();
 
 private:

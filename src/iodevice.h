@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ public:
     virtual void resetIo() = 0;
     virtual const char *getName() = 0;
     virtual Word sizeOfIo() = 0;
-    virtual ~IoDevice() { };
+    virtual ~IoDevice() = default;
 };
 
 #endif // IODEVICE_INCLUDED

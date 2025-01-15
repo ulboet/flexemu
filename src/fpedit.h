@@ -2,8 +2,8 @@
     fpedit.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 
 #include "efiletim.h"
 #include "warnoff.h"
+#include <QString>
 #include <QStringList>
 #include <QStyledItemDelegate>
 #include <QRegularExpressionValidator>
@@ -40,13 +41,13 @@ class FlexRegularExpressionValidator : public QRegularExpressionValidator
 {
 public:
     FlexRegularExpressionValidator() = delete;
-    FlexRegularExpressionValidator(const QRegularExpression &regex,
+    explicit FlexRegularExpressionValidator(const QRegularExpression &regex,
                                    QObject *parent = Q_NULLPTR,
-                                   const QVector<QString> &filenames = { });
+                                   QStringList filenames = { });
     QValidator::State validate(QString &input, int &pos) const override;
 
 private:
-    QVector<QString> filenames;
+    QStringList filenames;
 };
 
 // Delegate to edit date and time.
@@ -144,7 +145,7 @@ public:
                               const QStyleOptionViewItem &option,
                               const QModelIndex &index) const override;
 
-    static QStringList GetAllCombinations(const QString &supportedAttributes);
+    static QStringList GetAllCombinations(const QString &attributes);
 
 private:
     static void GetCombinations(const QString &chars, int length, int start,

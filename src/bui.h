@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,18 +26,21 @@
 
 #include "efslctle.h"
 #include "warnoff.h"
+#include <QString>
 #include <QLineEdit>
+#include <QLatin1Char>
 #include "warnon.h"
 
 
 extern void InstallSelectionEventFilter(QLineEdit &lineEdit, QObject *parent);
 
 template<class T1, class T2>
-void SetData(T1 value, T2 &widget)
+void SetData(T1 opt_value, T2 &widget)
 {
-    if (value <= 0xFFFF)
+    if (opt_value.has_value())
     {
-        widget.setText(QString::asprintf("%04X", value));
+        widget.setText(QString("%1").arg(opt_value.value(), 4, 16,
+                       QLatin1Char('0')));
     }
     else
     {
@@ -48,16 +51,16 @@ void SetData(T1 value, T2 &widget)
 template<class T1, class T2>
 T1 GetData(T2 &widget)
 {
-    T1 value;
+    T1 opt_value;
     bool isSuccess;
 
-    value = widget.text().toUInt(&isSuccess, 16);
-    if (!isSuccess)
+    auto value = widget.text().toUInt(&isSuccess, 16);
+    if (isSuccess)
     {
-        value = 0x10000;
+        opt_value = static_cast<typename T1::value_type>(value);
     }
 
-    return value;
+    return opt_value;
 }
 
 #endif

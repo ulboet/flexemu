@@ -2,8 +2,8 @@
     bregistr.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022 W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,16 +28,16 @@
 #include <memory>
 
 
-BRegistry BRegistry::classesRoot    = HKEY_CLASSES_ROOT;
-BRegistry BRegistry::currentUser    = HKEY_CURRENT_USER;
-BRegistry BRegistry::localMachine   = HKEY_LOCAL_MACHINE;
-BRegistry BRegistry::users          = HKEY_USERS;
+BRegistry BRegistry::classesRoot = HKEY_CLASSES_ROOT;
+BRegistry BRegistry::currentUser = HKEY_CURRENT_USER;
+BRegistry BRegistry::localMachine = HKEY_LOCAL_MACHINE;
+BRegistry BRegistry::users = HKEY_USERS;
 
 BRegistry::BRegistry() : lastError(0), hKey(nullptr)
 {
 }
 
-BRegistry::BRegistry(HKEY aHKey) :  lastError(0), hKey(aHKey)
+BRegistry::BRegistry(HKEY p_hKey) :  lastError(0), hKey(p_hKey)
 {
 }
 
@@ -99,18 +99,18 @@ LONG BRegistry::SetValue(const std::string &name, const BYTE *value, int size)
 
 LONG BRegistry::GetValue(const std::string &name, std::string &value)
 {
-    DWORD aSize;
+    DWORD size;
     DWORD type;
 
     if ((lastError = RegQueryValueEx(hKey, ConvertToUtf16String(name).c_str(),
-                                     0, &type, nullptr, &aSize))
+                                     0, &type, nullptr, &size))
                      == ERROR_SUCCESS)
     {
         auto buffer =
-            std::unique_ptr<wchar_t>(new wchar_t[aSize / sizeof(wchar_t)]);
+            std::unique_ptr<wchar_t>(new wchar_t[size / sizeof(wchar_t)]);
 
         lastError = RegQueryValueEx(hKey, ConvertToUtf16String(name).c_str(),
-                                    0, &type, (BYTE *)buffer.get(), &aSize);
+                                    0, &type, (BYTE *)buffer.get(), &size);
 
         if (lastError == ERROR_SUCCESS)
         {
@@ -123,11 +123,11 @@ LONG BRegistry::GetValue(const std::string &name, std::string &value)
 
 LONG BRegistry::GetValue(const std::string &name, int &value)
 {
-    DWORD aSize(sizeof(DWORD));
+    DWORD size(sizeof(DWORD));
     DWORD type;
 
     lastError = RegQueryValueEx(hKey, ConvertToUtf16String(name).c_str(), 0,
-        &type, (BYTE *)&value, &aSize);
+        &type, (BYTE *)&value, &size);
 
     return lastError;
 }
@@ -135,6 +135,51 @@ LONG BRegistry::GetValue(const std::string &name, int &value)
 LONG BRegistry::DeleteValue(const std::string &name)
 {
     lastError = RegDeleteValue(hKey, ConvertToUtf16String(name).c_str());
+
+    return lastError;
+}
+
+LONG BRegistry::GetValues(const std::string &keyPrefix,
+        std::map<std::string, std::string> &values)
+{
+    const DWORD size(16384);
+    DWORD keySize;
+    DWORD index = 0U;
+    DWORD type;
+    bool isFinished = false;
+    const auto lcKeyPrefix = flx::tolower(keyPrefix);
+    auto keyBuf =
+        std::unique_ptr<wchar_t>(new wchar_t[size * sizeof(wchar_t)]);
+
+    while (!isFinished)
+    {
+        keySize = size;
+        lastError = RegEnumValue(hKey, index, keyBuf.get(), &keySize, nullptr,
+                                 &type, nullptr, nullptr);
+        if (lastError == ERROR_SUCCESS && type == REG_SZ)
+        {
+            auto key = ConvertToUtf8String(keyBuf.get());
+            if (key.size() > keyPrefix.size())
+            {
+                std::string value;
+                const auto lcPrefixOfKey =
+                    flx::tolower(key.substr(0, keyPrefix.size()));
+                if (lcKeyPrefix.compare(lcPrefixOfKey) == 0 &&
+                    GetValue(key, value) == ERROR_SUCCESS)
+                {
+                    auto subKey = key.substr(keyPrefix.size());
+                    values[subKey] = value;
+                }
+            }
+        }
+
+        if (lastError == ERROR_NO_MORE_ITEMS)
+        {
+            isFinished = true;
+            lastError = ERROR_SUCCESS;
+        }
+        ++index;
+    }
 
     return lastError;
 }

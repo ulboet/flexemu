@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,16 +20,17 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+#include "typedefs.h"
 #include "iodevdbg.h"
-#include "misc1.h"
 #include <fstream>
-#include <iomanip>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
-IoDeviceDebug::IoDeviceDebug(IoDevice &x_device,
-                             const std::string &x_logFilePath) :
-      device(x_device)
-    , logFilePath(x_logFilePath)
+IoDeviceDebug::IoDeviceDebug(IoDevice &p_device, std::string p_logFilePath)
+    : device(p_device)
+    , logFilePath(std::move(p_logFilePath))
 {
     std::ofstream fstream(logFilePath,
                           std::ios_base::out | std::ios_base::trunc);
@@ -41,8 +42,8 @@ IoDeviceDebug::IoDeviceDebug(IoDevice &x_device,
     }
 }
 
-IoDeviceDebug::IoDeviceDebug(IoDeviceDebug &&src) :
-      device(src.device)
+IoDeviceDebug::IoDeviceDebug(IoDeviceDebug &&src) noexcept
+    : device(src.device)
     , logFilePath(std::move(src.logFilePath))
 {
 }
@@ -55,12 +56,9 @@ Byte IoDeviceDebug::readIo(Word offset)
 
     if (fstream.is_open())
     {
-        fstream << "mode=read"
-                << "  offset=" << std::setw(2) << offset
-                << " result=" << tohexstr(result)
-                << " device=" << std::string(device.getName())
-                << std::endl;
-
+        fstream << fmt::format(
+                "mode=read  offset={:2} result={:02X} device={}\n",
+                offset, static_cast<Word>(result), device.getName());
         fstream.close();
     }
 
@@ -75,12 +73,9 @@ void IoDeviceDebug::writeIo(Word offset, Byte value)
 
     if (fstream.is_open())
     {
-        fstream << "mode=write"
-                << " offset=" << std::setw(2) << offset
-                << " value=" << tohexstr(value)
-                << "  device=" << std::string(device.getName())
-                << std::endl;
-
+        fstream << fmt::format(
+                "mode=write offset={:2} value={:02X}  device={}\n",
+                offset, static_cast<Word>(value), device.getName());
         fstream.close();
     }
 }
@@ -95,7 +90,7 @@ void IoDeviceDebug::resetIo()
     {
 
         fstream << "mode=reset device=" << std::string(device.getName())
-                << std::endl;
+                << '\n';
 
         fstream.close();
     }

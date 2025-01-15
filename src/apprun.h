@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +25,6 @@
 #ifndef APPRUN_INCLUDED
 #define APPRUN_INCLUDED
 
-#include "misc1.h"
 #include "memory.h"
 #include "mc6809.h"
 #include "da6809.h"
@@ -33,6 +32,7 @@
 #include "schedule.h"
 #include "joystick.h"
 #include "keyboard.h"
+#include "termimpi.h"
 #include "terminal.h"
 #include "mmu.h"
 #include "acia1.h"
@@ -52,6 +52,7 @@
 #include <map>
 #include <thread>
 
+class QApplication;
 
 struct sOptions;
 
@@ -60,9 +61,9 @@ class ApplicationRunner
 public:
     ApplicationRunner() = delete;
     ~ApplicationRunner();
-    ApplicationRunner(struct sOptions &x_options);
+    ApplicationRunner(struct sOptions &p_options, ITerminalImplPtr &&termImpl);
 
-    int startup();
+    int startup(QApplication &app);
     void cleanup();
 
 private:

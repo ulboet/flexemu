@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,48 +20,54 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-
-#include <stdio.h>
-
 #include "misc1.h"
 #include "mc146818.h"
-#include "mc6809.h"
-#include "bfileptr.h"
+#include <array>
+#include <fstream>
+#include <ctime>
+#include <cstring>
+#include <filesystem>
+#include <sys/stat.h>
 
-Byte last_day[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-Mc146818::Mc146818() :
-    al_second(0), al_minute(0), al_hour(0),
-    A(0), B(0), C(0), D(0),
-    path("")
+namespace fs = std::filesystem;
+
+static const std::array<Byte, 12> days_per_month{
+    31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+};
+
+static const char * const OLDCONFIGBIN = ".mc146818";
+static const char * const CONFIGBIN = "mc146818.bin";
+
+Mc146818::Mc146818()
 {
-    struct tm   *lt;
-    time_t       time_now;
-    const char* home = getFileName();
+    const auto path = getConfigFilePath(Config::NewOrOld);
 
-    if (home[0] != '\0')
+    if (!path.empty())
     {
-        BFilePtr fp(home, "rb");
+        std::ifstream istream(path, std::ios::in | std::ios::binary);
 
-        if (fp != nullptr)
+        if (istream.is_open())
         {
-            if (fread(ram, 1, sizeof(ram), fp) != sizeof(ram))
+            istream.read(reinterpret_cast<char *>(ram.data()),
+                         static_cast<int>(ram.size()));
+            if (istream.fail())
             {
-                memset(ram, 0, sizeof(ram));
+                std::memset(ram.data(), '\0', ram.size());
             }
         }
     }
     else
     {
-        memset(ram, 0, sizeof(ram));
+        std::memset(ram.data(), '\0', ram.size());
     }
 
     A = 0;
     B = 0x06;
 
     // initialize clock registers with system time
-    time_now = time(nullptr);
-    lt = localtime(&time_now);
+    const auto time_now = time(nullptr);
+    const struct tm *lt = localtime(&time_now);
     second = convert(static_cast<Byte>(lt->tm_sec));
     minute = convert(static_cast<Byte>(lt->tm_min));
     hour = convert_hour(static_cast<Byte>(lt->tm_hour));
@@ -71,27 +77,29 @@ Mc146818::Mc146818() :
     year = convert(static_cast<Byte>(lt->tm_year % 100));
 }
 
-const char *Mc146818::getFileName()
+std::string Mc146818::getConfigFilePath(Mc146818::Config type)
 {
-    if (path[0] == '\0')
+    auto newPath = flx::getFlexemuUserConfigPath() + PATHSEPARATORSTRING +
+        CONFIGBIN;
+    struct stat sbuf{};
+
+    if ((type == Config::New) ||
+        (type == Config::NewOrOld && stat(newPath.c_str(), &sbuf) == 0))
     {
-#ifdef UNIX
-        char *home = getenv("HOME");
-#endif
-#ifdef _WIN32
-        char* home = getenv("USERPROFILE");
-#endif
+        fs::create_directories(flx::getFlexemuUserConfigPath());
+        return newPath;
+    }
 
-        if (home != nullptr)
+    auto path = flx::getHomeDirectory();
+
+    if (!path.empty())
+    {
+        if (!flx::endsWithPathSeparator(path))
         {
-            strcpy(path, home);
-            strcat(path, PATHSEPARATORSTRING);
+            path.append(PATHSEPARATORSTRING);
         }
 
-        if (path[0] != '\0')
-        {
-            strcat(path, ".mc146818");
-        }
+        path.append(OLDCONFIGBIN);
     }
 
     return path;
@@ -99,23 +107,34 @@ const char *Mc146818::getFileName()
 
 Mc146818::~Mc146818()
 {
-    const char* home = getFileName();
+    const auto path = getConfigFilePath(Config::New);
 
-    if (home[0] != '\0')
+    if (path.empty())
     {
-        BFilePtr fp(home, "wb");
+        return;
+    }
 
-        if (fp != nullptr)
-        {
-            fwrite(ram, 1, sizeof(ram), fp);
-        }
+    std::ofstream ostream(path, std::ios::out | std::ios::binary);
+
+    if (ostream.is_open())
+    {
+        ostream.write(reinterpret_cast<char *>(ram.data()),
+                     static_cast<int>(ram.size()));
+    }
+
+    const auto oldPath = getConfigFilePath(Config::Old);
+    struct stat sbuf{};
+
+    if (stat(oldPath.c_str(), &sbuf) == 0)
+    {
+        fs::remove(oldPath);
     }
 }
 
 void Mc146818::resetIo()
 {
-    A &= 0x7f;
-    B &= 0x87;
+    A &= 0x7FU;
+    B &= 0x87U;
     C = 0;
     D = 0x80;
 }
@@ -124,7 +143,7 @@ Byte Mc146818::readIo(Word offset)
 {
     Byte temp;
 
-    switch (offset & 0x3f)
+    switch (offset & 0x3FU)
     {
         case 0x00:
             return second;
@@ -179,10 +198,10 @@ Byte Mc146818::readIo(Word offset)
 
 void Mc146818::writeIo(Word offset, Byte val)
 {
-    switch (offset & 0x3f)
+    switch (offset & 0x3FU)
     {
         case 0x00:
-            second    = val;
+            second = val;
             break;
 
         case 0x01:
@@ -190,7 +209,7 @@ void Mc146818::writeIo(Word offset, Byte val)
             break;
 
         case 0x02:
-            minute    = val;
+            minute = val;
             break;
 
         case 0x03:
@@ -198,44 +217,42 @@ void Mc146818::writeIo(Word offset, Byte val)
             break;
 
         case 0x04:
-            hour      = val;
+            hour = val;
             break;
 
         case 0x05:
-            al_hour   = val;
+            al_hour = val;
             break;
 
         case 0x06:
-            weekday   = val;
+            weekday = val;
             break;
 
         case 0x07:
-            day       = val;
+            day = val;
             break;
 
         case 0x08:
-            month     = val;
+            month = val;
             break;
 
         case 0x09:
-            year      = val;
+            year = val;
             break;
 
         case 0x0a:
-            A         = val & 0x7f;
+            A = val & 0x7FU;
             break;
 
         case 0x0b:
-            B         = val;
+            B = val;
 
         // a SET bit going 1 clears the UIE bit
-        //if (BSET7(B))
+        //if (BSET<Byte>(B, 7U))
         //   B = val & 0xef;
         case 0x0c:
-            break;   // Reg. C is read only
-
         case 0x0d:
-            break;   // Reg. D is read only
+            break; // Reg. C and D is read only
 
         default:
             ram[offset - 0x0e] = val;
@@ -246,24 +263,24 @@ void Mc146818::writeIo(Word offset, Byte val)
 void Mc146818::update_1_second()
 {
     // update only if SET bit is 0
-    if (!BTST7(B))
+    if (!BTST<Byte>(B, 7U))
     {
         static Byte dse_october = 0;
 
         // check for last sunday in april 1:59:59
-        if (BTST0(B) && hour == 1 &&
+        if (BTST<Byte>(B, 0U) && hour == 1 &&
             convert_bin(minute) == 59 &&
             convert_bin(second) == 59 &&
             month == 4 &&
             weekday == 1 &&
             convert_bin(day) >= 24)
         {
-            hour    = 3;
-            minute  = 0;
-            second  = 0;
+            hour = 3;
+            minute = 0;
+            second = 0;
             // check for last sunday in october 1:59:59
         }
-        else if (BTST0(B) && hour == 1 &&
+        else if (BTST<Byte>(B, 0U) && hour == 1 &&
                  convert_bin(minute) == 59 &&
                  convert_bin(second) == 59 &&
                  convert_bin(month) == 10 &&
@@ -272,84 +289,90 @@ void Mc146818::update_1_second()
                  !dse_october)
         {
             dse_october = 1;
-            hour    = 1;
-            minute  = 0;
-            second  = 0;
+            hour = 1;
+            minute = 0;
+            second = 0;
         }
         else
         {
             // do a normal update
             if (increment(second, 0, 59))
+            {
                 if (increment(minute, 0, 59))
+                {
                     if (increment_hour(hour))
                     {
                         increment(weekday, 1, 7);
 
                         if (increment_day(day, month, year))
+                        {
                             if (increment(month, 1, 12))
                             {
                                 increment(year, 0, 99);
                             }
+                        }
                     }
+                }
+            }
         }
 
-        BSET4(C); // set update ended interrupt flag
+        BSET<Byte>(C, 4U); // set update ended interrupt flag
 
-        if (BTST4(B))
+        if (BTST<Byte>(B, 4U))
         {
-            BSET7(C);
+            BSET<Byte>(C, 7U);
             Notify(NotifyId::SetFirq);
         }
 
         // now check for an alarm
-        if ((((al_second & 0xc0) == 0xc0) || (al_second == second)) &&
-            (((al_minute & 0xc0) == 0xc0) || (al_minute == minute)) &&
-            (((al_hour & 0xc0) == 0xc0) || (al_hour == hour)))
+        if ((((al_second & 0xC0U) == 0xC0U) || (al_second == second)) &&
+            (((al_minute & 0xC0U) == 0xC0U) || (al_minute == minute)) &&
+            (((al_hour & 0xC0U) == 0xC0U) || (al_hour == hour)))
         {
-            BSET5(C); // set alarm interrupt flag
+            BSET<Byte>(C, 5U); // set alarm interrupt flag
 
-            if (BTST5(B))
+            if (BTST<Byte>(B, 5U))
             {
-                BSET7(C);
+                BSET<Byte>(C, 7U);
                 Notify(NotifyId::SetFirq);
             }
         }
     }
-} // update
+}
 
 // convert from binary to binary or bcd
-Byte Mc146818::convert(Byte val)
+Byte Mc146818::convert(Byte val) const
 {
-    if (B & 0x04)
+    if (B & 0x04U)
     {
         return val;
     }
-    else
-    {
-        return ((val / 10) << 4)  | (val % 10);
-    }
+
+    return ((val / 10U) << 4U)  | (val % 10U);
 }
 
-Byte Mc146818::convert_hour(Byte val)
+Byte Mc146818::convert_hour(Byte val) const
 {
-    switch (B & 0x06)
+    switch (B & 0x06U)
     {
         case 0x00:      //12 hour, BCD
-            if (val >= 12)
-                return  0x80 |
-                        (((val - 12) / 10) << 4) | ((val - 12) % 10);
+            if (val >= 12U)
+            {
+                return 0x80U | (((val - 12U) / 10U) << 4U) |
+                    ((val - 12U) % 10U);
+            }
             else
             {
-                return ((val / 10) << 4)  | (val % 10);
+                return ((val / 10U) << 4U)  | (val % 10U);
             }
 
         case 0x02:      //24 hour, BCD
-            return ((val / 10) << 4)  | (val % 10);
+            return ((val / 10U) << 4U)  | (val % 10U);
 
         case 0x04:      //12 hour, binary
-            if (val >= 12)
+            if (val >= 12U)
             {
-                return (val - 12) | 0x80;
+                return (val - 12U) | 0x80U;
             }
             else
             {
@@ -358,28 +381,26 @@ Byte Mc146818::convert_hour(Byte val)
 
         case 0x06:      //24 hour, binary
             return val;
-    }  // switch
+    }
 
-    return 1;  // this should NEVER happen
+    return 1; // this should NEVER happen
 }
 
 // convert from bcd or binary to binary
-Byte Mc146818::convert_bin(Byte val)
+Byte Mc146818::convert_bin(Byte val) const
 {
-    if (B & 0x04)
+    if (B & 0x04U)
     {
         return val;
     }
-    else
-    {
-        return ((val >> 4) * 10)  | (val & 0x0f);
-    }
+
+    return ((val >> 4U) * 10U)  | (val & 0x0FU);
 }
 
 // return 1 on overflow
 bool Mc146818::increment(Byte &reg, Byte min, Byte max)
 {
-    if (B & 0x04)
+    if (B & 0x04U)
     {
         // binary calculation
         reg++;
@@ -389,160 +410,145 @@ bool Mc146818::increment(Byte &reg, Byte min, Byte max)
             reg = min;
             return true;
         }
-        else
-        {
-            return false;
-        }
+
+        return false;
+    }
+
+    // bcd calculation
+    if ((reg & 0x0FU) == 9U)
+    {
+        reg = (reg & 0xF0U) + 0x10U;
     }
     else
     {
-        // bcd calculation
-        if ((reg & 0x0f) == 9)
-        {
-            reg = (reg & 0xf0) + 0x10;
-        }
-        else
-        {
-            reg++;
-        }
-
-        if (reg > convert(max))
-        {
-            reg = min;
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        reg++;
     }
-}
 
-
-bool Mc146818::increment_hour(Byte &x_hour)
-{
-    switch (B & 0x06)
+    if (reg > convert(max))
     {
-        case 0x00:      //12 hour, BCD
-            if (x_hour == 0x12)
-            {
-                x_hour = 0x81;
-            }
-            else if (x_hour == 0x92)
-            {
-                x_hour = 0x01;
-                return true;
-            }
-            else if ((x_hour & 0x0f) == 9)
-            {
-                x_hour = (x_hour & 0xf0) + 0x10;
-            }
-            else
-            {
-                x_hour++;
-            }
-
-            break;
-
-        case 0x02:      //24 hour, BCD
-            if ((x_hour & 0x0f) == 9)
-            {
-                x_hour = (x_hour & 0xf0) + 0x10;
-            }
-            else if (x_hour == 0x23)
-            {
-                x_hour = 0x00;
-                return true;
-            }
-            else
-            {
-                x_hour++;
-            }
-
-            break;
-
-        case 0x04:      //12 hour, binary
-            if (x_hour == 0x0C)
-            {
-                x_hour = 0x81;
-            }
-            else if (x_hour == 0x8C)
-            {
-                x_hour = 0x01;
-                return true;
-            }
-            else
-            {
-                x_hour++;
-            }
-
-            break;
-
-        case 0x06:      //24 hour, binary
-            if (x_hour == 0x17)
-            {
-                x_hour = 0x00;
-                return true;
-            }
-            else
-            {
-                x_hour++;
-            }
-
-            break;
-    }  // switch
+        reg = min;
+        return true;
+    }
 
     return false;
 }
 
 
-bool Mc146818::increment_day(Byte &x_day, Byte x_month, Byte x_year)
+bool Mc146818::increment_hour(Byte &p_hour) const
 {
-    Byte binmonth;
-
-    binmonth = convert_bin(x_month);
-
-    if (binmonth < 1)
+    switch (B & 0x06U)
     {
-        binmonth = 1;
+        case 0x00:      //12 hour, BCD
+            if (p_hour == 0x12U)
+            {
+                p_hour = 0x81U;
+            }
+            else if (p_hour == 0x92U)
+            {
+                p_hour = 0x01U;
+                return true;
+            }
+            else if ((p_hour & 0x0FU) == 9U)
+            {
+                p_hour = (p_hour & 0xF0U) + 0x10U;
+            }
+            else
+            {
+                p_hour++;
+            }
+
+            break;
+
+        case 0x02:      //24 hour, BCD
+            if ((p_hour & 0x0FU) == 9U)
+            {
+                p_hour = (p_hour & 0xF0U) + 0x10U;
+            }
+            else if (p_hour == 0x23U)
+            {
+                p_hour = 0x00U;
+                return true;
+            }
+            else
+            {
+                p_hour++;
+            }
+
+            break;
+
+        case 0x04:      //12 hour, binary
+            if (p_hour == 0x0CU)
+            {
+                p_hour = 0x81U;
+            }
+            else if (p_hour == 0x8CU)
+            {
+                p_hour = 0x01U;
+                return true;
+            }
+            else
+            {
+                p_hour++;
+            }
+
+            break;
+
+        case 0x06:      //24 hour, binary
+            if (p_hour == 0x17U)
+            {
+                p_hour = 0x00U;
+                return true;
+            }
+            else
+            {
+                p_hour++;
+            }
+
+            break;
     }
 
-    if (binmonth > 12)
-    {
-        binmonth = 12;
-    }
+    return false;
+}
+
+
+bool Mc146818::increment_day(Byte &p_day, Byte p_month, Byte p_year)
+{
+    Byte binmonth = convert_bin(p_month);
+
+    binmonth = std::max<Byte>(binmonth, 1U);
+    binmonth = std::min<Byte>(binmonth, 12U);
 
     // if February leap year
-    if (binmonth == 2 && (convert_bin(x_year) % 4 == 0))
+    if (binmonth == 2U && (convert_bin(p_year) % 4U == 0U))
     {
-        if (convert_bin(x_day) == 29)
+        if (convert_bin(p_day) == 29U)
         {
             // switch to next month on 29. Febr.
-            x_day = 1;
+            p_day = 1;
             return true;
         }
     }
-    else if (convert_bin(x_day) == last_day[binmonth - 1])
+    else if (convert_bin(p_day) == days_per_month[binmonth - 1])
     {
-        x_day = 1;
+        p_day = 1U;
         return true;
     }
 
-    if (B & 0x04)
+    if (B & 0x04U)
     {
         // binary calculation
-        x_day++;
+        p_day++;
     }
     else
     {
         // bcd calculation
-        if ((x_day & 0x0f) == 9)
+        if ((p_day & 0x0FU) == 9U)
         {
-            x_day = (x_day & 0xf0) + 0x10;
+            p_day = (p_day & 0xF0U) + 0x10U;
         }
         else
         {
-            x_day++;
+            p_day++;
         }
     }
 

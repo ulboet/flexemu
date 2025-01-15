@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,7 +39,6 @@
 DrawnWidget::DrawnWidget(QWidget *parent)
     : QWidget(parent)
     , preferredSize(16, 16)
-    , driveNumber(0xFFFF)
 {
 }
 
@@ -60,11 +59,9 @@ void DrawnWidget::SetPixmap(const QPixmap &p_pixmap)
     updateGeometry();
 }
 
-void DrawnWidget::SetDriveInfo(Word p_driveNumber,
-                               const FlexContainerInfo &p_driveInfo)
+void DrawnWidget::SetDiskAttributes(const FlexDiskAttributes &p_diskAttributes)
 {
-    driveNumber = p_driveNumber;
-    driveInfo = p_driveInfo;
+    diskAttributes = p_diskAttributes;
 }
 
 void DrawnWidget::paintEvent(QPaintEvent *event)
@@ -74,18 +71,18 @@ void DrawnWidget::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.drawPixmap(0, 0, pixmap);
 
-    if (driveInfo.GetIsFlexFormat() && pixmap.size() == QSize(256, 256))
+    if (diskAttributes.GetIsFlexFormat() && pixmap.size() == QSize(256, 256))
     {
         int tracks;
         int sectors;
         int x = 16;
         int y = 27;
 
-        driveInfo.GetTrackSector(tracks, sectors); 
-        auto trkSec = QString::asprintf("%d/%d trk/sec", tracks, sectors);
-        auto name = QString(driveInfo.GetName().c_str());
-        auto numberString = QString::asprintf("#%u", driveInfo.GetNumber());
-        auto date = driveInfo.GetDate();
+        diskAttributes.GetTrackSector(tracks, sectors);
+        QString trkSec = tr("%1/%2 trk/sec").arg(tracks).arg(sectors);
+        auto name = QString(diskAttributes.GetName().c_str());
+        QString numberString = tr("#%1").arg(diskAttributes.GetNumber());
+        auto date = diskAttributes.GetDate();
         auto qdate = QDate(date.GetYear(), date.GetMonth(), date.GetDay());
         auto locale = QLocale::system();
         auto dateString = locale.toString(qdate, QLocale::ShortFormat);
@@ -94,7 +91,7 @@ void DrawnWidget::paintEvent(QPaintEvent *event)
         painter.drawText(x, y+30, dateString);
         painter.drawText(x, y+45, trkSec);
 
-        if (!driveInfo.GetIsWriteProtected())
+        if (!diskAttributes.GetIsWriteProtected())
         {
             // Paint the write enable notch.
             auto backgroundColor = palette().color(QPalette::Window);

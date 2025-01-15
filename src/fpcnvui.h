@@ -2,8 +2,8 @@
     fpcnvui.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ class FlexplorerConvertUi : public QObject, protected Ui_FlexplorerConvert
 public:
 
     FlexplorerConvertUi();
-    virtual ~FlexplorerConvertUi();
+    ~FlexplorerConvertUi() override = default;
     void setupUi(QDialog &dialog);
     void TransferDataToDialog(const QString &title,
                               const QString &filename,
@@ -49,7 +49,7 @@ public:
     bool GetConvert() const;
     bool GetAskUser() const;
 
-    QDialog *dialog;
+    QDialog *dialog{nullptr};
 };
 
 #endif

@@ -1,8 +1,8 @@
 /*
     filecont.h
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,36 +30,38 @@
 
 class FlexCopyManager;
 class FlexDirEntry;
-class FlexContainerInfo;
+class FlexDiskAttributes;
 class FlexFileBuffer;
 
-//typedef int FileHdl;
 
-
-class FileContainerIf : public FileContainerIfBase
+// This interface describes a file oriented access to a FLEX disk image.
+// Rename: FileContainerIf => IFlexDiskByFile
+class IFlexDiskByFile : public IFlexDiskBase
 {
-    /* File oriented interface (to be used within flexdisk) */
+    /* File oriented interface (to be used within flexplorer). */
 public:
-    virtual FileContainerIf *begin() = 0;
-    virtual FileContainerIf *end() const = 0;
-    virtual bool  CheckFilename(const char *fileName) const = 0;
-    virtual bool  FindFile(const char *fileName, FlexDirEntry &entry) = 0;
-    virtual bool  DeleteFile(const char *fileName) = 0;
-    virtual bool  RenameFile(const char *oldName, const char *newName) = 0;
-    virtual bool  SetAttributes(const char *fileName, Byte setMask = 0,
-                                Byte clearMask = ~0) = 0;
-    virtual FlexFileBuffer ReadToBuffer(const char *fileName) = 0;
-    virtual bool  WriteFromBuffer(const FlexFileBuffer &buffer,
-                                  const char *fileName = nullptr) = 0;
-    virtual bool  FileCopy(const char *sourceName, const char *destName,
-                           FileContainerIf &destination) = 0;
+    virtual IFlexDiskByFile *begin() = 0;
+    virtual IFlexDiskByFile *end() const = 0;
+    virtual bool FindFile(const std::string &wildcard, FlexDirEntry &entry) = 0;
+    virtual bool DeleteFile(const std::string &wildcard) = 0;
+    virtual bool RenameFile(const std::string &oldName,
+                            const std::string &newName) = 0;
+    virtual bool SetAttributes(const std::string &wildcard, unsigned setMask,
+                               unsigned clearMask = ~0U) = 0;
+    virtual FlexFileBuffer ReadToBuffer(const std::string &fileName) = 0;
+    virtual bool WriteFromBuffer(const FlexFileBuffer &buffer,
+                                 const char *fileName = nullptr) = 0;
+    virtual bool FileCopy(const std::string &sourceName,
+                          const std::string &destName,
+                          IFlexDiskByFile &destination) = 0;
     virtual std::string GetSupportedAttributes() const = 0;
-    virtual ~FileContainerIf() { };
+
+    ~IFlexDiskByFile() override = default;
 
 private:
-    virtual FileContainerIteratorImpPtr IteratorFactory() = 0;
-    friend class FileContainerIterator;
+    virtual IFlexDiskIteratorImpPtr IteratorFactory() = 0;
+    friend class FlexDiskIterator;
     friend class FlexCopyManager;
-};  /* class FileContainerIf */
+};
 
 #endif /* FILECONT_INCLUDED */

@@ -2,7 +2,7 @@
     idircnt.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,20 +23,24 @@
 #include <algorithm>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <errno.h>
+#include <cerrno>
+#include "fattrib.h"
 #include "filecont.h"
 #include "dircont.h"
 #include "idircnt.h"
+#include "filecnts.h"
 #include "cvtwchar.h"
+#include <ctime>
+#include <fstream>
 
 
-DirectoryContainerIteratorImp::DirectoryContainerIteratorImp(
-    DirectoryContainer *aBase)
-    : base(aBase), dirHdl(nullptr)
+FlexDirectoryDiskIteratorImp::FlexDirectoryDiskIteratorImp(
+    FlexDirectoryDiskByFile *p_base)
+    : base(p_base), dirHdl(nullptr), searchOneFileAtEnd(false)
 {
 }
 
-DirectoryContainerIteratorImp::~DirectoryContainerIteratorImp()
+FlexDirectoryDiskIteratorImp::~FlexDirectoryDiskIteratorImp()
 {
     if (dirHdl != nullptr)
     {
@@ -49,46 +53,77 @@ DirectoryContainerIteratorImp::~DirectoryContainerIteratorImp()
         dirHdl = nullptr;
     }
 
+    if (base != nullptr)
+    {
+        base->randomFileCheck.UpdateRandomListToFile();
+    }
+
     base = nullptr;
 }
 
-bool DirectoryContainerIteratorImp::operator==(const FileContainerIf *src) const
+bool FlexDirectoryDiskIteratorImp::operator==(const IFlexDiskByFile *rhs) const
 {
-    return (base == nullptr && src == nullptr) ||
-           (((FileContainerIf *)base == src) && (dirHdl == nullptr));
+    return (base == nullptr && rhs == nullptr) ||
+           ((base == rhs) && (dirHdl == nullptr));
 }
 
-void DirectoryContainerIteratorImp::AtEnd()
+void FlexDirectoryDiskIteratorImp::AtEnd()
 {
+    if (base != nullptr)
+    {
+        base->randomFileCheck.UpdateRandomListToFile();
+    }
+    searchOneFileAtEnd = true;
+
     base = nullptr;
 }
 
-bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
+bool FlexDirectoryDiskIteratorImp::NextDirEntry(const std::string &wildcard)
 {
-    std::string str, fileName;
-    bool isValid;
-#ifdef _WIN32
-    WIN32_FIND_DATA findData;
-    SYSTEMTIME systemTime;
-#endif
-#ifdef UNIX
-    struct dirent *findData = nullptr;
-    struct stat sbuf;
-#endif
+    std::string fileName;
+    bool isValid = true;
+    bool searchOneFile = (wildcard.find_first_of("*?[];") == std::string::npos);
+
     dirEntry.SetEmpty();
+    if (searchOneFile && searchOneFileAtEnd)
+    {
+        return false;
+    }
+
     // repeat until a valid directory entry found
 #ifdef _WIN32
-    str = base->GetPath();
-    str += PATHSEPARATOR;
-    str += "*.*";
+    const auto path = base->GetPath() + PATHSEPARATORSTRING;
+    const auto pattern = path + "*.*";
+    WIN32_FIND_DATA findData{};
 
-    do
+    while (isValid &&
+            (!flx::isFlexFilename(fileName) ||
+            (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (findData.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE) ||
+            (findData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) ||
+            findData.nFileSizeLow > (MAX_FILE_SECTORS * DBPS) ||
+            !flx::multimatches(fileName, wildcard, ';', true)))
     {
         isValid = false;
 
+        if (searchOneFile)
+        {
+            fileName = wildcard;
+            const auto filePattern = path + fileName;
+            dirHdl = FindFirstFile(ConvertToUtf16String(filePattern).c_str(),
+                &findData);
+            if (dirHdl != INVALID_HANDLE_VALUE && !searchOneFileAtEnd)
+            {
+                isValid = true;
+            }
+            searchOneFileAtEnd = true;
+            continue;
+        }
+
         if (dirHdl == nullptr)
         {
-            dirHdl = FindFirstFile(ConvertToUtf16String(str).c_str(), &findData);
+            dirHdl = FindFirstFile(ConvertToUtf16String(pattern).c_str(),
+                                   &findData);
             if (dirHdl != INVALID_HANDLE_VALUE)
             {
                 isValid = true;
@@ -112,28 +147,19 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
             }
         }
     }
-    while (isValid &&
-           ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
-            (findData.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE) ||
-            (findData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) ||
-            !stricmp(fileName.c_str(), RANDOM_FILE_LIST) ||
-            !multimatches(fileName.c_str(), filePattern, ';', true)));
 
     if (isValid)
     {
+        SYSTEMTIME systemTime{};
+        SYSTEMTIME localTime{};
+
         // ok, found a valid directory entry
         Byte attributes = 0;
-        int sectorMap = 0;
+        int sectorMapFlag = 0;
 
-        if (findData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
+        if (base->randomFileCheck.IsRandomFile(fileName))
         {
-            sectorMap = 2;
-        }
-
-        // CDFS support:
-        if (isListedInFileRandom(base->GetPath().c_str(), fileName.c_str()))
-        {
-            sectorMap = 2;
+            sectorMapFlag = IS_RANDOM_FILE;
         }
 
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
@@ -141,16 +167,16 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
             attributes |= WRITE_PROTECT;
         }
 
-//        strupper(fileName);
-        dirEntry.SetTotalFileName(fileName.c_str());
+        flx::strupper(fileName);
+        dirEntry.SetTotalFileName(fileName);
         auto fileSize = (findData.nFileSizeLow + 251U) / 252U * SECTOR_SIZE;
         dirEntry.SetFileSize(fileSize);
         FileTimeToSystemTime(&findData.ftLastWriteTime, &systemTime);
-        dirEntry.SetDate(BDate(systemTime.wDay, systemTime.wMonth,
-                         systemTime.wYear));
-        dirEntry.SetTime(BTime(systemTime.wHour, systemTime.wMinute, 0U));
+        SystemTimeToTzSpecificLocalTime(nullptr, &systemTime, &localTime);
+        dirEntry.SetDate({localTime.wDay, localTime.wMonth, localTime.wYear});
+        dirEntry.SetTime({localTime.wHour, localTime.wMinute, 0U});
         dirEntry.SetAttributes(attributes);
-        dirEntry.SetSectorMap(sectorMap);
+        dirEntry.SetSectorMap(sectorMapFlag);
         dirEntry.SetStartTrkSec(0, 0);
         dirEntry.SetEndTrkSec(0, 0);
         dirEntry.ClearEmpty();
@@ -158,57 +184,60 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
 
 #endif
 #ifdef UNIX
-    // unfinished
-    str = base->GetPath();
+    auto path = base->GetPath() + PATHSEPARATORSTRING;
+    struct stat sbuf {};
+    struct dirent* findData = nullptr;
 
-    do
+    while (isValid &&
+            (!flx::isFlexFilename(fileName) ||
+            stat((path + fileName).c_str(), &sbuf) != 0 ||
+            !S_ISREG(sbuf.st_mode) ||
+            sbuf.st_size < 0 || sbuf.st_size > (MAX_FILE_SECTORS * DBPS) ||
+            !flx::multimatches(fileName, wildcard, ';', true)))
     {
         isValid = false;
 
+        if (searchOneFile)
+        {
+            fileName = flx::tolower(wildcard);
+            if (stat((path + fileName).c_str(), &sbuf) == 0 &&
+                    !searchOneFileAtEnd)
+            {
+                isValid = true;
+            }
+            searchOneFileAtEnd = true;
+            continue;
+        }
+
         if (dirHdl == nullptr)
         {
-            if ((dirHdl = opendir(str.c_str())) != nullptr)
+            dirHdl = opendir(path.c_str());
+            if (dirHdl != nullptr)
             {
                 isValid = true;
             }
         }
 
-        if (dirHdl != nullptr && (findData = readdir(dirHdl)) != nullptr)
+        if (dirHdl != nullptr)
         {
-            isValid = true;
-            fileName = findData->d_name;
+            findData = readdir(dirHdl);
+            if (findData != nullptr)
+            {
+                isValid = true;
+                fileName = findData->d_name;
+            }
         }
     }
-    while (isValid &&
-           (stat((str + PATHSEPARATORSTRING + fileName).c_str(),
-                 &sbuf) ||
-            !base->IsFlexFilename(fileName.c_str()) ||
-            !S_ISREG(sbuf.st_mode) ||
-            sbuf.st_size < 0 ||
-            !multimatches(fileName.c_str(), filePattern, ';', true)));
 
     if (isValid)
     {
-        struct tm *lt;
-
         // ok, found a valid directory entry
         Byte attributes = 0;
-        int sectorMap = 0;
+        int sectorMapFlag = 0;
 
-        if (base->IsWriteProtected())
+        if (base->randomFileCheck.IsRandomFile(fileName))
         {
-            // CDFS-Support: look for file name in file 'random'
-            if (isListedInFileRandom(base->GetPath().c_str(), fileName.c_str()))
-            {
-                sectorMap = 2;
-            }
-        }
-        else
-        {
-            if (sbuf.st_mode & S_IXUSR)
-            {
-                sectorMap = 2;
-            }
+            sectorMapFlag = IS_RANDOM_FILE;
         }
 
         if (!(sbuf.st_mode & S_IWUSR))
@@ -216,15 +245,18 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
             attributes |= WRITE_PROTECT;
         }
 
-//        strupper(fileName);
-        dirEntry.SetTotalFileName(fileName.c_str());
-        dirEntry.SetFileSize((sbuf.st_size + 251) / 252 * SECTOR_SIZE);
-        lt = localtime(&(sbuf.st_mtime));
-        dirEntry.SetDate(BDate(lt->tm_mday, lt->tm_mon + 1,
-                    lt->tm_year + 1900));
-        dirEntry.SetTime(BTime(lt->tm_hour, lt->tm_min, 0U));
+        flx::strupper(fileName);
+        dirEntry.SetTotalFileName(fileName);
+        auto fileSize = (sbuf.st_size + 251) / 252 * SECTOR_SIZE;
+        dirEntry.SetFileSize(static_cast<int>(fileSize));
+        const struct tm *lt = localtime(&sbuf.st_mtime);
+        dirEntry.SetDate({lt->tm_mday, lt->tm_mon + 1, lt->tm_year + 1900});
+        if ((base->ft_access & FileTimeAccess::Get) == FileTimeAccess::Get)
+        {
+            dirEntry.SetTime({lt->tm_hour, lt->tm_min});
+        }
         dirEntry.SetAttributes(attributes);
-        dirEntry.SetSectorMap(sectorMap);
+        dirEntry.SetSectorMap(sectorMapFlag);
         dirEntry.SetStartTrkSec(0, 0);
         dirEntry.SetEndTrkSec(0, 0);
         dirEntry.ClearEmpty();
@@ -237,7 +269,7 @@ bool DirectoryContainerIteratorImp::NextDirEntry(const char *filePattern)
 // deletes the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool DirectoryContainerIteratorImp::DeleteCurrent()
+bool FlexDirectoryDiskIteratorImp::DeleteCurrent()
 {
     std::string filePath;
 
@@ -246,21 +278,22 @@ bool DirectoryContainerIteratorImp::DeleteCurrent()
         return false;
     }
 
-    filePath = dirEntry.GetTotalFileName();
-//    strlower(filePath);
+    filePath = flx::tolower(dirEntry.GetTotalFileName());
     filePath = base->GetPath() + PATHSEPARATOR + filePath;
 #ifdef UNIX
 
     if (remove(filePath.c_str()))
     {
         if (errno == ENOENT)
+        {
             throw FlexException(FERR_NO_FILE_IN_CONTAINER,
-                                dirEntry.GetTotalFileName().c_str(),
-                                base->GetPath().c_str());
-        else
-            throw FlexException(FERR_REMOVE_FILE,
-                                dirEntry.GetTotalFileName().c_str(),
-                                base->GetPath().c_str());
+                                dirEntry.GetTotalFileName(),
+                                base->GetPath());
+        }
+
+        throw FlexException(FERR_REMOVE_FILE,
+                            dirEntry.GetTotalFileName(),
+                            base->GetPath());
     }
 
 #endif
@@ -299,7 +332,7 @@ bool DirectoryContainerIteratorImp::DeleteCurrent()
 // Renames the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool DirectoryContainerIteratorImp::RenameCurrent(const char *newName)
+bool FlexDirectoryDiskIteratorImp::RenameCurrent(const std::string &newName)
 {
     if (dirEntry.IsEmpty())
     {
@@ -307,16 +340,15 @@ bool DirectoryContainerIteratorImp::RenameCurrent(const char *newName)
     }
 
     std::string src(dirEntry.GetTotalFileName());
-    std::string dst(newName);
-    FlexDirEntry de;
-#ifdef UNIX
-//    strlower(src);
-#endif
     // When renaming always prefer lowercase filenames
-//    strlower(dst);
+    auto dst(flx::tolower(newName));
+    FlexDirEntry tempDirEntry;
+#ifdef UNIX
+    flx::strlower(src);
+#endif
 
     // prevent overwriting of an existing file
-    if (base->FindFile(dst.c_str(), de))
+    if (base->FindFile(dst, tempDirEntry))
     {
         throw FlexException(FERR_FILE_ALREADY_EXISTS, newName);
     }
@@ -336,14 +368,20 @@ bool DirectoryContainerIteratorImp::RenameCurrent(const char *newName)
         {
             throw FlexException(FERR_FILE_ALREADY_EXISTS, newName);
         }
-        else if (errno == EACCES)
+
+        if (errno == EACCES)
+        {
             throw FlexException(FERR_RENAME_FILE,
-                                dirEntry.GetTotalFileName().c_str(),
-                                base->GetPath().c_str());
-        else if (errno == ENOENT)
+                                dirEntry.GetTotalFileName(),
+                                base->GetPath());
+        }
+
+        if (errno == ENOENT)
+        {
             throw FlexException(FERR_NO_FILE_IN_CONTAINER,
-                                dirEntry.GetTotalFileName().c_str(),
-                                base->GetPath().c_str());
+                                dirEntry.GetTotalFileName(),
+                                base->GetPath());
+        }
     }
 
     return true;
@@ -352,11 +390,9 @@ bool DirectoryContainerIteratorImp::RenameCurrent(const char *newName)
 // Set date for the file on which the iterator currently
 // is pointing on
 // Only valid if the iterator has a valid directory entry
-bool DirectoryContainerIteratorImp::SetDateCurrent(const BDate &date)
+bool FlexDirectoryDiskIteratorImp::SetDateCurrent(const BDate &date)
 {
-    struct stat sbuf;
-    struct utimbuf timebuf;
-    struct tm file_time;
+    struct stat sbuf{};
     std::string filePath;
 
     if (dirEntry.IsEmpty())
@@ -364,31 +400,26 @@ bool DirectoryContainerIteratorImp::SetDateCurrent(const BDate &date)
         return false;
     }
 
-    filePath = dirEntry.GetTotalFileName();
-//    strlower(filePath);
+    filePath = flx::tolower(dirEntry.GetTotalFileName());
     filePath = base->GetPath() + PATHSEPARATORSTRING + filePath;
 
-    if (stat(filePath.c_str(), &sbuf) >= 0)
+    if (stat(filePath.c_str(), &sbuf) == 0)
     {
-        timebuf.actime = sbuf.st_atime;
-        file_time.tm_sec   = 0;
-        file_time.tm_min   = 0;
-        file_time.tm_hour  = 12;
-        file_time.tm_mon   = date.GetMonth() - 1;
-        file_time.tm_mday  = date.GetDay();
-        file_time.tm_year  = date.GetYear() - 1900;
-        file_time.tm_isdst = 0;
-        timebuf.modtime    = mktime(&file_time);
+        struct utimbuf timebuf{};
+        struct tm file_time{};
 
-        if (timebuf.modtime >= 0 && utime(filePath.c_str(), &timebuf) >= 0)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    } // if
+        timebuf.actime = sbuf.st_atime;
+        file_time.tm_sec = 0;
+        file_time.tm_min = 0;
+        file_time.tm_hour = 0;
+        file_time.tm_mon = date.GetMonth() - 1;
+        file_time.tm_mday = date.GetDay();
+        file_time.tm_year = date.GetYear() - 1900;
+        file_time.tm_isdst = -1;
+        timebuf.modtime = mktime(&file_time);
+
+        return (timebuf.modtime >= 0 && utime(filePath.c_str(), &timebuf) == 0);
+    }
 
     return false;
 }
@@ -396,7 +427,7 @@ bool DirectoryContainerIteratorImp::SetDateCurrent(const BDate &date)
 // set the date in the actual selected directory entry
 // Only valid if the iterator has a valid directory entry
 // Only the WRITE_PROTECT flag is supported
-bool DirectoryContainerIteratorImp::SetAttributesCurrent(Byte attributes)
+bool FlexDirectoryDiskIteratorImp::SetAttributesCurrent(Byte attributes)
 {
     std::string filePath;
 
@@ -423,21 +454,21 @@ bool DirectoryContainerIteratorImp::SetAttributesCurrent(Byte attributes)
     SetFileAttributes(wFilePath.c_str(), attrs);
 #endif
 #ifdef UNIX
-    struct stat sbuf;
+    struct stat sbuf{};
 
-    filePath = dirEntry.GetTotalFileName();
-//    strlower(filePath);
+    filePath = flx::tolower(dirEntry.GetTotalFileName());
     filePath = base->GetPath() + PATHSEPARATORSTRING + filePath;
 
     if (!stat(filePath.c_str(), &sbuf))
     {
         if (attributes & WRITE_PROTECT)
         {
-            chmod(filePath.c_str(), sbuf.st_mode | S_IWUSR);
+            chmod(filePath.c_str(), sbuf.st_mode &
+                    static_cast<unsigned>(~S_IWUSR));
         }
         else
         {
-            chmod(filePath.c_str(), sbuf.st_mode & ~S_IWUSR);
+            chmod(filePath.c_str(), sbuf.st_mode | S_IWUSR);
         }
     }
 

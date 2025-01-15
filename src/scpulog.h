@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,25 +23,29 @@
 #ifndef SCPULOG_INCLUDED
 #define SCPULOG_INCLUDED
 
-#include "misc1.h"
+#include "typedefs.h"
 #include <string>
+#include "warnoff.h"
+#include <optional>
+#include "warnon.h"
 
-enum class LogRegister : Byte
+using OptionalWord = std::optional<Word>;
+enum class LogRegister : uint8_t
 {
-    NONE = 0,
-    CC = (1 << 0),
-    A = (1 << 1),
-    B = (1 << 2),
-    DP = (1 << 3),
-    X = (1 << 4),
-    Y = (1 << 5),
-    U = (1 << 6),
-    S = (1 << 7),
+    NONE = 0U,
+    CC = (1U << 0U),
+    A = (1U << 1U),
+    B = (1U << 2U),
+    DP = (1U << 3U),
+    X = (1U << 4U),
+    Y = (1U << 5U),
+    U = (1U << 6U),
+    S = (1U << 7U),
 };
 
 inline LogRegister operator| (LogRegister lhs, LogRegister rhs)
 {
-    using TYPE = std::underlying_type<LogRegister>::type;
+    using TYPE = std::underlying_type_t<LogRegister>;
 
     return static_cast<LogRegister>(static_cast<TYPE>(lhs) |
                                     static_cast<TYPE>(rhs));
@@ -49,15 +53,15 @@ inline LogRegister operator| (LogRegister lhs, LogRegister rhs)
 
 inline LogRegister operator& (LogRegister lhs, LogRegister rhs)
 {
-    using TYPE = std::underlying_type<LogRegister>::type;
+    using TYPE = std::underlying_type_t<LogRegister>;
 
     return static_cast<LogRegister>(static_cast<TYPE>(lhs) &
                                     static_cast<TYPE>(rhs));
 }
 
-inline LogRegister operator<< (LogRegister lhs, int shift_count)
+inline LogRegister operator<< (LogRegister lhs, unsigned shift_count)
 {
-    using TYPE = std::underlying_type<LogRegister>::type;
+    using TYPE = std::underlying_type_t<LogRegister>;
 
     return static_cast<LogRegister>(static_cast<TYPE>(lhs) << shift_count);
 }
@@ -80,50 +84,50 @@ inline LogRegister operator<<= (LogRegister &lhs, int shift_count)
     return lhs;
 }
 
-struct s_cpu_logfile
+struct Mc6809LoggerConfig
 {
+    enum class Format : uint8_t
+    {
+        Csv,
+        Text,
+    };
+
 public:
-    s_cpu_logfile() : minAddr(0x0000), maxAddr(0xFFFF),
-                      startAddr(0x10000), stopAddr(0x10000),
-                      logCycleCount(false),
-                      logRegisters(LogRegister::NONE)
-    {
-        logFileName.reserve(PATH_MAX);
-    }
-
-    s_cpu_logfile(const s_cpu_logfile &src) :
-        minAddr(src.minAddr), maxAddr(src.maxAddr),
-        startAddr(src.startAddr), stopAddr(src.stopAddr),
-        logCycleCount(src.logCycleCount),
-        logRegisters(src.logRegisters),
-        logFileName(src.logFileName)
-    {
-    }
-
-    s_cpu_logfile &operator=(const s_cpu_logfile &src)
-    {
-        minAddr = src.minAddr;
-        maxAddr = src.maxAddr;
-        startAddr = src.startAddr;
-        stopAddr = src.stopAddr;
-        logCycleCount = src.logCycleCount;
-        logRegisters = src.logRegisters;
-        logFileName = src.logFileName;
-        return *this;
-    }
+    Mc6809LoggerConfig() = default;
+    Mc6809LoggerConfig(const Mc6809LoggerConfig &src) = default;
+    Mc6809LoggerConfig &operator=(const Mc6809LoggerConfig &src) = default;
 
     void reset()
     {
         minAddr = 0x0000;
         maxAddr = 0xFFFF;
-        startAddr = 0x10000;
-        stopAddr = 0x10000;
+        startAddr.reset();
+        stopAddr.reset();
         logCycleCount = false;
         logRegisters = LogRegister::NONE;
         logFileName.clear();
+        format = Format::Text;
+        csvSeparator = ';';
+        isEnabled = false;
+        isLoopOptimization = false;
     }
 
-    s_cpu_logfile(s_cpu_logfile &&src)
+    Mc6809LoggerConfig(Mc6809LoggerConfig &&src) noexcept
+        : minAddr(src.minAddr)
+        , maxAddr(src.maxAddr)
+        , startAddr(src.startAddr)
+        , stopAddr(src.stopAddr)
+        , logCycleCount(src.logCycleCount)
+        , logRegisters(src.logRegisters)
+        , logFileName(std::move(src.logFileName))
+        , format(src.format)
+        , csvSeparator(src.csvSeparator)
+        , isEnabled(src.isEnabled)
+        , isLoopOptimization(src.isLoopOptimization)
+    {
+    }
+
+    Mc6809LoggerConfig &operator=(Mc6809LoggerConfig &&src) noexcept
     {
         minAddr = src.minAddr;
         maxAddr = src.maxAddr;
@@ -132,27 +136,24 @@ public:
         logCycleCount = src.logCycleCount;
         logRegisters = src.logRegisters;
         logFileName = std::move(src.logFileName);
-    }
-
-    s_cpu_logfile &operator=(s_cpu_logfile &&src)
-    {
-        minAddr = src.minAddr;
-        maxAddr = src.maxAddr;
-        startAddr = src.startAddr;
-        stopAddr = src.stopAddr;
-        logCycleCount = src.logCycleCount;
-        logRegisters = src.logRegisters;
-        logFileName = std::move(src.logFileName);
+        format = src.format;
+        csvSeparator = src.csvSeparator;
+        isEnabled = src.isEnabled;
+        isLoopOptimization = src.isLoopOptimization;
         return *this;
     }
 
-    unsigned int minAddr;
-    unsigned int maxAddr;
-    unsigned int startAddr;
-    unsigned int stopAddr;
-    bool logCycleCount;
-    LogRegister logRegisters;
+    OptionalWord minAddr{0x0000};
+    OptionalWord maxAddr{0xFFFF};
+    OptionalWord startAddr;
+    OptionalWord stopAddr;
+    bool logCycleCount{false};
+    LogRegister logRegisters{LogRegister::NONE};
     std::string logFileName;
+    Format format{Format::Text};
+    char csvSeparator{';'};
+    bool isEnabled{false};
+    bool isLoopOptimization{true};
 };
 
 #endif

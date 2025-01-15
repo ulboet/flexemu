@@ -2,8 +2,8 @@
     rfilecnt.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,40 +25,39 @@
 
 #include "efiletim.h"
 #include "ffilecnt.h"
-#include <memory>
+#include <vector>
 
-class FlexRamFileContainer : public FlexFileContainer
+// class FlexRamDisk is a specialization of FlexDisk where the whole disk
+// image is stored in RAM for improved performance. The disk image is only
+// written back to disk if there are changes (see is_dirty flag).
+class FlexRamDisk : public FlexDisk
 {
 
 private:
 
-    std::unique_ptr<Byte[]> file_buffer;
-    bool is_dirty;
+    std::vector<Byte> file_buffer;
+    bool is_dirty{};
 
 public:
 
-    FlexRamFileContainer() = delete;
-    FlexRamFileContainer(const FlexRamFileContainer &) = delete;
-    FlexRamFileContainer(FlexRamFileContainer &&);
-    FlexRamFileContainer(const char *path, const char *mode,
-                         const FileTimeAccess &fileTimeAccess);
-    virtual ~FlexRamFileContainer();
+    FlexRamDisk() = delete;
+    FlexRamDisk(const FlexRamDisk &src) = delete;
+    FlexRamDisk(FlexRamDisk &&src) = delete;
+    FlexRamDisk(const std::string &p_path, std::ios::openmode mode,
+                const FileTimeAccess &fileTimeAccess);
+    ~FlexRamDisk() override;
 
-    FlexRamFileContainer &operator= (const FlexRamFileContainer &) = delete;
-    FlexRamFileContainer &operator= (FlexRamFileContainer &&);
+    FlexRamDisk &operator= (const FlexRamDisk &src) = delete;
+    FlexRamDisk &operator= (FlexRamDisk &&src) = delete;
 
-    virtual bool ReadSector(Byte *buffer, int trk, int sec,
-                            int side = -1) const override;
-    virtual bool WriteSector(const Byte *buffer, int trk, int sec,
-                            int side = -1) override;
+    bool ReadSector(Byte *buffer, int trk, int sec,
+                    int side = -1) const override;
+    bool WriteSector(const Byte *buffer, int trk, int sec,
+                     int side = -1) override;
 
 private:
     bool close();
-    void Initialize_for_flx_format(const s_flex_header &header,
-                                   bool write_protected) override;
-    void Initialize_for_dsk_format(const s_formats &format,
-                                   bool write_protected) override;
 };
 
-#endif // RFILECNT_INCLUDED 
+#endif // RFILECNT_INCLUDED
 

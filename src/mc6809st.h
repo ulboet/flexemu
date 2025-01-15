@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,18 +27,41 @@
 
 #include "cpustate.h"
 
-class Mc6809CpuStatus : public CpuStatus
+
+enum : uint8_t
 {
-public:
-    QWord           total_cycles;
-    Byte            a, b, cc, dp;
-    Word            pc, s, u, x, y;
-    Byte            instruction[4];
-    char            mnemonic[28];
-    Byte            memory[48];
-    Mc6809CpuStatus();
-    Mc6809CpuStatus &operator=(const Mc6809CpuStatus &lhs);
+    CPU_STACK_LINES = 6,
+    CPU_STACK_BYTES = 8,
+    CPU_LINES = 14,
+    CPU_LINE_WIDTH = 39,
 };
 
-#endif // MC6809ST_INCLUDED
+/* The following struct represents the current Mc6809 CPU status */
+/* For performance reasons it uses plain C arrays. */
+/* NOLINTBEGIN(modernize-avoid-c-arrays) */
+struct Mc6809CpuStatus : public CpuStatus
+{
+    QWord total_cycles{0};
+    Byte a{0};
+    Byte b{0};
+    Byte cc{0};
+    Byte dp{0};
+    Word pc{0};
+    Word s{0};
+    Word u{0};
+    Word x{0};
+    Word y{0};
+    Word insn_size{0};
+    Byte instruction[8]{};
+    char mnemonic[8]{};
+    char operands[20]{};
+    Byte memory[CPU_STACK_LINES * CPU_STACK_BYTES]{};
+    Mc6809CpuStatus() = default;
+    ~Mc6809CpuStatus() override = default;
+    Mc6809CpuStatus(const Mc6809CpuStatus &src) = default;
+    Mc6809CpuStatus &operator=(const Mc6809CpuStatus &lhs);
+};
+/* NOLINTEND(modernize-avoid-c-arrays) */
+
+#endif
 

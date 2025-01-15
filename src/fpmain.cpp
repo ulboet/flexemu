@@ -2,8 +2,8 @@
     fpmain.cpp
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,57 +21,61 @@
 */
 
 
+#include "misc1.h"
 #include "fpwin.h"
 #include "warnoff.h"
 #include <QApplication>
 #include <QResource>
 #include <QMessageBox>
+#include <QTimer>
 #include "warnon.h"
 #include "winmain.h"
 #include "winctxt.h"
-#include "winmain.h"
 #include "sfpopts.h"
 #include "fpoptman.h"
+#include "ffilecnt.h"
+#include <iostream>
 
 
 #ifdef _WIN32
 WinApiContext winApiContext;
 #endif
 
-static void LoadFiles(int argc, char *argv[], FLEXplorer &window)
-{
-    for (int i = 1; i < argc; ++i)
-    {
-        bool isLast = (i == argc - 1);
-        if (!window.OpenContainerForPath(QString(argv[i]), isLast))
-        {
-            break;
-        }
-    }
-}
-
 int main(int argc, char *argv[])
 {
-    Q_INIT_RESOURCE(fpmain_qrc_cpp);
+    Q_INIT_RESOURCE(fpmain);
     sFPOptions options;
 
+    FlexDisk::InitializeClass();
     QApplication app(argc, argv);
     FlexplorerOptions::InitOptions(options);
     FlexplorerOptions::ReadOptions(options);
     FLEXplorer window(options);
     int return_code = EXIT_FAILURE;
 
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg{argv[i]};
+
+        if (arg.compare("-V") == 0)
+        {
+            flx::print_versions(std::cout, "FLEXplorer");
+            exit(EXIT_SUCCESS);
+        }
+    }
+
     const auto icon = QIcon(":/resource/flexplorer.png");
-    app.setWindowIcon(icon);
+    QApplication::setWindowIcon(icon);
 
     try
     {
+        ProcessArgumentsFtor functor(window, argc, argv);
+
         window.show();
 
-        LoadFiles(argc, argv, window);
-        app.processEvents();
+        QTimer::singleShot(10, functor);
 
-        return_code = app.exec();
+        return_code = QApplication::exec();
     }
     catch (std::exception &ex)
     {

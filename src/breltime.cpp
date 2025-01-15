@@ -3,7 +3,7 @@
 
 
     Basic class for platform independent high resolution time support
-    Copyright (C) 2001-2022  W. Schwotzer
+    Copyright (C) 2001-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,30 +20,23 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#ifdef _WIN32
-    #include "misc1.h"
+#include "misc1.h"
+#if HAVE_SYS_TIME_H
+#include <sys/time.h>
 #endif
 #include "breltime.h"
 
 // This class could also be realized as a envelope/letter pattern
 // but this is still the most efficient C++ implementation
 
-BRelativeTime::BRelativeTime()
-{
-}
-
-BRelativeTime::~BRelativeTime()
-{
-}
-
 #ifdef UNIX
 // return time in us as a unsigned int 64 Bit value
 QWord BRelativeTime::GetTimeUsll()
 {
-    struct timeval tv;
+    struct timeval tv{};
 
     gettimeofday(&tv, nullptr);
-    return ((QWord)tv.tv_sec * 1000000 + tv.tv_usec);
+    return (static_cast<QWord>(tv.tv_sec) * 1000000U + tv.tv_usec);
 }
 #endif
 
@@ -56,7 +49,8 @@ QWord BRelativeTime::GetTimeUsll()
     if (QueryPerformanceCounter(&count))
     {
         QueryPerformanceFrequency(&freq);
-        return (QWord)count.QuadPart * 1000000 / (QWord)freq.QuadPart;
+        return static_cast<QWord>(count.QuadPart) * 1000000U /
+               static_cast<QWord>(freq.QuadPart);
     }
     else
     {

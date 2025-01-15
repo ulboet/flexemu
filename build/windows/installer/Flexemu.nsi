@@ -12,15 +12,32 @@
 !include FileFunc.nsh
 !include SplitFirstStrPart.nsh
 !include "MUI2.nsh"
-  
+
+!addplugindir /x86-ansi "Plugins\x86-ansi"
+!addplugindir /x86-unicode "Plugins\x86-unicode"
+!addplugindir /amd64-unicode "Plugins\amd64-unicode"
+
 !define APPNAME    "Flexemu"
-!define APPVERSION "3.12"
+!define APPVERSION "3.28"
 ; Refreshing Windows Defines
 !define SHCNE_ASSOCCHANGED 0x8000000
 !define SHCNF_IDLIST 0
 !define ERROR_ALREADY_EXISTS 183
 !define ARP "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 !define BASEDIR    "..\..\.."
+; The variables QTVERSION and QTMAVERSION have to be set as command line parameters
+; !define QTVERSION "0.0.0"   ; Qt version
+; !define QTMAVERSION "0"     ; Qt Major version
+; !define QTMIVERSION "0"     ; Qt Minor version
+!define QTBASEDIR "Qt${QTVERSION}"
+
+; The variable QT_GE_670 is != 0 if QTVERSION is >= 6.7.0
+!define QT_GE_670 0
+!if ${QTMAVERSION} == 6
+!if ${QTMIVERSION} >= 7
+!define /redef QT_GE_670 1
+!endif
+!endif
 
 CRCCheck on
 SetDateSave on
@@ -31,7 +48,7 @@ LicenseBkColor /windows
 
 ; file info
 VIAddVersionKey ProductName     "${APPNAME}"
-VIAddVersionKey LegalCopyright  "(C) 1997-2022 W. Schwotzer"
+VIAddVersionKey LegalCopyright  "(C) 1997-2024 W. Schwotzer"
 VIAddVersionKey Comment         "an MC6809 emulator running FLEX"
 VIAddVersionKey ProductVersion  "${APPVERSION}"
 VIAddVersionKey FileDescription "an MC6809 emulator running FLEX"
@@ -158,47 +175,68 @@ Section "${APPNAME}" BinaryFiles
   SetOutPath $INSTDIR ; Set output path to the installation directory.
   ; Add files to be extracted to the current $OUTDIR path
 ${If} $Arch == "x64"
-  File /a "${BASEDIR}\bin\x64\Release\flexemu.exe"
-  File /a "${BASEDIR}\bin\x64\Release\flexplorer.exe"
-  File /a "${BASEDIR}\bin\x64\Release\mdcrtool.exe"
-  File /a "${BASEDIR}\bin\x64\Release\dsktool.exe"
-  File /a "${BASEDIR}\bin\x64\Release\flex2hex.exe"
-  File /a "${BASEDIR}\bin\x64\Release\Qt5Core.dll"
-  File /a "${BASEDIR}\bin\x64\Release\Qt5Gui.dll"
-  File /a "${BASEDIR}\bin\x64\Release\Qt5Widgets.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\flexemu.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\flexplorer.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\mdcrtool.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\dsktool.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\flex2hex.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\Qt${QTMAVERSION}Core.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\Qt${QTMAVERSION}Gui.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\Qt${QTMAVERSION}Widgets.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\Qt${QTMAVERSION}PrintSupport.dll"
 ${Else}
-  File /a "${BASEDIR}\bin\Win32\Release\flexemu.exe"
-  File /a "${BASEDIR}\bin\Win32\Release\flexplorer.exe"
-  File /a "${BASEDIR}\bin\Win32\Release\mdcrtool.exe"
-  File /a "${BASEDIR}\bin\Win32\Release\dsktool.exe"
-  File /a "${BASEDIR}\bin\Win32\Release\flex2hex.exe"
-  File /a "${BASEDIR}\bin\Win32\Release\Qt5Core.dll"
-  File /a "${BASEDIR}\bin\Win32\Release\Qt5Gui.dll"
-  File /a "${BASEDIR}\bin\Win32\Release\Qt5Widgets.dll"
+!if ${QTMAVERSION} == 5
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\flexemu.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\flexplorer.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\mdcrtool.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\dsktool.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\flex2hex.exe"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\Qt5Core.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\Qt5Gui.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\Qt5Widgets.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\Qt5PrintSupport.dll"
+!endif
 ${EndIf}
   File /a "${BASEDIR}\src\boot"
   File /a "${BASEDIR}\src\flexemu.conf"
+  File /a "${BASEDIR}\src\flexlabl.conf"
   File /a /oname=Changes.txt "${BASEDIR}\ChangeLog"
   File /a /oname=Copying.txt "${BASEDIR}\COPYING"
   File /a /oname=Readme.txt "${BASEDIR}\README"
   SetOutPath $INSTDIR\platforms
 ${If} $Arch == "x64"
-  File /a "${BASEDIR}\bin\x64\Release\platforms\qdirect2d.dll"
-  File /a "${BASEDIR}\bin\x64\Release\platforms\qminimal.dll"
-  File /a "${BASEDIR}\bin\x64\Release\platforms\qoffscreen.dll"
-  File /a "${BASEDIR}\bin\x64\Release\platforms\qwindows.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\platforms\qdirect2d.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\platforms\qminimal.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\platforms\qoffscreen.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\platforms\qwindows.dll"
 ${Else}
-  File /a "${BASEDIR}\bin\Win32\Release\platforms\qdirect2d.dll"
-  File /a "${BASEDIR}\bin\Win32\Release\platforms\qminimal.dll"
-  File /a "${BASEDIR}\bin\Win32\Release\platforms\qoffscreen.dll"
-  File /a "${BASEDIR}\bin\Win32\Release\platforms\qwindows.dll"
+!if ${QTMAVERSION} == 5
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\platforms\qdirect2d.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\platforms\qminimal.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\platforms\qoffscreen.dll"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\platforms\qwindows.dll"
+!endif
 ${EndIf}
   SetOutPath $INSTDIR\styles
 ${If} $Arch == "x64"
-  File /a "${BASEDIR}\bin\x64\Release\styles\qwindowsvistastyle.dll"
+!if ${QT_GE_670} != 0
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\styles\qmodernwindowsstyle.dll"
+!else
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\styles\qwindowsvistastyle.dll"
+!endif
 ${Else}
-  File /a "${BASEDIR}\bin\Win32\Release\styles\qwindowsvistastyle.dll"
+!if ${QTMAVERSION} == 5
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\styles\qwindowsvistastyle.dll"
+!endif
 ${EndIf}
+!if ${QTMAVERSION} == 5
+  SetOutPath $INSTDIR\printsupport
+${If} $Arch == "x64"
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\x64\Release\printsupport\windowsprintersupport.dll"
+${Else}
+  File /a "${BASEDIR}\bin\${QTBASEDIR}\Win32\Release\printsupport\windowsprintersupport.dll"
+${EndIf}
+!endif
 SectionEnd
 
 Section "Monitor programs and disk files" MonitorDiskFiles
@@ -215,8 +253,10 @@ Section "Monitor programs and disk files" MonitorDiskFiles
   File /a "${BASEDIR}\monitor\neumon54.hex"
   ; Install cassette/disk files
   File /a "${BASEDIR}\disks\btx.dsk"
+  File /a "${BASEDIR}\disks\cedric.dsk"
   File /a "${BASEDIR}\disks\colors.dsk"
   File /a "${BASEDIR}\disks\games.dsk"
+  File /a "${BASEDIR}\disks\just.dsk"
   File /a "${BASEDIR}\disks\laycad.dsk"
   File /a "${BASEDIR}\disks\layout.dsk"
   File /a "${BASEDIR}\disks\pictures.dsk"
@@ -226,6 +266,8 @@ Section "Monitor programs and disk files" MonitorDiskFiles
   File /a "${BASEDIR}\disks\system54.dsk"
   File /a "${BASEDIR}\disks\diag6809.dsk"
   File /a "${BASEDIR}\disks\system.mdcr"
+  File /a "${BASEDIR}\disks\dynadocu.dsk"
+  File /a "${BASEDIR}\disks\tsc_man.dsk"
 
 SectionEnd
 
@@ -233,6 +275,7 @@ Section "Documentation" Documentation
 
   SectionIn RO
   SetOutPath $INSTDIR\Documentation
+  File /a "${BASEDIR}\doc\flexemu.css"
   File /a "${BASEDIR}\doc\flexdos.htm"
   File /a "${BASEDIR}\doc\flexemu.htm"
   File /a "${BASEDIR}\doc\flexerr.htm"
@@ -243,6 +286,8 @@ Section "Documentation" Documentation
   File /a "${BASEDIR}\doc\flexuser.htm"
   File /a "${BASEDIR}\doc\flexutil.htm"
   File /a "${BASEDIR}\doc\neumon54.htm"
+  File /a "${BASEDIR}\doc\mon53_54.htm"
+  File /a "${BASEDIR}\doc\monu54.htm"
   File /a "${BASEDIR}\doc\mon24.htm"
   File /a "${BASEDIR}\doc\e2hwdesc.htm"
   File /a "${BASEDIR}\doc\mc6809.htm"
@@ -252,17 +297,21 @@ Section "Documentation" Documentation
   File /a "${BASEDIR}\doc\ba2bqs.pdf"
   File /a "${BASEDIR}\doc\basic_um.pdf"
   File /a "${BASEDIR}\doc\basprec.pdf"
+  File /a "${BASEDIR}\doc\cedric.pdf"
   File /a "${BASEDIR}\doc\crasmb.pdf"
   File /a "${BASEDIR}\doc\debug.pdf"
   File /a "${BASEDIR}\doc\dynamite.pdf"
   File /a "${BASEDIR}\doc\f77.pdf"
   File /a "${BASEDIR}\doc\flex2um.pdf"
   File /a "${BASEDIR}\doc\flexapg.pdf"
+  File /a "${BASEDIR}\doc\just.pdf"
   File /a "${BASEDIR}\doc\linkload.pdf"
   File /a "${BASEDIR}\doc\relasmb.pdf"
   File /a "${BASEDIR}\doc\swflexum.pdf"
   File /a "${BASEDIR}\doc\tedit.pdf"
   File /a "${BASEDIR}\doc\util_man.pdf"
+  File /a "${BASEDIR}\doc\dynastar.pdf"
+  File /a "${BASEDIR}\doc\TSC_Text_Processor.pdf"
   File /a "${BASEDIR}\doc\6x09_Instruction_Sets.pdf"
   SetOutPath $INSTDIR\Documentation\images
   File /a "${BASEDIR}\doc\images\e2v5m.png"
@@ -287,6 +336,17 @@ Section "Documentation" Documentation
   File /a "${BASEDIR}\doc\images\pat09_numpad.png"
 
 SectionEnd   
+
+Section "ImHex Hex Editor support files" ImHexSupportFiles
+
+  SectionIn RO
+  SetOutPath $INSTDIR\ImHex\patterns
+  ; Install ImHex pattern files
+  File /a "${BASEDIR}\imhex\patterns\flex_binary.hexpat"
+  File /a "${BASEDIR}\imhex\patterns\flex_dskflx.hexpat"
+  File /a "${BASEDIR}\imhex\patterns\flex_random.hexpat"
+
+SectionEnd
 
 Section "Start Menu Shortcuts" StartMenu
 
@@ -462,6 +522,7 @@ Section "Uninstall" Uninstall
   Delete $INSTDIR\Data\*.*
   Delete $INSTDIR\platforms\*.*
   Delete $INSTDIR\styles\*.*
+  Delete $INSTDIR\printsupport\*.*
   Delete $INSTDIR\*.*
 
   ; Remove shortcuts, if any
@@ -477,6 +538,7 @@ Section "Uninstall" Uninstall
   RMDir "$INSTDIR\Data"
   RMDir "$INSTDIR\platforms"
   RMDir "$INSTDIR\styles"
+  RMDir "$INSTDIR\printsupport"
   RMDir "$INSTDIR"
 
   ; Remove install directory from PATH environment variable

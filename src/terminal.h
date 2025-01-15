@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2018-2022  W. Schwotzer
+    Copyright (C) 2018-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,71 +21,53 @@
 */
 
 
-
 #ifndef TERMINAL_INCLUDED
 #define TERMINAL_INCLUDED
 
 #include "misc1.h"
-#ifdef HAVE_TERMIOS_H
-    #include <termios.h>
-#endif
-#include <signal.h>
-#include "flexemu.h"
-#include "flexerr.h"
+#include "termimpi.h"
 #include "bobservd.h"
-#include "soptions.h"
-#include <deque>
-#include <mutex>
-
-#define BACK_SPACE  (0x08)
-
+#include <csignal>
 
 class Scheduler;
 
 class TerminalIO : public BObserved
 {
-private:
-    std::deque<Byte> key_buffer_serial;
+    ITerminalImplPtr impl;
+    // The Scheduler instance is needed here.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     Scheduler &scheduler;
-    const struct sOptions &options;
-    std::mutex serial_mutex;
-#ifdef HAVE_TERMIOS_H
-    static bool used_serial_io;
-    static struct termios save_termios;
-    static bool is_termios_saved;
+    static TerminalIO *instance;
+    bool is_initialized{};
+#ifdef UNIX
+    static bool is_atexit_initialized;
 #endif
-    Word init_delay;
 
 public:
-    static TerminalIO *instance;
-
-#ifdef _WIN32
-    static void s_exec_signal(int sig_no);
-#else
-    static void s_exec_signal(int sig_no, siginfo_t *, void *);
-#endif
-    void init(Word reset_key);
-
+    bool init(Word reset_key);
     void reset_serial();
-    bool has_key_serial();
+    bool has_char_serial();
     Byte read_char_serial();
     Byte peek_char_serial();
     void write_char_serial(Byte val);
     bool is_terminal_supported();
-    void signal_reset(int sig_no);
-    void set_startup_command(const char *x_startup_command);
+    void set_startup_command(const std::string &startup_command);
+
+    static void on_exit();
+#ifdef _WIN32
+    static void s_exec_signal(int sig_no);
+#endif
+#ifdef UNIX
+    static void s_exec_signal(int sig_no, siginfo_t *siginfo, void *ptr);
+#endif
+
+    TerminalIO() = delete;
+    TerminalIO(Scheduler &p_scheduler, ITerminalImplPtr &&p_impl);
+    ~TerminalIO() override;
 
 private:
-    static void reset_terminal_io();
-    void init_terminal_io(Word reset_key);
-    void put_char_serial(Byte key);
+    void reset_terminal_io();
     void exec_signal(int sig_no);
-    void write_char_serial_safe(Byte val);
-
-public:
-    TerminalIO() = delete;
-    TerminalIO(Scheduler &x_scheduler, const struct sOptions &x_options);
-    ~TerminalIO();
 };
 
 #endif // TERMINAL_INCLUDED

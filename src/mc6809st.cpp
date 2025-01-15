@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,36 +21,34 @@
 */
 
 
-#include "misc1.h"
 #include "mc6809st.h"
+#include <cstring>
 
-Mc6809CpuStatus::Mc6809CpuStatus() :
-    total_cycles(0),
-    a(0), b(0), cc(0), dp(0),
-    pc(0), s(0), u(0), x(0), y(0)
-{
-    memset(instruction, 0, 4);
-    memset(mnemonic,    0, 28);
-    memset(memory,      0, 48);
-}
 
 Mc6809CpuStatus &Mc6809CpuStatus::operator=(const Mc6809CpuStatus &lhs)
 {
-    freq         = lhs.freq,
+    if (this == &lhs)
+    {
+        return *this;
+    }
+
+    freq = lhs.freq,
     total_cycles = lhs.total_cycles;
-    a            = lhs.a;
-    b            = lhs.b;
-    cc           = lhs.cc;
-    dp           = lhs.dp;
-    pc           = lhs.pc;
-    s            = lhs.s;
-    u            = lhs.u;
-    x            = lhs.x;
-    y            = lhs.y;
-    state        = lhs.state;
-    memcpy(instruction, lhs.instruction, 4);
-    memcpy(mnemonic,    lhs.mnemonic,    28);
-    memcpy(memory,      lhs.memory,      48);
+    a = lhs.a;
+    b = lhs.b;
+    cc = lhs.cc;
+    dp = lhs.dp;
+    pc = lhs.pc;
+    s = lhs.s;
+    u = lhs.u;
+    x = lhs.x;
+    y = lhs.y;
+    state = lhs.state;
+    insn_size = lhs.insn_size;
+    std::memcpy(instruction, lhs.instruction, sizeof(instruction));
+    std::memcpy(mnemonic, lhs.mnemonic, sizeof(mnemonic));
+    std::memcpy(operands, lhs.operands, sizeof(operands));
+    std::memcpy(memory, lhs.memory, sizeof(memory));
     return *this;
 }
 

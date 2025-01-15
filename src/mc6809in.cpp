@@ -2,7 +2,7 @@
      mc6809in.cpp
 
      flexemu, an MC6809 emulator running FLEX
-     Copyright (C) 1997-2022  W. Schwotzer
+     Copyright (C) 1997-2025  W. Schwotzer
 
      This file is based on usim-0.91 which is
      Copyright (C) 1994 by R. B. Bellis
@@ -10,16 +10,25 @@
 
 
 #include <limits>
+#include <cinttypes>
+#include <cassert>
 #include "misc1.h"
 #include "mc6809.h"
 #include "mc6809st.h"
 #include "da6809.h"
+#include <array>
+#include <cstring>
+#include "warnoff.h"
+#include <fmt/format.h>
+#include "warnon.h"
 
 
 #ifdef _MSC_VER
     #pragma warning (disable: 4800)
 #endif
 
+// Looks like a false postitive, this should not throw an exception.
+// NOLINTNEXTLINE(cert-err58-cpp)
 static const Mc6809::Event AnyInterrupt =
                  Mc6809::Event::Irq |
                  Mc6809::Event::Firq |
@@ -28,49 +37,52 @@ static const Mc6809::Event AnyInterrupt =
 void Mc6809::reset()
 {
     ++interrupt_status.count[INT_RESET];
-    cycles          = 0;
-    total_cycles    = 0;
-    nmi_armed       = 0;
+    cycles = 0;
+    total_cycles = 0;
+    nmi_armed = 0;
     /* no interrupts yet */
     events = events & Event::FrequencyControl;
-    reset_bp(2);    // remove next-breakpoint
+    reset_bp(2); // remove next-breakpoint
 
 #ifdef FASTFLEX
-    ipcreg          = memory.read_word(0xfffe);
-    idpreg          = 0x00;         /* Direct page register = 0x00 */
-    iccreg          = 0x50;         /* set i and f bit              */
-    eaddr           = 0;
-    iflag           = 0;
-    tb              = 0;
-    tw              = 0;
-    k               = 0;
+    ipcreg = memory.read_word(0xfffe);
+    idpreg = 0x00; /* Direct page register = 0x00 */
+    iccreg = 0x50; /* set i and f bit */
+    eaddr = 0;
+    iflag = 0;
+    tb = 0;
+    tw = 0;
+    k = 0;
 #else
-    pc              = memory.read_word(0xfffe);
-    dp              = 0x00;         /* Direct page register = 0x00 */
-    cc.all          = 0x00;         /* Clear all flags */
-    cc.bit.i        = true;         /* IRQ disabled */
-    cc.bit.f        = true;         /* FIRQ disabled */
+    pc = memory.read_word(0xfffe);
+    dp = 0x00; /* Direct page register = 0x00 */
+    cc.all = 0x00; /* Clear all flags */
+    cc.bit.i = true; /* IRQ disabled */
+    cc.bit.f = true; /* FIRQ disabled */
 #endif
 }
 
-int Mc6809::Disassemble(Word address, InstFlg *pFlags,
-                        char **pCode, char **pMnemonic)
+unsigned Mc6809::Disassemble(Word address, InstFlg &p_flags,
+                        std::string &code, std::string &mnemonic,
+                        std::string &operands)
 {
-    Byte buffer[6];
+    std::array<Byte, 6> buffer{};
     DWord jumpAddress = 0;
+    Word address_inc = address;
 
     if (disassembler == nullptr)
     {
         return 0;
     }
 
-    for (Word i = 0; i < 6; i++)
+    for (Byte &value : buffer)
     {
-        buffer[i] = memory.read_byte(address + i);
+        value = memory.read_byte(address_inc++);
     }
 
-    return disassembler->Disassemble(buffer, address, pFlags, &jumpAddress,
-                                     pCode, pMnemonic);
+    p_flags = disassembler->Disassemble(buffer.data(), address, jumpAddress,
+            code, mnemonic, operands);
+    return disassembler->getByteSize(buffer.data());
 }
 
 //*******************************************************************
@@ -89,72 +101,84 @@ QWord Mc6809::get_cycles(bool reset /* = false */)
         cycles = 0;
         return total_cycles;
     }
-    else
-    {
+
 #ifdef FASTFLEX
-        return total_cycles + (cycles / 10);
+    return total_cycles + (cycles / 10);
 #else
-        return total_cycles +  cycles;
+    return total_cycles +  cycles;
 #endif
-    }
 }
 
 void Mc6809::get_status(CpuStatus *cpu_status)
 {
-
     InstFlg flags = InstFlg::NONE;
-    char *pmnem_buf, *pbuffer;
-    Word i, mem_addr;
-    Mc6809CpuStatus *stat = static_cast<Mc6809CpuStatus *>(cpu_status);
+    std::string mnemonic;
+    std::string operands;
+    std::string code;
+    Word i;
+    auto *stat = dynamic_cast<Mc6809CpuStatus *>(cpu_status);
+    assert(stat != nullptr);
 
 #ifdef FASTFLEX
-    stat->a        = iareg;
-    stat->b        = ibreg;
-    stat->cc       = iccreg;
-    stat->dp       = idpreg;
-    stat->pc       = ipcreg;
-    stat->x        = ixreg;
-    stat->y        = iyreg;
-    stat->u        = iureg;
-    stat->s        = isreg;
+    stat->a = iareg;
+    stat->b = ibreg;
+    stat->cc = iccreg;
+    stat->dp = idpreg;
+    stat->pc = ipcreg;
+    stat->x = ixreg;
+    stat->y = iyreg;
+    stat->u = iureg;
+    stat->s = isreg;
 #else
-    stat->a        = a;
-    stat->b        = b;
-    stat->cc       = cc.all;
-    stat->dp       = dp;
-    stat->pc       = pc;
-    stat->x        = x;
-    stat->y        = y;
-    stat->u        = u;
-    stat->s        = s;
+    stat->a = a;
+    stat->b = b;
+    stat->cc = cc.all;
+    stat->dp = dp;
+    stat->pc = pc;
+    stat->x = x;
+    stat->y = y;
+    stat->u = u;
+    stat->s = s;
 #endif
-    mem_addr = ((stat->s >> 3) << 3) - 16;
+    Word stack_base = ((stat->s / CPU_STACK_BYTES) * CPU_STACK_BYTES) - 16;
 
-    for (i = 0; i < 4; i++)
+    for (i = 0U; i < static_cast<Word>(sizeof(stat->instruction)); ++i)
     {
         stat->instruction[i] = memory.read_byte(stat->pc + i);
     }
 
-    for (i = 0; i < 48; i++)
+    for (i = 0; i < static_cast<Word>(sizeof(stat->memory)); ++i)
     {
-        stat->memory[i] = memory.read_byte(mem_addr + i);
+        stat->memory[i] = memory.read_byte(stack_base + i);
     }
 
-    if (!Disassemble(stat->pc, &flags, &pbuffer, &pmnem_buf))
+    auto byte_size = Disassemble(stat->pc, flags, code, mnemonic, operands);
+    if (byte_size == 0)
     {
         stat->mnemonic[0] = '\0';
+        stat->operands[0] = '\0';
+        stat->insn_size = 0U;
     }
     else
     {
-        strcpy(stat->mnemonic, pmnem_buf);
+        assert(mnemonic.size() < sizeof(stat->mnemonic));
+        std::strncpy(stat->mnemonic, mnemonic.c_str(),
+                sizeof(stat->mnemonic) - 1);
+        stat->mnemonic[sizeof(stat->mnemonic) - 1] = '\0';
+        assert(operands.size() < sizeof(stat->operands));
+        std::strncpy(stat->operands, operands.c_str(),
+                sizeof(stat->operands) - 1);
+        stat->operands[sizeof(stat->operands) - 1] = '\0';
+        stat->insn_size = static_cast<Word>(byte_size);
     }
 
     stat->total_cycles = get_cycles();
-}  // get_status
+}
 
 void Mc6809::set_status(CpuStatus *cpu_status)
 {
-    Mc6809CpuStatus *stat = static_cast<Mc6809CpuStatus *>(cpu_status);
+    const auto *stat = dynamic_cast<Mc6809CpuStatus *>(cpu_status);
+    assert(stat != nullptr);
 
 #ifdef FASTFLEX
     iareg = stat->a;
@@ -177,7 +201,7 @@ void Mc6809::set_status(CpuStatus *cpu_status)
     u = stat->u;
     s = stat->s;
 #endif
-}  // set_status
+}
 
 CpuStatusPtr Mc6809::create_status_object()
 {
@@ -195,7 +219,9 @@ CpuState Mc6809::run(RunMode mode)
 
         case RunMode::SingleStepOver:
         {
-            char *pCode, *pMnemonic;
+            std::string code;
+            std::string mnemonic;
+            std::string operands;
             InstFlg flags = InstFlg::NONE;
 
             // Only if disassembler available and
@@ -203,9 +229,9 @@ CpuState Mc6809::run(RunMode mode)
             // set a breakpoint after this instruction
             if (disassembler != nullptr)
             {
-                bp[2] =
-                    PC + Disassemble((unsigned int)PC,
-                                     &flags, &pCode, &pMnemonic);
+                const auto byteSize =
+                    Disassemble(PC, flags, code, mnemonic, operands);
+                bp[2] = static_cast<Word>(PC + byteSize);
             }
 
             if (disassembler == nullptr ||
@@ -250,12 +276,16 @@ CpuState Mc6809::run(RunMode mode)
 #ifdef _MSC_VER
     #pragma inline_depth(255)
 #endif
+
+// This function is performance critical for the CPU emulation and thus should
+// not be split up.
+// NOLINTNEXTLINE(readability-function-size)
 CpuState Mc6809::runloop()
 {
     CpuState new_state = CpuState::NONE;
     bool first_time = true;
 
-    while (1)
+    while (true)
     {
         if (events != Event::NONE)
         {
@@ -276,17 +306,19 @@ CpuState Mc6809::runloop()
                 if (((events & Event::BreakPoint) != Event::NONE) &&
                     ((events & Event::IgnoreBP) == Event::NONE))
                 {
-                    if (PC == bp[0] || PC == bp[1] || PC == bp[2])
+                    if ((bp[0].has_value() && PC == bp[0].value()) ||
+                        (bp[1].has_value() && PC == bp[1].value()) ||
+                        (bp[2].has_value() && PC == bp[2].value()))
                     {
                         // breakpoint encountered
-                        if (PC == bp[2])
+                        if (bp[2].has_value() && PC == bp[2].value())
                         {
                             reset_bp(2);
                         }
 
                         new_state = CpuState::Stop;
                         break;
-                    } // if
+                    }
                 }
 
                 events &= ~Event::IgnoreBP;
@@ -375,98 +407,26 @@ CpuState Mc6809::runloop()
                 new_state = CpuState::Schedule;
                 break;
             }
-        } // if
+        }
 
-        if (log_fp != nullptr)
+        if (logger.doLogging(PC) && disassembler != nullptr)
         {
-            if (lfs.startAddr >= 0x10000 || PC == lfs.startAddr)
-            {
-                do_logging = true;
-            }
+            Mc6809CpuStatus cpuState;
 
-            if (lfs.stopAddr < 0x10000 && PC == lfs.stopAddr)
-            {
-                do_logging = false;
-            }
-
-            if (do_logging && disassembler != nullptr &&
-                PC >= lfs.minAddr && PC <= lfs.maxAddr)
-            {
-                log_current_instruction();
-            }
+            get_status(&cpuState);
+            logger.logCpuState(cpuState);
         }
 
         // execute one CPU instruction
 #ifdef FASTFLEX
-#include "engine.cpp"
+#include "engine.cpi"
 #else
-#include "mc6809ex.cpp"
+#include "mc6809ex.cpi"
 #endif
         first_time = false;
-    } // while
+    }
 
     return new_state;
-} // runloop
-
-void Mc6809::log_current_instruction()
-{
-    Mc6809CpuStatus cpu_status;
-
-    get_status(&cpu_status);
-    if (lfs.logCycleCount)
-    {
-#if (SIZEOF_LONG == 4)
-        fprintf(log_fp, "%20llu ", cpu_status.total_cycles);
-#endif
-#if (SIZEOF_LONG == 8)
-        fprintf(log_fp, "%20lu ", cpu_status.total_cycles);
-#endif
-    }
-    fprintf(log_fp, "%04X %-23s", PC.load(), cpu_status.mnemonic);
-
-    if (lfs.logRegisters != LogRegister::NONE)
-    {
-        LogRegister registerBit = LogRegister::CC;
-        while (registerBit != LogRegister::NONE)
-        {
-            registerBit <<= 1;
-        }
-
-        if ((lfs.logRegisters & LogRegister::CC) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " CC=%s", asCCString(cpu_status.cc).c_str());
-        }
-        if ((lfs.logRegisters & LogRegister::A) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " A=%02X", (Word)cpu_status.a);
-        }
-        if ((lfs.logRegisters & LogRegister::B) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " B=%02X", (Word)cpu_status.b);
-        }
-        if ((lfs.logRegisters & LogRegister::DP) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " DP=%02X", (Word)cpu_status.dp);
-        }
-        if ((lfs.logRegisters & LogRegister::X) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " X=%04X", cpu_status.x);
-        }
-        if ((lfs.logRegisters & LogRegister::Y) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " Y=%04X", cpu_status.y);
-        }
-        if ((lfs.logRegisters & LogRegister::U) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " U=%04X", cpu_status.u);
-        }
-        if ((lfs.logRegisters & LogRegister::S) != LogRegister::NONE)
-        {
-           fprintf(log_fp, " S=%04X", cpu_status.s);
-        }
-    }
-    fprintf(log_fp, "\n");
-    fflush(log_fp);
 }
 
 void Mc6809::do_reset()
@@ -489,15 +449,15 @@ void Mc6809::exit_run()
 // reached the runloop exits automatically with
 // the state CpuState::Suspend.
 
-void Mc6809::set_required_cyclecount(cycles_t x_cycles)
+void Mc6809::set_required_cyclecount(cycles_t p_cycles)
 {
 #ifdef FASTFLEX
-    required_cyclecount = x_cycles * 10;
+    required_cyclecount = p_cycles * 10;
 #else
-    required_cyclecount = x_cycles;
+    required_cyclecount = p_cycles;
 #endif
 
-    if (x_cycles == std::numeric_limits<decltype(cycles)>::max())
+    if (p_cycles == std::numeric_limits<decltype(cycles)>::max())
     {
         events &= ~Event::FrequencyControl;
     }
@@ -518,14 +478,16 @@ cycles_t Mc6809::exec_irqs(bool save_state)
             events &= ~Event::Nmi;
             return save_state ? 17 : 5;
         }
-        else if (((events & Event::Firq) != Event::NONE) && !CC_BITF)
+
+        if (((events & Event::Firq) != Event::NONE) && !CC_BITF)
         {
             ++interrupt_status.count[INT_FIRQ];
             EXEC_FIRQ(save_state);
             events &= ~Event::Firq;
             return save_state ? 8 : 5;
         }
-        else if (((events & Event::Irq) != Event::NONE) && !CC_BITI)
+
+        if (((events & Event::Irq) != Event::NONE) && !CC_BITI)
         {
             ++interrupt_status.count[INT_IRQ];
             EXEC_IRQ(save_state);
@@ -535,25 +497,5 @@ cycles_t Mc6809::exec_irqs(bool save_state)
     }
 
     return 0;
-}
-
-std::string Mc6809::asCCString(Byte reg)
-{
-    const static Byte cc_bitmask[8] = {
-        CC_BIT_E, CC_BIT_F, CC_BIT_H, CC_BIT_I,
-        CC_BIT_N, CC_BIT_Z, CC_BIT_V, CC_BIT_C,
-    };
-    const static std::string cc_bitnames = "EFHINZVC";
-    std::string result = "--------";
-
-    for (int i = 0; i < 8; ++i)
-    {
-        if (reg & cc_bitmask[i])
-        {
-            result[i] = cc_bitnames[i];
-        }
-    }
-
-    return result;
 }
 

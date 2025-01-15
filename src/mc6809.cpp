@@ -2,7 +2,7 @@
     mc6809.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This file is based on usim-0.91 which is
     Copyright (C) 1994 by R. B. Bellis
@@ -10,10 +10,11 @@
 
 
 #include "misc1.h"
-
+#include "flexerr.h"
 #include "mc6809.h"
 #include "da6809.h"
 #include "inout.h"
+#include <cstring>
 
 #ifdef FASTFLEX
     #define PC ipcreg
@@ -21,35 +22,22 @@
     #define PC pc
 #endif
 
-Mc6809::Mc6809(Memory &x_memory) : events(Event::NONE),
-#ifdef FASTFLEX
-    pMem(nullptr),
-#else
+Mc6809::Mc6809(Memory &p_memory) : events(Event::NONE),
+#ifndef FASTFLEX
     a(acc.byte.a), b(acc.byte.b), d(acc.d), dp(dpreg.byte.h),
 #endif
-    disassembler(nullptr), use_undocumented(false),
-    log_fp(nullptr), do_logging(false), memory(x_memory)
+     memory(p_memory)
 {
 #ifndef FASTFLEX
     dpreg.byte.l = 0;
 #endif
-    memset(&interrupt_status, 0, sizeof(interrupt_status));
+    std::memset(&interrupt_status, 0, sizeof(interrupt_status));
     init();
 }
 
-Mc6809::~Mc6809()
+void Mc6809::set_disassembler(Da6809 *p_disassembler)
 {
-    if (log_fp != nullptr)
-    {
-        fclose(log_fp);
-    }
-
-    log_fp = nullptr;
-}
-
-void Mc6809::set_disassembler(Da6809 *x_disassembler)
-{
-    disassembler = x_disassembler;
+    disassembler = p_disassembler;
 
     if (disassembler != nullptr)
     {
@@ -74,14 +62,14 @@ void Mc6809::init()
     events = Event::NONE;
 
     // all breakpoints are reset
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < static_cast<int>(bp.size()); ++i)
     {
-        bp[i] = 0x10000;
+        bp[i].reset();
     }
 
     init_indexed_cycles();
     init_psh_pul_cycles();
-} // init
+}
 
 void Mc6809::init_indexed_cycles()
 {
@@ -93,7 +81,8 @@ void Mc6809::init_indexed_cycles()
     }
 
     for (i = 128; i < 256; i++)
-        switch ((Byte)(i & 0x1f))
+    {
+        switch (static_cast<Byte>(i & 0x1FU))
         {
             case 0x05:
             case 0x06:
@@ -144,7 +133,8 @@ void Mc6809::init_indexed_cycles()
             default:
                 indexed_cycles[i] = 0;
                 break;
-        } // switch
+        }
+    }
 }
 
 void Mc6809::init_psh_pul_cycles()
@@ -156,69 +146,69 @@ void Mc6809::init_psh_pul_cycles()
     {
         cycle_count = 5;
 
-        if (i & 0x01)
+        if (i & 0x01U)
         {
             cycle_count++;
         }
 
-        if (i & 0x02)
+        if (i & 0x02U)
         {
             cycle_count++;
         }
 
-        if (i & 0x04)
+        if (i & 0x04U)
         {
             cycle_count++;
         }
 
-        if (i & 0x08)
+        if (i & 0x08U)
         {
             cycle_count++;
         }
 
-        if (i & 0x10)
+        if (i & 0x10U)
         {
             cycle_count += 2;
         }
 
-        if (i & 0x20)
+        if (i & 0x20U)
         {
             cycle_count += 2;
         }
 
-        if (i & 0x40)
+        if (i & 0x40U)
         {
             cycle_count += 2;
         }
 
-        if (i & 0x80)
+        if (i & 0x80U)
         {
             cycle_count += 2;
         }
 
         psh_pul_cycles[i] = cycle_count;
-    } // for
+    }
 }
 
 void Mc6809::set_nmi()
 {
     events |= Event::Nmi;
-} // set_nmi
+}
 
 void Mc6809::set_firq()
 {
     events |= Event::Firq;
-} // set_firq
+}
 
 void Mc6809::set_irq()
 {
     events |= Event::Irq;
-} // set_irq
+}
 
 #ifndef FASTFLEX
 cycles_t Mc6809::psh(Byte what, Word &stack, Word &reg_s_or_u)
 {
-    switch ((Byte)(what & 0xf0))
+    switch (static_cast<Byte>(what & 0xF0U))
     {
         case 0xf0:
             stack -= 2;
@@ -307,9 +297,9 @@ cycles_t Mc6809::psh(Byte what, Word &stack, Word &reg_s_or_u)
             stack -= 2;
             memory.write_word(stack, pc);
             break;
-    } // switch
+    }
 
-    switch ((Byte)(what & 0x0f))
+    switch (static_cast<Byte>(what & 0x0FU))
     {
         case 0x0f:
             memory.write_byte(--stack, dp);
@@ -378,14 +368,14 @@ cycles_t Mc6809::psh(Byte what, Word &stack, Word &reg_s_or_u)
         case 0x08:
             memory.write_byte(--stack, dp);
             break;
-    } // switch
+    }
 
     return psh_pul_cycles[what];
 }
 
 cycles_t Mc6809::pul(Byte what, Word &stack, Word &reg_s_or_u)
 {
-    switch ((Byte)(what & 0x0f))
+    switch (static_cast<Byte>(what & 0x0FU))
     {
         case 0x0f:
             cc.all = memory.read_byte(stack++);
@@ -454,9 +444,9 @@ cycles_t Mc6809::pul(Byte what, Word &stack, Word &reg_s_or_u)
         case 0x01:
             cc.all = memory.read_byte(stack++);
             break;
-    } // switch
+    }
 
-    switch ((Byte)(what & 0xf0))
+    switch (static_cast<Byte>(what & 0xF0U))
     {
         case 0xf0:
             x = memory.read_word(stack);
@@ -521,7 +511,7 @@ cycles_t Mc6809::pul(Byte what, Word &stack, Word &reg_s_or_u)
         case 0xd0:
             x = memory.read_word(stack);
             stack += 2;
-            reg_s_or_u  = memory.read_word(stack);
+            reg_s_or_u = memory.read_word(stack);
             stack += 2;
             pc = memory.read_word(stack);
             stack += 2;
@@ -537,7 +527,7 @@ cycles_t Mc6809::pul(Byte what, Word &stack, Word &reg_s_or_u)
         case 0x50:
             x = memory.read_word(stack);
             stack += 2;
-            reg_s_or_u  = memory.read_word(stack);
+            reg_s_or_u = memory.read_word(stack);
             stack += 2;
             break;
 
@@ -545,20 +535,21 @@ cycles_t Mc6809::pul(Byte what, Word &stack, Word &reg_s_or_u)
             x = memory.read_word(stack);
             stack += 2;
             break;
-    } // switch
+    }
 
     return psh_pul_cycles[what];
 }
 
 void Mc6809::exg()
 {
-    Word    t1, t2;
-    Byte    w = memory.read_byte(pc++);
-    bool    r1_is_byte = false;
-    bool    r2_is_byte = false;
+    Word t1;
+    Word t2;
+    Byte w = memory.read_byte(pc++);
+    bool r1_is_byte = false;
+    bool r2_is_byte = false;
 
     // decode source
-    switch (w >> 4)
+    switch (w >> 4U)
     {
         case 0x00:
             t1 = d;
@@ -585,22 +576,22 @@ void Mc6809::exg()
             break;
 
         case 0x08:
-            t1 = a      | (a << 8);
+            t1 = a | (a * 256U);
             r1_is_byte = true;
             break;
 
         case 0x09:
-            t1 = b      | (b << 8);
+            t1 = b | (b * 256U);
             r1_is_byte = true;
             break;
 
         case 0x0a:
-            t1 = cc.all | (cc.all << 8);
+            t1 = cc.all | (cc.all * 256U);
             r1_is_byte = true;
             break;
 
         case 0x0b:
-            t1 = dp     | (dp << 8);
+            t1 = dp | (dp * 256U);
             r1_is_byte = true;
             break;
 
@@ -615,7 +606,7 @@ void Mc6809::exg()
             t1 = 0xFFFF;
     }
 
-    switch (w & 0x0F)
+    switch (w & 0x0FU)
     {
         case 0x00:
             t2 = d;
@@ -642,22 +633,22 @@ void Mc6809::exg()
             break;
 
         case 0x08:
-            t2 = a      | 0xFF00;
+            t2 = a | 0xFF00U;
             r2_is_byte = true;
             break;
 
         case 0x09:
-            t2 = b      | 0xFF00;
+            t2 = b | 0xFF00U;
             r2_is_byte = true;
             break;
 
         case 0x0a:
-            t2 = cc.all | 0xFF00;
+            t2 = cc.all | 0xFF00U;
             r2_is_byte = true;
             break;
 
         case 0x0b:
-            t2 = dp     | 0xFF00;
+            t2 = dp | 0xFF00U;
             r2_is_byte = true;
             break;
 
@@ -679,101 +670,101 @@ void Mc6809::exg()
         return;
     }
 
-    switch (w >> 4)
+    switch (w >> 4U)
     {
         case 0x00:
-            d      = t2;
+            d = t2;
             break;
 
         case 0x01:
-            x      = t2;
+            x = t2;
             break;
 
         case 0x02:
-            y      = t2;
+            y = t2;
             break;
 
         case 0x03:
-            u      = t2;
+            u = t2;
             break;
 
         case 0x04:
-            s      = t2;
+            s = t2;
             break;
 
         case 0x05:
-            pc     = t2;
+            pc = t2;
             break;
 
         case 0x08:
-            a      = (Byte)t2;
+            a = static_cast<Byte>(t2);
             break;
 
         case 0x09:
-            b      = (Byte)t2;
+            b = static_cast<Byte>(t2);
             break;
 
         case 0x0a:
-            cc.all = (Byte)t2;
+            cc.all = static_cast<Byte>(t2);
             break;
 
         case 0x0b:
-            dp     = (Byte)t2;
+            dp = static_cast<Byte>(t2);
             break;
     }
 
-    switch (w & 0x0F)
+    switch (w & 0x0FU)
     {
         case 0x00:
-            d      = t1;
+            d = t1;
             break;
 
         case 0x01:
-            x      = t1;
+            x = t1;
             break;
 
         case 0x02:
-            y      = t1;
+            y = t1;
             break;
 
         case 0x03:
-            u      = t1;
+            u = t1;
             break;
 
         case 0x04:
-            s      = t1;
+            s = t1;
             break;
 
         case 0x05:
-            pc     = t1;
+            pc = t1;
             break;
 
         case 0x08:
-            a      = (Byte)t1;
+            a = static_cast<Byte>(t1);
             break;
 
         case 0x09:
-            b      = (Byte)t1;
+            b = static_cast<Byte>(t1);
             break;
 
         case 0x0a:
-            cc.all = (Byte)t1;
+            cc.all = static_cast<Byte>(t1);
             break;
 
         case 0x0b:
-            dp     = (Byte)t1;
+            dp = static_cast<Byte>(t1);
             break;
     }
 }
 
 void Mc6809::tfr()
 {
-    Word    t;
-    Byte    w = memory.read_byte(pc++);
-    bool    is_byte = false;
+    Word t;
+    Byte w = memory.read_byte(pc++);
+    bool is_byte = false;
 
     // decode source
-    switch (w >> 4)
+    switch (w >> 4U)
     {
         case 0x00:
             t = d;
@@ -800,22 +791,22 @@ void Mc6809::tfr()
             break;
 
         case 0x08:
-            t = a      | 0xFF00;
+            t = a | 0xFF00U;
             is_byte = true;
             break;
 
         case 0x09:
-            t = b      | 0xFF00;
+            t = b | 0xFF00U;
             is_byte = true;
             break;
 
         case 0x0a:
-            t = cc.all | (cc.all << 8);
+            t = cc.all | (cc.all * 256U);
             is_byte = true;
             break;
 
         case 0x0b:
-            t = dp     | (dp << 8);
+            t = dp | (dp * 256U);
             is_byte = true;
             break;
 
@@ -831,7 +822,7 @@ void Mc6809::tfr()
     }
 
     // decode destination
-    switch (w & 0x0F)
+    switch (w & 0x0FU)
     {
         case 0x00:
             if (!use_undocumented && is_byte)
@@ -839,7 +830,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            d      = t;
+            d = t;
             return;
 
         case 0x01:
@@ -848,7 +839,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            x      = t;
+            x = t;
             return;
 
         case 0x02:
@@ -857,7 +848,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            y      = t;
+            y = t;
             return;
 
         case 0x03:
@@ -866,7 +857,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            u      = t;
+            u = t;
             return;
 
         case 0x04:
@@ -875,7 +866,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            s      = t;
+            s = t;
             return;
 
         case 0x05:
@@ -884,7 +875,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            pc     = t;
+            pc = t;
             return;
 
         case 0x08:
@@ -893,7 +884,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            a      = (Byte)t;
+            a = static_cast<Byte>(t);
             return;
 
         case 0x09:
@@ -902,7 +893,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            b      = (Byte)t;
+            b = static_cast<Byte>(t);
             return;
 
         case 0x0a:
@@ -911,7 +902,7 @@ void Mc6809::tfr()
                 break;
             }
 
-            cc.all = (Byte)t;
+            cc.all = static_cast<Byte>(t);
             return;
 
         case 0x0b:
@@ -920,13 +911,12 @@ void Mc6809::tfr()
                 break;
             }
 
-            dp     = (Byte)t;
+            dp = static_cast<Byte>(t);
             return;
     }
 
     pc -= 2;
     invalid("transfer register");
-    return;
 }
 #endif
 
@@ -940,16 +930,16 @@ Word Mc6809::do_effective_address(Byte post)
 {
     Word addr = 0;
 
-    if (!BTST7(post))
+    if (!BTST<Byte>(post, 7U))
     {
-        Word offset = post & 0x1f;
+        Word offset = post & 0x1FU;
 
-        if (offset & 0x10)
+        if (offset & 0x10U)
         {
-            offset |= 0xffe0;
+            offset |= 0xFFE0U;
         }
 
-        switch (post & 0x60)
+        switch (post & 0x60U)
         {
             case 0x00 :
                 addr = x + offset;
@@ -1369,11 +1359,11 @@ void Mc6809::nmi(bool save_state)
 {
     if (save_state)
     {
-        cc.bit.e = 1;
+        cc.bit.e = true;
         psh(0xff, s, u);
     }
 
-    cc.bit.f = cc.bit.i = 1;
+    cc.bit.f = cc.bit.i = true;
     pc = memory.read_word(0xfffc);
 }
 
@@ -1381,11 +1371,11 @@ void Mc6809::firq(bool save_state)
 {
     if (save_state)
     {
-        cc.bit.e = 0;
+        cc.bit.e = false;
         psh(0x81, s, u);
     }
 
-    cc.bit.f = cc.bit.i = 1;
+    cc.bit.f = cc.bit.i = true;
     pc = memory.read_word(0xfff6);
 }
 
@@ -1393,78 +1383,130 @@ void Mc6809::irq(bool save_state)
 {
     if (save_state)
     {
-        cc.bit.e = 1;
+        cc.bit.e = true;
         psh(0xff, s, u);
     }
 
-    cc.bit.i = 1;           // Sw: don't set flag f !!
+    cc.bit.i = true; // Don't set flag f!
     pc = memory.read_word(0xfff8);
+}
+
+void Mc6809::EXEC_NMI(bool save_state)
+{
+    nmi(save_state);
+}
+
+void Mc6809::EXEC_IRQ(bool save_state)
+{
+    irq(save_state);
+}
+
+void Mc6809::EXEC_FIRQ(bool save_state)
+{
+    firq(save_state);
+}
+#endif
+#ifdef FASTFLEX
+void Mc6809::EXEC_NMI(bool save_state)
+{
+    if (save_state)
+    {
+        PUSH_ENTIRE;
+    }
+
+    iccreg |= 0xD0U;
+    ipcreg = GETWORD(0xFFFCU);
+}
+
+void Mc6809::EXEC_IRQ(bool save_state)
+{
+    if (save_state)
+    {
+        PUSH_ENTIRE;
+    }
+
+    iccreg |= 0x90U;
+    ipcreg = GETWORD(0xFFF8U);
+}
+
+void Mc6809::EXEC_FIRQ(bool save_state)
+{
+    if (save_state)
+    {
+        PUSHWORD(ipcreg);
+        PUSHBYTE(iccreg);
+        iccreg &= 0x7FU;
+    }
+
+    iccreg |= 0x50U;
+    ipcreg = GETWORD(0xFFF6U);
 }
 #endif
 
 void Mc6809::set_bp(int which, Word address)
 {
+    if (which < 0 || which > static_cast<int>(bp.size()))
+    {
+        throw FlexException(FERR_WRONG_PARAMETER);
+    }
+
     bp[which] = address;
     events |= Event::BreakPoint;
 }
 
-unsigned int Mc6809::get_bp(int which)
+OptionalWord Mc6809::get_bp(int which)
 {
+    if (which < 0 || which > static_cast<int>(bp.size()))
+    {
+        throw FlexException(FERR_WRONG_PARAMETER);
+    }
+
     return bp[which];
 }
 
-int Mc6809::is_bp_set(int which)
+bool Mc6809::is_bp_set(int which)
 {
-    return bp[which] < 0x10000;
+    if (which < 0 || which > static_cast<int>(bp.size()))
+    {
+        throw FlexException(FERR_WRONG_PARAMETER);
+    }
+
+    return bp[which].has_value();
 }
 
 void Mc6809::reset_bp(int which)
 {
-    bp[which] = 0x10000;
+    if (which < 0 || which > static_cast<int>(bp.size()))
+    {
+        throw FlexException(FERR_WRONG_PARAMETER);
+    }
 
-    if (bp[0] >  0xffff && bp[1] >  0xffff && bp[2] >  0xffff)
+    bp[which].reset();
+
+    if (!bp[0].has_value() && !bp[1].has_value() && !bp[2].has_value())
     {
         events &= ~Event::BreakPoint;
     }
 
     // if a bp has been set in another thread check again
-    if (bp[0] <= 0xffff || bp[1] <= 0xffff || bp[2] <= 0xffff)
+    if (bp[0].has_value() || bp[1].has_value() || bp[2].has_value())
     {
         events |= Event::BreakPoint;
     }
 }
 
 // If logFileName is empty the current log file is closed.
-bool Mc6809::set_logfile(const struct s_cpu_logfile &x_lfs)
+bool Mc6809::setLoggerConfig(const Mc6809LoggerConfig &loggerConfig)
 {
-    if (log_fp != nullptr)
-    {
-        fclose(log_fp);
-        log_fp = nullptr;
-    }
-
-    lfs = x_lfs;
-
-    if (!lfs.logFileName.empty())
-    {
-        if ((log_fp = fopen(x_lfs.logFileName.c_str(), "w")) == nullptr)
-        {
-            // Error when trying to open log file.
-            lfs.logFileName.clear();
-        }
-
-        return log_fp != nullptr;
-    }
-
-    return false;
+    return logger.setLoggerConfig(loggerConfig);
 }
 
 void Mc6809::get_interrupt_status(tInterruptStatus &stat)
 {
-    memcpy(&stat, &interrupt_status, sizeof(tInterruptStatus));
+    std::memcpy(&stat, &interrupt_status, sizeof(tInterruptStatus));
 }
 
-void Mc6809::UpdateFrom(NotifyId id, void *)
+void Mc6809::UpdateFrom(NotifyId id, void * /*param*/)
 {
     if (id == NotifyId::SetIrq)
     {

@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,16 +24,19 @@
 #ifndef BRKPTUI_INCLUDE
 #define BRKPTUI_INCLUDE
 
+#include "typedefs.h"
 #include "warnoff.h"
 #include "brkpt_ui.h"
 #include <QObject>
+#include <optional>
 #include "warnon.h"
 
 class QDialog;
 class QLineEdit;
 class QAbstractButton;
 
-using BPArray = std::array<unsigned int, 2>;
+using OptionalWord = std::optional<Word>;
+using BPArray = std::array<OptionalWord, 2>;
 
 class BreakpointSettingsUi : public QObject, protected Ui_BreakpointSettings
 {
@@ -41,7 +44,7 @@ class BreakpointSettingsUi : public QObject, protected Ui_BreakpointSettings
 
 public:
     BreakpointSettingsUi();
-    ~BreakpointSettingsUi() = default;
+    ~BreakpointSettingsUi() override = default;
     void setupUi(QDialog &dialog);
     void SetData(const BPArray &breakpoints);
     BPArray GetData() const;
@@ -56,7 +59,7 @@ private slots:
     void OnRejected();
 
 private:
-    QDialog *dialog;
+    QDialog *dialog{nullptr};
 };
 
 #endif

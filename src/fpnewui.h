@@ -2,8 +2,8 @@
     fpnewui.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 1998-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 1998-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,23 +42,28 @@ class FlexplorerNewUi : public QObject, protected Ui_FlexplorerNew
 public:
 
     FlexplorerNewUi();
-    virtual ~FlexplorerNewUi();
+    ~FlexplorerNewUi() override = default;
     void setupUi(QDialog &dialog);
-    void TransferDataToDialog(int format = TYPE_DSK_CONTAINER,
-                              int tracks = 80, int sectors = 36,
+    void TransferDataToDialog(DiskType p_disk_Type, int tracks, int sectors,
                               const QString &path = "");
 
     int GetTracks() const;
     int GetSectors() const;
     QString GetPath() const;
-    int GetFormat() const;
+    DiskType GetDiskType() const;
+    bool IsDiskTypeValid() const;
+    bool IsMDCRDiskActive() const;
+    void SetDefaultPath(const QString &path);
+    QString GetDefaultPath() const;
 
 private slots:
     void OnDskFileFormat(bool value);
     void OnFlxFileFormat(bool value);
     void OnMdcrFileFormat(bool value);
     void OnFormatChanged(int index);
-    void OnTrkSecChanged();
+    void OnTrkSecChanged(int tracks, int sectors);
+    void OnTrackChanged(int tracks);
+    void OnSectorChanged(int sectors);
     void OnSelectPath();
     void OnAccepted();
     void OnRejected();
@@ -66,13 +71,15 @@ private slots:
 private:
     void InitializeWidgets();
     void ConnectSignalsWithSlots();
-    void AddTracksValidator(QLineEdit &lineEdit);
-    void AddSectorsValidator(QLineEdit &lineEdit);
     void UpdateFormatTrkSecEnable(bool isMdcrFormat);
+    void UpdateFilename();
     bool Validate();
+    QString GetCurrentFileExtension() const;
 
-    QDialog *dialog;
-    int format;
+    QDialog *dialog{nullptr};
+    QString defaultPath;
+    DiskType disk_type{DiskType::DSK};
+    bool is_disk_type_valid{};
 };
 
 #endif

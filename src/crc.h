@@ -2,7 +2,7 @@
     crc.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,20 +24,22 @@
 #define CRC_INCLUDED
 
 #include "typedefs.h"
+#include <array>
+
 
 template<typename T>
 class Crc
 {
     T crc;
-    T crc_table[256];
+    std::array<T, 256> crc_table;
 
     void Initialize(T polynomial)
     {
         for (Word dividend = 0U;
-             dividend < (sizeof(crc_table) / sizeof(T));
+             dividend < static_cast<Word>(crc_table.size());
              ++dividend)
         {
-            T current = (T)dividend << ((sizeof(T) * 8U) - 8U);
+            T current = static_cast<T>(dividend) << ((sizeof(T) * 8U) - 8U);
             for (Byte bit = 0U; bit < 8U; ++bit)
             {
                 if ((current & (1U << ((sizeof(T) * 8U) - 1U))) != 0U)
@@ -62,22 +64,23 @@ public:
     Crc &operator=(const Crc&) = delete;
     ~Crc() = default;
 
-    Crc(T p_polynomial) : crc(0U)
+    explicit Crc(T p_polynomial) : crc(0U)
     {
         Initialize(p_polynomial);
     }
 
     void Add(Byte value)
     {
-        static const Byte shift = (sizeof(T) - 1U) * 8;
-        Byte pos = (Byte)((crc ^ ((T)value << shift)) >> shift);
-        crc = (crc << 8) ^ crc_table[pos];
+        static const Byte shift = (sizeof(T) - 1U) * 8U;
+        auto pos = static_cast<Byte>(
+                (crc ^ (static_cast<unsigned>(value) << shift)) >> shift);
+        crc = (crc * 256U) ^ crc_table[pos];
     }
 
     T GetResult(const Byte *begin, const Byte *end)
     {
         Reset();
-        for (auto iter = begin; iter != end; ++iter)
+        for (const auto *iter = begin; iter != end; ++iter)
         {
             Add(*iter);
         }

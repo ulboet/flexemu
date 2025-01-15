@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 
-#include "misc1.h"
 #include "pia1.h"
 #include "schedule.h"
 #include "keyboard.h"
@@ -29,10 +28,10 @@
 #include "bobserv.h"
 
 
-Pia1::Pia1(Scheduler &x_scheduler, KeyboardIO &x_keyboardIO,
-           const struct sOptions &x_options) :
-    scheduler(x_scheduler), keyboardIO(x_keyboardIO),
-    options(x_options), request_a_updated(false)
+Pia1::Pia1(Scheduler &p_scheduler, KeyboardIO &p_keyboardIO,
+           const struct sOptions &p_options) :
+    scheduler(p_scheduler), keyboardIO(p_keyboardIO),
+    options(p_options)
 {
 }
 
@@ -93,7 +92,7 @@ Byte Pia1::readInputA()
     // for video display.
     // If it is 0 RAM Bank 2 ($8000 - $BFFF) will be used for video display
     // which also contains the stack and the direct page registers.
-    return ora | (options.isEurocom2V5 ? 0x80 : 0);
+    return ora | (options.isEurocom2V5 ? 0x80U : 0U);
 }
 
 void Pia1::set_irq_A()

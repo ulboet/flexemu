@@ -2,8 +2,8 @@
     fpwin.h
 
 
-    FLEXplorer, An explorer for any FLEX file or disk container
-    Copyright (C) 2020-2022  W. Schwotzer
+    FLEXplorer, An explorer for FLEX disk image files and directory disks.
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,12 +23,16 @@
 #ifndef FPWIN_INCLUDED
 #define FPWIN_INCLUDED
 
+#include "e2.h"
 #include "misc1.h"
 #include "efiletim.h"
 #include "warnoff.h"
+#include <QPoint>
+#include <QSize>
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
+#include <QList>
 #include "warnon.h"
 #include <functional>
 #include "sfpopts.h"
@@ -36,11 +40,18 @@
 
 class FlexplorerMdiChild;
 class QAction;
+class QEvent;
+class QWidget;
+class QToolBar;
 class QLabel;
 class QMenu;
 class QMdiArea;
 class QMimeData;
 class QMdiSubWindow;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDragLeaveEvent;
+class QDropEvent;
 
 /*------------------------------------------------------
  FLEXplorer
@@ -53,54 +64,65 @@ class FLEXplorer : public QMainWindow
 
 public:
     FLEXplorer() = delete;
-    FLEXplorer(struct sFPOptions &options);
+    explicit FLEXplorer(struct sFPOptions &options);
+    ~FLEXplorer() override;
+    FLEXplorer(const FLEXplorer &src) = delete;
+    FLEXplorer(FLEXplorer &&src) = delete;
+    FLEXplorer &operator=(const FLEXplorer &src) = delete;
+    FLEXplorer &operator=(FLEXplorer &&src) = delete;
 
-    bool OpenContainerForPath(QString path, bool isLast = true);
+    void ProcessArguments(const QStringList &args);
 
 signals:
     void FileTimeAccessHasChanged();
+    void FileSizeTypeHasChanged();
 
 private slots:
-    void NewContainer();
-    void OpenContainer();
-    void OpenDirectory();
-    void Exit();
+    void OnNewFlexDisk();
+    void OnOpenFlexDisk();
+    void OnOpenDirectory();
+    void OnOpenRecentDisk();
+    void OnOpenRecentDirectory();
+    void OnClearAllRecentDiskEntries();
+    void OnClearAllRecentDirectoryEntries();
 #ifndef QT_NO_CLIPBOARD
-    void Copy();
-    void Paste();
+    void OnCopy();
+    void OnPaste();
 #endif
-    void SelectAll();
-    void DeselectAll();
-    void FindFiles();
-    void DeleteSelected();
-    void InjectFiles();
-    void ExtractSelected();
-    void ViewSelected();
-    void AttributesSelected();
-    void Info();
-    void Options();
-    void SubWindowActivated(QMdiSubWindow *window);
-    void ContextMenuRequested(QPoint pos);
-    void UpdateWindowMenu();
-    void CloseActiveSubWindow();
-    void CloseAllSubWindows();
-    void About();
+    void OnSelectAll();
+    void OnDeselectAll();
+    void OnFindFiles();
+    void OnDeleteSelected();
+    void OnInjectFiles();
+    void OnExtractSelected();
+    void OnViewSelected();
+    void OnAttributesSelected();
+    void OnInfo();
+    void OnOptions();
+    void OnSubWindowActivated(QMdiSubWindow *window);
+    void OnContextMenuRequested(QPoint pos);
+    void OnUpdateWindowMenu();
+    void OnCloseActiveSubWindow();
+    void OnCloseAllSubWindows();
+    void OnAbout();
+    void OnSelectionHasChanged();
+    void OnIconSize(int index);
 
-public slots:
-    void SelectionHasChanged();
-    void SetStatusMessage(const QString &message);
+    static void OnExit();
 
 private:
-    void ExecuteInChild(std::function<void(FlexplorerMdiChild &child)>);
+    void ExecuteInChild(
+            const std::function<void(FlexplorerMdiChild &child)>&action);
     QToolBar *CreateToolBar(QWidget *parent, const QString &title,
-                            const QString &objectName);
-    void CreateActions();
-    void CreateFileActions();
-    void CreateEditActions();
-    void CreateContainerActions();
-    void CreateExtrasActions();
-    void CreateWindowsActions();
-    void CreateHelpActions();
+                            const QString &objectName, const QSize &iconSize);
+    void CreateActions(const QSize &iconSize);
+    void CreateFileActions(QToolBar &p_toolBar);
+    void CreateEditActions(QToolBar &p_toolBar);
+    void CreateViewActions(QToolBar &p_toolBar);
+    void CreateFlexDiskActions(QToolBar &p_toolBar);
+    void CreateExtrasActions(QToolBar &p_toolBar);
+    void CreateWindowsActions(QToolBar &p_toolBar);
+    void CreateHelpActions(QToolBar &p_toolBar);
     void CreateStatusBar();
     FlexplorerMdiChild *CreateMdiChild(const QString &path,
                                        struct sFPOptions &options);
@@ -111,6 +133,20 @@ private:
     void UpdateMenus();
     static QStringList GetSupportedFiles(const QMimeData *mimeData);
     void SetFileTimeAccess(FileTimeAccess fileTimeAccess);
+    void CreateRecentDiskActionsFor(QMenu *menu);
+    void UpdateRecentDiskActions() const;
+    void DeleteRecentDiskActions();
+    void UpdateForRecentDisk(const QString &path);
+    void RestoreRecentDisks();
+    void CreateRecentDirectoryActionsFor(QMenu *menu);
+    void UpdateRecentDirectoryActions() const;
+    void DeleteRecentDirectoryActions();
+    void UpdateForRecentDirectory(const QString &path);
+    void RestoreRecentDirectories();
+    bool OpenFlexDiskForPath(QString path, bool isLast = true);
+    void SetStatusMessage(const QString &message);
+    void SetIconSize(const QSize &iconSize);
+    void SetIconSizeCheck(const QSize &iconSize);
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -119,46 +155,87 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 
-    QMdiArea *mdiArea;
-    QMenu *windowMenu;
-    QLabel *l_selectedFilesCount;
-    QLabel *l_selectedFilesByteSize;
-    QToolBar *fileToolBar;
-    QToolBar *editToolBar;
-    QToolBar *containerToolBar;
-    QAction *newContainerAction;
-    QAction *openContainerAction;
-    QAction *openDirectoryAction;
-    QAction *injectAction;
-    QAction *extractAction;
-    QAction *selectAllAction;
-    QAction *deselectAllAction;
-    QAction *findFilesAction;
+    QMdiArea *mdiArea{};
+    QMenu *windowMenu{};
+    QMenu *recentDisksMenu{};
+    QList<QAction *> recentDiskActions;
+    QAction *recentDisksClearAllAction{};
+    QMenu *recentDirectoriesMenu{};
+    QAction *recentDirectoriesClearAllAction{};
+    QList<QAction *> recentDirectoryActions;
+    QLabel *l_selectedFilesCount{};
+    QLabel *l_selectedFilesByteSize{};
+    QToolBar *toolBar{};
+    QAction *newFlexDiskAction{};
+    QAction *openFlexDiskAction{};
+    QAction *openDirectoryAction{};
+    QAction *injectAction{};
+    QAction *extractAction{};
+    QAction *selectAllAction{};
+    QAction *deselectAllAction{};
+    QAction *findFilesAction{};
 #ifndef QT_NO_CLIPBOARD
-    QAction *copyAction;
-    QAction *pasteAction;
+    QAction *copyAction{};
+    QAction *pasteAction{};
 #endif
-    QAction *deleteAction;
-    QAction *viewAction;
-    QAction *attributesAction;
-    QAction *infoAction;
-    QAction *optionsAction;
-    QAction *closeAction;
-    QAction *closeAllAction;
-    QAction *tileAction;
-    QAction *cascadeAction;
-    QAction *nextAction;
-    QAction *previousAction;
-    QAction *windowMenuSeparatorAction;
-    QAction *aboutAction;
-    QAction *aboutQtAction;
+    QAction *deleteAction{};
+    QAction *viewAction{};
+    QAction *attributesAction{};
+    QAction *infoAction{};
+    QAction *optionsAction{};
+    QAction *closeAction{};
+    QAction *closeAllAction{};
+    QAction *tileAction{};
+    QAction *cascadeAction{};
+    QAction *nextAction{};
+    QAction *previousAction{};
+    QAction *windowMenuSeparatorAction{};
+    QAction *aboutAction{};
+    QAction *aboutQtAction{};
+    std::array<QAction *, ICON_SIZES> iconSizeAction{};
     QSize newDialogSize;
     QSize optionsDialogSize;
     QSize attributesDialogSize;
-    QString findPattern;
+    QString findPattern{"*.*"};
     QString injectDirectory;
     QString extractDirectory;
+    QStringList recentDiskPaths;
+    QStringList recentDirectoryPaths;
     sFPOptions &options;
+};
+
+class ProcessArgumentsFtor
+{
+    // Intentionally use a reference.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    FLEXplorer &window;
+    QStringList args;
+
+public:
+    ProcessArgumentsFtor() = delete;
+    /* Parameter comes from main(). */
+    /* NOLINTNEXTLINE(modernize-avoid-c-arrays) */
+    ProcessArgumentsFtor(FLEXplorer &win, int p_argc, char *p_argv[])
+    : window(win)
+    {
+        for (int i = 0; i < p_argc; ++i)
+        {
+            args.push_back(p_argv[i]);
+        }
+    }
+    ProcessArgumentsFtor(const ProcessArgumentsFtor &src) = default;
+    ProcessArgumentsFtor(ProcessArgumentsFtor &&src) noexcept
+        : window(src.window)
+        , args(std::move(src.args))
+    {
+    }
+    ProcessArgumentsFtor &operator=(const ProcessArgumentsFtor &src) = delete;
+    ProcessArgumentsFtor &operator=(ProcessArgumentsFtor &&src) = delete;
+
+    void operator() ()
+    {
+        window.ProcessArguments(args);
+    }
 };
 
 #endif

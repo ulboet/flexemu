@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,17 +21,11 @@
 */
 
 
-#include "misc1.h"
-
+#include "typedefs.h"
 #include "mmu.h"
 #include "memory.h"
 
-Mmu::Mmu(Memory &x_memory) : memory(x_memory)
-{
-}
-
-
-Mmu::~Mmu()
+Mmu::Mmu(Memory &p_memory) : memory(p_memory)
 {
 }
 
@@ -41,7 +35,7 @@ void Mmu::resetIo()
 
 
 
-Byte Mmu::readIo(Word)
+Byte Mmu::readIo(Word /*offset*/)
 {
     return 0xff;
 }

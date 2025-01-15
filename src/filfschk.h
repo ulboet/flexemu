@@ -1,8 +1,8 @@
-/*                                                                              
-    dskfschk.cpp
+/*
+    filfschk.cpp
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,8 +30,7 @@
 #include "fcinfo.h"
 
 
-
-struct ContainerCheckResultItem
+struct FlexDiskCheckResultItem
 {
     enum class Type : uint8_t
     {
@@ -40,18 +39,19 @@ struct ContainerCheckResultItem
         Error,
     };
 
-    Type type;
+    Type type{};
 
-    virtual ~ContainerCheckResultItem() = default;
+    virtual ~FlexDiskCheckResultItem() = default;
 
     friend std::ostream& operator<<(std::ostream &os,
-                                    ContainerCheckResultItem::Type type);
+                                    FlexDiskCheckResultItem::Type type);
 };
 
-using ContainerCheckResultItemPtr = std::unique_ptr<ContainerCheckResultItem>;
-using ContainerCheckResultItems = std::vector<ContainerCheckResultItemPtr>;
+using FlexDiskCheckResultItemPtr = std::unique_ptr<FlexDiskCheckResultItem>;
+using FlexDiskCheckResultItems = std::vector<FlexDiskCheckResultItemPtr>;
+using FlexDiskCheckStatistics_t = std::map<FlexDiskCheckResultItem::Type, int>;
 
-class FileContainerCheck
+class FlexDiskCheck
 {
     enum class SectorType : uint8_t
     {
@@ -63,78 +63,72 @@ class FileContainerCheck
         Lost,
     };
 
-    typedef struct s_link
+    struct s_link
     {
-        SectorType type;
-        st_t trk_sec; // track-sector of this sector.
-        st_t to; // track-sector to next linked sector or 00-00.
+        SectorType type{SectorType::NotAssigned};
+        st_t trk_sec{}; // track-sector of this sector.
+        st_t to{}; // track-sector to next linked sector or 00-00.
         std::set<st_t> from; // track-sector from previous linked sector(s)
-        SWord item_index; // index of according item
-        Word record_nr; // record number
-        Word expected_record_nr; // expected record number (only valid if
-                                 // type == SectorType::File)
-        bool is_bad; // flag if trk_sec is a bad track-sector (not usable as
-                     // link.
-        bool has_cycle; // flag if this link has a cycle
+        SDWord item_index{-1}; // index of according item
+        Word record_nr{0}; // record number
+        Word expected_record_nr{0}; // expected record number (only valid if
+                                    // type == SectorType::File)
+        bool is_bad{false}; // flag if trk_sec is a bad track-sector
+                            // (not usable as link).
+        bool has_cycle{false}; // flag if this link has a cycle
 
-        s_link() :
-            type(SectorType::NotAssigned), trk_sec{0, 0}, to{0, 0},
-            item_index(-1), record_nr(0), expected_record_nr(0),
-            is_bad(false), has_cycle(false)
+        s_link() = default;
+
+        explicit s_link(st_t ts, st_t p_to = st_t{0, 0}, Word p_record_nr = 0) :
+              trk_sec(ts), to(p_to), record_nr(p_record_nr)
         {
         }
+    };
+    using link_t = struct s_link;
 
-        s_link(st_t ts, st_t p_to = st_t{0, 0}, Word p_record_nr = 0) :
-              type(SectorType::NotAssigned), trk_sec(ts), to(p_to),
-              item_index(-1), record_nr(p_record_nr),
-              expected_record_nr(0),
-              is_bad(false), has_cycle(false)
-        {
-        }
-    } link_t;
-
-    typedef struct s_item
+    struct s_item
     {
-        SectorType type;
+        SectorType type{SectorType::NotAssigned};
         std::string name;
-        st_t start; // Start track-sector (For Files part of directory entry)
-        st_t end; // End track-sector (For Files part of directory entry)
-        st_t unexpected_end; // For Files: End track-sector (different from end)
-        Word records;
-        Word sectors;
-        bool is_random;
-        Byte month;
-        Byte day;
-        Byte year;
-        Byte hour;
-        Byte minute;
+        st_t start{}; // Start track-sector (For Files part of directory entry)
+        st_t end{}; // End track-sector (For Files part of directory entry)
+        st_t unexpected_end{}; // For Files: End track-sector (different from end)
+        Word records{0};
+        Word sectors{0};
+        bool is_random{false};
+        Byte month{0};
+        Byte day{0};
+        Byte year{0};
+        Byte hour{0};
+        Byte minute{0};
 
-        s_item(SectorType p_type, st_t p_start, st_t p_end,
-               const std::string &p_name) :
-            type(p_type),
-            name(p_name),
-            start(p_start), end(p_end),
-            unexpected_end{0,0},
-            records(0), sectors(0),
-            is_random(false)
+        s_item(SectorType p_type, st_t p_start, st_t p_end, std::string p_name)
+            : type(p_type)
+            , name(std::move(p_name))
+            , start(p_start)
+            , end(p_end)
         {
         };
-    } item_t;
+    };
+    using item_t = struct s_item;
 
 public:
-    FileContainerCheck() = delete;
-    FileContainerCheck(FileContainerIfSector &fc,
-                       FileTimeAccess fileTimeAccess);
-    FileContainerCheck(const FileContainerCheck &src) = delete;
-    FileContainerCheck(FileContainerCheck &&src) = delete;
-    ~FileContainerCheck();
+    FlexDiskCheck() = delete;
+    FlexDiskCheck(
+            const IFlexDiskBySector &p_flexDisk,
+            FileTimeAccess fileTimeAccess);
+    FlexDiskCheck(const FlexDiskCheck &src) = delete;
+    FlexDiskCheck(FlexDiskCheck &&src) = delete;
+    ~FlexDiskCheck();
 
-    FileContainerCheck &operator= (const FileContainerCheck &src) = delete;
-    FileContainerCheck &operator= (FileContainerCheck &&src) = delete;
+    FlexDiskCheck &operator= (const FlexDiskCheck &src) = delete;
+    FlexDiskCheck &operator= (FlexDiskCheck &&src) = delete;
 
     bool CheckFileSystem();
     bool IsValid() const;
-    const ContainerCheckResultItems &GetResult() const;
+    const FlexDiskCheckResultItems &GetResult() const;
+    FlexDiskCheckStatistics_t GetStatistics() const;
+    std::string GetStatisticsString() const;
     std::ostream &DebugDump(std::ostream &os) const;
 
 private:
@@ -152,130 +146,130 @@ private:
     static bool CheckTime(Byte hour, Byte minute);
     void DumpItemChains(std::ostream &os) const;
 
-    void AddItem(const std::string &name, SectorType type,      
+    void AddItem(const std::string &name, SectorType type,
                  const st_t &start,
                  const st_t &end = st_t{0, 0},
                  Word records = 0,
                  bool is_random = false);
 
     static std::string GetItemName(const item_t &item);
-    std::string GetItemName(SWord item_index) const;
-    bool IsTrackSectorValid(st_t sec_trk) const;
+    std::string GetItemName(SDWord item_index) const;
+    bool IsTrackSectorValid(st_t trk_sec) const;
     static std::string GetUnixFilename(const s_dir_entry &dir_entry);
 
     friend std::ostream& operator<<(std::ostream &os,
-                                    FileContainerCheck::SectorType type);
+                                    FlexDiskCheck::SectorType type);
     friend std::ostream& operator<<(std::ostream &os,
-                       const struct FileContainerCheck::s_link &link);
+                       const struct FlexDiskCheck::s_link &link);
     friend std::ostream& operator<<(std::ostream &os,
-                       const struct FileContainerCheck::s_item &item);
+                       const struct FlexDiskCheck::s_item &item);
 
-    const FileContainerIfSector &fc;
-    FlexContainerInfo fc_info;
+    const IFlexDiskBySector &flexDisk;
+    FlexDiskAttributes diskAttributes;
     std::map<st_t, link_t> links;
     std::vector<item_t> items;
-    ContainerCheckResultItems results;
-    Byte disk_month;
-    Byte disk_day;
-    Byte disk_year;
-    FileTimeAccess fileTimeAccess;
+    FlexDiskCheckResultItems results;
+    Byte disk_month{0};
+    Byte disk_day{0};
+    Byte disk_year{0};
+    FileTimeAccess fileTimeAccess{FileTimeAccess::NONE};
 };
 
 // The following objects represent and discribe the check results.
 
-struct MultipleLinkInputs : public ContainerCheckResultItem
+struct MultipleLinkInputs : public FlexDiskCheckResultItem
 {
     std::string name;
-    st_t current; // Current track-sector with multiple inputs.
+    st_t current{}; // Current track-sector with multiple inputs.
     std::vector<st_t> inputs; // Input Track-sector's having a link to current.
 };
 
-struct LinkAndFileInput : public ContainerCheckResultItem
+struct LinkAndFileInput : public FlexDiskCheckResultItem
 {
     std::string name;
-    st_t current;
+    st_t current{};
     std::string inputName; // Item name with start track-sector to current
-    st_t input; // Track-sector with link to current.
+    st_t input{}; // Track-sector with link to current.
 };
 
-struct NullFile : ContainerCheckResultItem
+struct NullFile : FlexDiskCheckResultItem
 {
     std::string name;
 };
 
-struct BadStart : ContainerCheckResultItem
+struct BadStart : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t start;
+    st_t start{};
 };
 
-struct BadEnd : ContainerCheckResultItem
+struct BadEnd : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t end;
+    st_t end{};
 };
 
-struct LinkAfterEnd : ContainerCheckResultItem
+struct LinkAfterEnd : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t end; // Track-Sector marked as end
-    st_t to; // Track-Sector to which end sector links to.
+    st_t end{}; // Track-Sector marked as end
+    st_t to{}; // Track-Sector to which end sector links to.
 };
 
-struct InconsistentRecordSize : ContainerCheckResultItem
+struct InconsistentRecordSize : FlexDiskCheckResultItem
 {
     std::string name;
-    Word records; // Number of records in directory entry.
-    Word sectors; // Number of sectors according to sector chain.
+    Word records{0}; // Number of records in directory entry.
+    Word sectors{0}; // Number of sectors according to sector chain.
 };
 
-struct DiscontiguousRecordNr : ContainerCheckResultItem
+struct DiscontiguousRecordNr : FlexDiskCheckResultItem
 {
     std::string name; // Item name
-    st_t current; // current track-sector
-    Word record_nr; // actual record number
-    Word expected_record_nr; // expected record number
+    st_t current{}; // current track-sector
+    Word record_nr{}; // actual record number
+    Word expected_record_nr{}; // expected record number
 };
 
-struct LostSectors : ContainerCheckResultItem
+struct LostSectors : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t start;
-    st_t end;
-    Word sectors; // Number of sectors.
+    st_t start{};
+    st_t end{};
+    Word sectors{}; // Number of sectors.
 };
 
-struct HasCycle : ContainerCheckResultItem
+struct HasCycle : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t from; // Track-sector which has a link back to back_to.
-    st_t back_to;
+    st_t from{}; // Track-sector which has a link back to back_to.
+    st_t back_to{};
 };
 
-struct BadLink : ContainerCheckResultItem
+struct BadLink : FlexDiskCheckResultItem
 {
     std::string name;
-    st_t bad; // Bad track-sector.
-    st_t current; // Track-sector with the bad link.
+    st_t bad{}; // Bad track-sector.
+    st_t current{}; // Track-sector with the bad link.
 };
 
-struct BadDate : ContainerCheckResultItem
+struct BadDate : FlexDiskCheckResultItem
 {
     std::string name;
-    Byte day;
-    Byte month;
-    Byte year;
+    Byte day{};
+    Byte month{};
+    Byte year{};
 };
 
-struct BadTime : ContainerCheckResultItem
+struct BadTime : FlexDiskCheckResultItem
 {
     std::string name;
-    Byte hour;
-    Byte minute;
+    Byte hour{};
+    Byte minute{};
 };
 
 extern std::ostream &operator<<(std::ostream &os,
-                                const ContainerCheckResultItemPtr &result);
+                                const FlexDiskCheckResultItemPtr &result);
 
 extern std::ostream& operator<<(std::ostream &os,
                                 const MultipleLinkInputs &item);

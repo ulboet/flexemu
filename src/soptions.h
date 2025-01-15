@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2021-2022  W. Schwotzer
+    Copyright (C) 2021-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,11 +28,11 @@
 #include <string>
 #include <array>
 #include <vector>
+#include <map>
 #include <algorithm>
 #include "efiletim.h"
+#include "e2.h"
 
-// Maximum size of one emulated pixel on screen
-#define MAX_PIXELSIZE (5)
 
 enum class FlexemuOptionId : uint8_t
 {
@@ -61,78 +61,85 @@ enum class FlexemuOptionId : uint8_t
     NColors,
     IsInverse,
     PixelSize,
+    IconSize,
     FileTimeAccess,
     IsDisplaySmooth,
+    PrintFont,
+    IsPrintPageBreakDetected,
+    PrintOrientation,
+    PrintPageSize,
+    PrintUnit,
+    PrintOutputWindowGeometry,
+    PrintPreviewDialogGeometry,
+    PrintConfigs,
+    DirectoryDiskTrkSec,
+    IsDirectoryDiskActive,
+    IsStatusBarVisible,
+    TerminalType,
+    IsConfirmExit,
 };
-using FlexemuOptionIds = std::vector<FlexemuOptionId>;
+using FlexemuOptionIds_t = std::vector<FlexemuOptionId>;
 
-const FlexemuOptionIds allFlexemuOptionIds {
-    FlexemuOptionId::Drive0,
-    FlexemuOptionId::Drive1,
-    FlexemuOptionId::Drive2,
-    FlexemuOptionId::Drive3,
-    FlexemuOptionId::CanFormatDrive0,
-    FlexemuOptionId::CanFormatDrive1,
-    FlexemuOptionId::CanFormatDrive2,
-    FlexemuOptionId::CanFormatDrive3,
-    FlexemuOptionId::MdcrDrive0,
-    FlexemuOptionId::MdcrDrive1,
-    FlexemuOptionId::HexFile,
-    FlexemuOptionId::DiskDirectory,
-    FlexemuOptionId::IsRamExt2x96,
-    FlexemuOptionId::IsRamExt2x288,
-    FlexemuOptionId::IsFlexibleMmu,
-    FlexemuOptionId::IsEurocom2V5,
-    FlexemuOptionId::IsUseUndocumented,
-    FlexemuOptionId::IsUseRtc,
-    FlexemuOptionId::IsTerminalIgnoreESC,
-    FlexemuOptionId::IsTerminalIgnoreNUL,
-    FlexemuOptionId::Frequency,
-    FlexemuOptionId::Color,
-    FlexemuOptionId::NColors,
-    FlexemuOptionId::IsInverse,
-    FlexemuOptionId::PixelSize,
-    FlexemuOptionId::FileTimeAccess,
-    FlexemuOptionId::IsDisplaySmooth,
-};
+extern const FlexemuOptionIds_t &GetAllFlexemuOptionIds();
 
 struct sOptions
 {
     sOptions() = default;
     sOptions(const sOptions &src) = default;
+    // No glue why clang-tidy finds an identifier __i0 here.
+    // NOLINTNEXTLINE(bugprone-reserved-identifier)
     sOptions& operator=(const sOptions &src) = default;
 
-    std::string drive[4];
+    std::string version;
+    std::array<std::string, MAX_DRIVES> drives;
     std::array<std::string, 2> mdcrDrives;
     std::string hex_file;
     std::string disk_dir;
     std::string startup_command;
-    bool isRamExtension;  // Use RAM extension cards/No RAM extension
-    bool isHiMem;         // Use 2 x 288K RAM extension/2 x 96 K RAM ext.
-    bool isFlexibleMmu;   // Use flexible MMU/Normal MMU
-    bool isEurocom2V5;    // Emulate an Eurocom II/V5 (instead of Eurocom II/V7)
-    bool use_undocumented;
-    bool useRtc;
-    bool term_mode;
-    bool canFormatDrive[4];
-    bool isTerminalIgnoreESC; // Terminal mode: Ignore ESC (0x1B) characters
-    bool isTerminalIgnoreNUL; // Terminal mode: Ignore NUL (0x00) characters
-    FileTimeAccess fileTimeAccess;
-    short int reset_key; // must be short int because of sscanf !!!
-    float frequency;
+    bool isRamExtension{}; // Use RAM extension cards/No RAM extension
+    bool isHiMem{}; // Use 2 x 288K RAM extension/2 x 96 K RAM ext.
+    bool isFlexibleMmu{}; // Use flexible MMU/Normal MMU
+    bool isEurocom2V5{}; // Emulate an Eurocom II/V5 (instead of Eurocom II/V7)
+    bool use_undocumented{};
+    bool useRtc{};
+    bool term_mode{};
+    std::array<bool, MAX_DRIVES> canFormatDrives{};
+    bool isTerminalIgnoreESC{}; // Terminal mode: Ignore ESC (0x1B) characters
+    bool isTerminalIgnoreNUL{}; // Terminal mode: Ignore NUL (0x00) characters
+    int terminalType{}; // type of terminal: 1 = scrolling, 2 = ncurses
+    FileTimeAccess fileTimeAccess{};
+    short int reset_key{};
+    int iconSize{}; // Size of icons {16, 24, 32 }.
+    float frequency{};
 
     // User interface options
     std::string color; // color name or "default" for multi color palette.
     std::string doc_dir; // Directory containing html documenation.
-    int nColors; // Number of colors or gray scale values { 2, 8, 64 }.
-    bool isInverse; // Display inverse colors or gray scale values.
-    bool isSmooth; // Display mode is smooth display.
-    int pixelSize; // Size of one pixel on the screen { 1, 2, 3, 4, 5 }.
+    int nColors{}; // Number of colors or gray scale values { 2, 8, 64 }.
+    bool isInverse{}; // Display inverse colors or gray scale values.
+    bool isSmooth{}; // Display mode is smooth display.
+    bool isConfirmExit{}; // On flexemu exit open confirmation dialog.
+    int pixelSize{}; // Size of one pixel on the screen { 1, 2, 3, 4, 5 }.
                    // It depends on the screen dimensions on which flexemu
                    // is executed.
+    std::string printFont; // Font used for printing documents (monospace)
+    bool isPrintPageBreakDetected{}; // Print preview: Automatic page break det.
+    std::string printOrientation; // Print preview: Page orientation (Port/Land)
+    std::string printPageSize; // Print preview: Page size
+    std::string printUnit; // Print preview: Unit (mm/inch)
+    // Print preview options: Margins and size factor.
+    // Orientation, page size and font are used as a key into the dictionary.
+    std::map<std::string, std::string> printConfigs;
+    std::string printOutputWindowGeometry; // Geometry of print output window
+    std::string printPreviewDialogGeometry; // Geometry of print preview dialog
+    int directoryDiskTracks{}; // Default number of track for a directory disk
+    int directoryDiskSectors{}; // Default number of sectors for a directory disk
+    bool isDirectoryDiskActive{}; // true if directory disk is active.
+    bool isStatusBarVisible{}; // true if status bar is visible.
+    std::string cpuLogPath; // Path used for CPU instruction logging
 
-    FlexemuOptionIds readOnlyOptionIds;// List of option ids which are
-                                       // read-only.
+    FlexemuOptionIds_t readOnlyOptionIds;// List of option ids which are
+                                         // read-only.
 };
 
 #endif

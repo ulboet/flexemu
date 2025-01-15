@@ -2,7 +2,7 @@
     btime.h
 
     Basic class containing a time with resolution seconds.
-    Copyright (C) 2022  W. Schwotzer
+    Copyright (C) 2022-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,15 +22,16 @@
 #ifndef BTIME_INCLUDED
 #define BTIME_INCLUDED
 
+#include <cstdint>
 #include <string>
 
 class BTime
 {
 private:
 
-    int hour; // range 0..23
-    int minute; // range 0..59
-    int second; // range 0..59
+    int hour{0}; // range 0..23
+    int minute{0}; // range 0..59
+    int second{0}; // range 0..59
 
 public:
 
@@ -40,12 +41,13 @@ public:
         HHMM, // HH:MM hour:minute
     };
 
-    BTime(int h = 0U, int m = 0U, int s = 0U);
-    BTime(const BTime &src);
-    ~BTime();
+    explicit BTime() = default;
+    BTime(int h, int m, int s = 0);
+    BTime(const BTime &src) = default;
+    ~BTime() = default;
 
     static BTime Now();
-    const std::string AsString(Format = Format::HHMMSS) const;
+    std::string AsString(Format format = Format::HHMMSS) const;
     void Get(int &hour, int &minute, int &second) const;
     void Set(int hour, int minute, int second);
     void Set(const BTime &src);
@@ -53,10 +55,11 @@ public:
     int GetMinute() const;
     int GetSecond() const;
     size_t ToSeconds() const;
-    BTime &operator = (const BTime &src);
+    BTime &operator = (const BTime &src) = default;
 };
 
 bool operator == (const BTime &rhs, const BTime &lhs);
+bool operator != (const BTime &rhs, const BTime &lhs);
 bool operator < (const BTime &rhs, const BTime &lhs);
 bool operator > (const BTime &rhs, const BTime &lhs);
 bool operator <= (const BTime &rhs, const BTime &lhs);

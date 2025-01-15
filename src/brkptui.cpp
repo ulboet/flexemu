@@ -3,7 +3,7 @@
 
 
     Flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 2020-2022  W. Schwotzer
+    Copyright (C) 2020-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 */
 
 
-#include "misc1.h"
 #include "bui.h"
 #include "brkptui.h"
 #include "efslctle.h"
@@ -31,8 +30,10 @@
 #include <QAbstractButton>
 #include "warnon.h"
 
+using OptionalWord = std::optional<Word>;
+
 BreakpointSettingsUi::BreakpointSettingsUi() :
-    Ui_BreakpointSettings(), dialog(nullptr)
+    Ui_BreakpointSettings()
 {
 }
 
@@ -65,27 +66,27 @@ void BreakpointSettingsUi::SetData(const BPArray &breakpoints)
         throw std::logic_error("setupUi(dialog) has to be called before.");
     }
 
-    ::SetData<uint>(breakpoints[0], *e_breakpoint1);
-    ::SetData<uint>(breakpoints[1], *e_breakpoint2);
+    ::SetData<OptionalWord>(breakpoints[0], *e_breakpoint1);
+    ::SetData<OptionalWord>(breakpoints[1], *e_breakpoint2);
 }
 
 BPArray BreakpointSettingsUi::GetData() const
 {
     BPArray breakpoints;
 
-    breakpoints[0] = ::GetData<uint>(*e_breakpoint1);
-    breakpoints[1] = ::GetData<uint>(*e_breakpoint2);
+    breakpoints[0] = ::GetData<OptionalWord>(*e_breakpoint1);
+    breakpoints[1] = ::GetData<OptionalWord>(*e_breakpoint2);
 
     return breakpoints;
 }
 
 void BreakpointSettingsUi::ConnectSignalsWithSlots()
 {
-    QObject::connect(c_buttonBox, &QDialogButtonBox::accepted,
-        this, &BreakpointSettingsUi::OnAccepted);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::rejected,
+    connect(c_buttonBox, &QDialogButtonBox::accepted,
+            this, &BreakpointSettingsUi::OnAccepted);
+    connect(c_buttonBox, &QDialogButtonBox::rejected,
             this, &BreakpointSettingsUi::OnRejected);
-    QObject::connect(c_buttonBox, &QDialogButtonBox::clicked,
+    connect(c_buttonBox, &QDialogButtonBox::clicked,
             this, &BreakpointSettingsUi::OnClicked);
 }
 

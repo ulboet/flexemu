@@ -1,7 +1,7 @@
 /* engine.h
 
    flexemu, an MC6809 emulator running FLEX
-   Copyright (C) 1997-2022  W. Schwotzer
+   Copyright (C) 1997-2025  W. Schwotzer
 
    Copyright 1994,1995 L.C. Benschop, Eidnhoven The Netherlands.
 
@@ -22,7 +22,7 @@
    This program simulates a 6809 processor.
 
    System dependencies: short must be 16 bits.
-                        char  must be 8 bits.
+                        char must be 8 bits.
                         long must be more than 16 bits.
                         arrays up to 65536 bytes must be supported.
                         machine must be twos complement.
@@ -42,16 +42,16 @@
    Note: BIG_ENDIAN option is no longer needed.
 */
 
-#ifndef _ENGINE_INCLUDED_
-#define _ENGINE_INCLUDED_
+#ifndef ENGINE_INCLUDED
+#define ENGINE_INCLUDED
 
 #define engine
 
 
 #define GETBYTE(a) memory.read_byte(a)
-#define GETBYTE_PI(a) memory.read_byte(a++) // get byte with post increment
+#define GETBYTE_PI(a) memory.read_byte((a)++) // get byte with post increment
 #define GETWORD(a) memory.read_word(a)
-#define SETBYTE(a,n) memory.write_byte(a, (Byte)n);
+#define SETBYTE(a,n) memory.write_byte(a, static_cast<Byte>(n));
 #define SETWORD(a,n) memory.write_word(a, n);
 
 /* Two bytes of a word are fetched separately because of
@@ -59,21 +59,21 @@
 */
 
 #define IMMBYTE(b) b=memory.read_byte(ipcreg++)
-#define IMMWORD(w) {w=GETWORD(ipcreg);ipcreg+=2;}
+#define IMMWORD(w) {(w)=GETWORD(ipcreg);ipcreg+=2;}
 
 #define PUSHBYTE(b) {--isreg;SETBYTE(isreg,b);}
 #define PUSHWORD(w) {isreg-=2;SETWORD(isreg,w);}
-#define PULLWORD(w) {w=GETWORD(isreg);isreg+=2;}
+#define PULLWORD(w) {(w)=GETWORD(isreg);isreg+=2;}
 #define PSHUBYTE(b) {--iureg;SETBYTE(iureg,b);}
 #define PSHUWORD(w) {iureg-=2;SETWORD(iureg,w);}
-#define PULUWORD(w) {w=GETWORD(iureg);iureg+=2;}
+#define PULUWORD(w) {(w)=GETWORD(iureg);iureg+=2;}
 #define PULLBYTE(b) b=memory.read_byte(isreg++)
 #define PULUBYTE(b) b=memory.read_byte(iureg++)
 
-#define SIGNED(b) ((Word)(b&0x80?b|0xff00:b))
+#define SIGNED(b) (static_cast<Word>((b)&0x80?(b)|0xff00:(b)))
 
 #define GETDREG ((iareg<<8)|ibreg)
-#define SETDREG(n) {iareg=(Byte)((n)>>8);ibreg=(Byte)(n);}
+#define SETDREG(n) {iareg=static_cast<Byte>((n)>>8);ibreg=static_cast<Byte>(n);}
 
 /* Macros for addressing modes (postbytes have their own code) */
 #define DIRECT {IMMBYTE(eaddr); eaddr|=(idpreg<<8);}
@@ -99,16 +99,16 @@
 #define INVALID_EXGTFR ipcreg--; invalid("exchange/transfer register")
 
 /* set N and Z flags depending on 8 or 16 bit result */
-#define SETNZ8(b) {if(b)CLZ; else SEZ; if(b&0x80)SEN; else CLN;}
-#define SETNZ16(b) {if(b)CLZ; else SEZ; if(b&0x8000)SEN; else CLN;}
+#define SETNZ8(b) {if(b)CLZ; else SEZ; if((b)&0x80)SEN; else CLN;}
+#define SETNZ16(b) {if(b)CLZ; else SEZ; if((b)&0x8000)SEN; else CLN;}
 
-#define SETSTATUS(a,b,res) if((a^b^res)&0x10) SEH; else CLH; \
-            if((a^b^res^(res>>1))&0x80)SEV; else CLV; \
-                    if(res&0x100)SEC; else CLC; SETNZ8((Byte)res)
+#define SETSTATUS(a,b,res) if(((a)^(b)^(res))&0x10) SEH; else CLH; \
+            if(((a)^(b)^(res)^((res)>>1))&0x80)SEV; else CLV; \
+                    if((res)&0x100)SEC; else CLC; SETNZ8(static_cast<Byte>(res))
 
-#define SETSTATUSD(a,b,res) {if(res&0x10000) SEC; else CLC; \
-                if(((res>>1)^a^b^res)&0x8000) SEV; else CLV; \
-                        SETNZ16((Word)res);}
+#define SETSTATUSD(a,b,res) {if((res)&0x10000) SEC; else CLC; \
+                if((((res)>>1)^(a)^(b)^(res))&0x8000) SEV; else CLV; \
+                        SETNZ16(static_cast<Word>(res));}
 
 /* Macros for branch instructions */
 #define BRANCH(f) if(!iflag){IMMBYTE(tb); if(f)ipcreg+=SIGNED(tb);}\
@@ -117,17 +117,17 @@
 
 /* MAcros for setting/getting registers in TFR/EXG instructions */
 #define GETREG(val,reg) switch(reg) {\
-    case 0: val=GETDREG;break;\
-    case 1: val=ixreg;break;\
-    case 2: val=iyreg;break;\
-    case 3: val=iureg;break;\
-    case 4: val=isreg;break;\
-    case 5: val=ipcreg;break;\
-    case 8: val=(Byte)iareg;break;\
-    case 9: val=(Byte)ibreg;break;\
-    case 10: val=(Byte)iccreg;break;\
-    case 11: val=(Byte)idpreg;break;\
-    default: val=0; INVALID_EXGTFR; break;}
+    case 0: (val)=GETDREG;break;\
+    case 1: (val)=ixreg;break;\
+    case 2: (val)=iyreg;break;\
+    case 3: (val)=iureg;break;\
+    case 4: (val)=isreg;break;\
+    case 5: (val)=ipcreg;break;\
+    case 8: (val)=static_cast<Byte>(iareg);break;\
+    case 9: (val)=static_cast<Byte>(ibreg);break;\
+    case 10: (val)=static_cast<Byte>(iccreg);break;\
+    case 11: (val)=static_cast<Byte>(idpreg);break;\
+    default: (val)=0; INVALID_EXGTFR; break;}
 
 #define SETREG(val,reg) switch(reg) {\
     case 0: SETDREG(val); break;\
@@ -136,10 +136,10 @@
     case 3: iureg=val;break;\
     case 4: isreg=val;break;\
     case 5: ipcreg=val;break;\
-    case 8: iareg=(Byte)val;break;\
-    case 9: ibreg=(Byte)val;break;\
-    case 10: iccreg=(Byte)val;break;\
-    case 11: idpreg=(Byte)val;break;\
+    case 8: iareg=static_cast<Byte>(val);break;\
+    case 9: ibreg=static_cast<Byte>(val);break;\
+    case 10: iccreg=static_cast<Byte>(val);break;\
+    case 11: idpreg=static_cast<Byte>(val);break;\
     default: INVALID_EXGTFR; break;}
 
 /* Macros for load and store of accumulators. Can be modified to check
@@ -151,7 +151,7 @@
 #define LOADREGS
 #define SAVEREGS
 
-#define PUSH_ENTIRE  PUSHWORD(ipcreg);\
+#define PUSH_ENTIRE PUSHWORD(ipcreg);\
     PUSHWORD(iureg);\
     PUSHWORD(iyreg);\
     PUSHWORD(ixreg);\
@@ -159,26 +159,6 @@
     PUSHBYTE(ibreg);\
     PUSHBYTE(iareg);\
     PUSHBYTE(iccreg)
-
-#define EXEC_IRQ(save_state)    if (save_state) {\
-        PUSH_ENTIRE;\
-    }\
-    iccreg|=0x90;\
-    ipcreg=GETWORD(0xfff8)
-
-#define EXEC_NMI(save_state)    if (save_state) {\
-        PUSH_ENTIRE;\
-    }\
-    iccreg|=0xD0;\
-    ipcreg=GETWORD(0xfffc)
-
-#define EXEC_FIRQ(save_state)   if (save_state) {\
-        PUSHWORD(ipcreg);\
-        PUSHBYTE(iccreg);\
-        iccreg&=0x7f;\
-    }\
-    iccreg|=0x50;\
-    ipcreg=GETWORD(0xfff6)
 
 #endif
 

@@ -3,7 +3,7 @@
 
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,9 +25,9 @@
 #include "mc6821.h"
 
 
-CActiveTransition::CActiveTransition(Mc6821 &x_mc6821,
-                                     Mc6821::ControlLine x_control_line) :
-    mc6821(x_mc6821), control_line(x_control_line)
+CActiveTransition::CActiveTransition(Mc6821 &p_mc6821,
+                                     Mc6821::ControlLine p_control_line) :
+    mc6821(p_mc6821), control_line(p_control_line)
 {
 }
 

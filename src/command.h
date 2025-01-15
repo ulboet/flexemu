@@ -2,7 +2,7 @@
     command.h
 
     flexemu, an MC6809 emulator running FLEX
-    Copyright (C) 1997-2022  W. Schwotzer
+    Copyright (C) 1997-2025  W. Schwotzer
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,17 +27,24 @@
 #include "misc1.h"
 #include "iodevice.h"
 #include "bobservd.h"
+#include "asciictl.h"
+#include "soptions.h"
 #include <string>
+#include <array>
 
-#define MAX_COMMAND     (128)
-#define INVALID_DRIVE   (4)
+enum : uint8_t {
+MAX_COMMAND = 128,
+};
 
-#define CR          (0x0d)
+enum : uint8_t {
+INVALID_DRIVE = 4, /* Identifier for an invalid drive */
+};
 
 class Inout;
 class E2floppy;
 class Scheduler;
 
+using command_t = std::array<char, MAX_COMMAND>;
 
 class Command : public IoDevice, public BObserved
 {
@@ -45,19 +52,18 @@ class Command : public IoDevice, public BObserved
     // Internal registers
 protected:
 
-    Inout       &inout;
-    Scheduler   &scheduler;
-    E2floppy    &fdc;
-    char         command[MAX_COMMAND];
-    Word         command_index;
-    Word         answer_index;
-    std::string  answer;
+    Inout &inout;
+    Scheduler &scheduler;
+    E2floppy &fdc;
+    command_t command{};
+    Word command_index{0};
+    Word answer_index{0};
+    std::string answer;
+    const sOptions &options;
 
     // private interface:
 private:
-    void        skip_token(char **);
-    const char  *next_token(char **, int *);
-    const char  *modify_command_token(char *p);
+    std::string next_token(command_t::iterator &iter, int &count);
 
     // public interface
 public:
@@ -76,10 +82,15 @@ public:
 
 public:
     Command(
-            Inout &x_inout,
-            Scheduler &x_scheduler,
-            E2floppy &x_fdc);
-    virtual ~Command();
+            Inout &p_inout,
+            Scheduler &p_scheduler,
+            E2floppy &p_fdc,
+            const sOptions &p_options);
+    ~Command() override = default;
+    Command(const Command &src) = delete;
+    Command(Command &&src) = delete;
+    Command &operator=(const Command &src) = delete;
+    Command &operator=(Command &&src) = delete;
 };
 
 #endif // COMMAND_INCLUDED
