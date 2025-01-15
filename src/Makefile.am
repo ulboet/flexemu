@@ -229,12 +229,14 @@ flexemu_SOURCES = \
 	mc6809lg.cpp \
 	mc6809st.cpp \
 	mc6821.cpp \
+	mc6522.cpp \
 	mc6850.cpp \
 	mmu.cpp \
 	ndircont.cpp \
 	pagedet.cpp \
 	pagedetd.cpp \
 	pia1.cpp \
+	via1.cpp \
 	pia2.cpp \
 	pia2v5.cpp \
 	poutwin.cpp \
@@ -330,6 +332,7 @@ flexemu_SOURCES = \
 	mc6809lg.h \
 	mc6809st.h \
 	mc6821.h \
+	mc6522.h \
 	mc6850.h \
 	mdcrtape.h \
 	memory.h \
@@ -341,6 +344,7 @@ flexemu_SOURCES = \
 	pagedet.h \
 	pagedetd.h \
 	pia1.h \
+	via1.h \
 	pia2.h \
 	pia2v5.h \
 	poutwin.h \
