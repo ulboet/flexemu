@@ -1,10 +1,6 @@
 /*
-<<<<<<<< HEAD:src/fdoptman.h
     fdoptman.h
 
-========
-    via1.h
->>>>>>>> 1272a3db9d378f0108133dfa7c6cec361eb660b6:src/via1.h
 
     flexemu, an MC6809 emulator running FLEX
     Copyright (C) 2024-2025  W. Schwotzer
@@ -24,7 +20,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-<<<<<<<< HEAD:src/fdoptman.h
 #ifndef FDOPTMAN_INCLUDED
 #define FDOPTMAN_INCLUDED
 
@@ -33,37 +28,8 @@
 
 
 class FlexDirectoryDiskOptions
-========
-
-
-#ifndef VIA1_INCLUDED
-#define VIA1_INCLUDED
-
-#include "misc1.h"
-#include "mc6522.h"
-#include "bobservd.h"
-
-
-class Scheduler;
-class BObserver;
-
-class Via1 : public Mc6522, public BObserved
->>>>>>>> 1272a3db9d378f0108133dfa7c6cec361eb660b6:src/via1.h
 {
-protected:
-
-    Scheduler &scheduler;
-    
-protected:
-
-    void set_irq_A() override;
-    void set_irq_B() override;
-    Byte readInputA() override;
-    void writeOutputA(Byte val) override;
- 
-
 public:
-<<<<<<<< HEAD:src/fdoptman.h
     FlexDirectoryDiskOptions() = delete;
     explicit FlexDirectoryDiskOptions(std::string directory);
     bool Read();
@@ -82,16 +48,4 @@ private:
 };
 
 #endif // FOPTMAN_INCLUDED
-========
-    Via1(Scheduler &x_scheduler);
-    void resetIo() override;
-    
-    const char *getName() override
-    {
-        return "via1";
-    }
-};
-
-#endif // VIA1_INCLUDED
->>>>>>>> 1272a3db9d378f0108133dfa7c6cec361eb660b6:src/via1.h
 

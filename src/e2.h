@@ -104,7 +104,8 @@ TERM_COLUMNS = (WINDOWWIDTH / 6), // Terminal columns
 /* ROM_BASE defines the base address where ROM  */
 /* memory is locatad (read-only memory).        */
 enum : uint16_t {
-GENIO_BASE = 0xfc00, /* Start addr. of mm-I/O up to 0xffff */
+GENIO_BASE = 0x0000, /* Start addr. of mm-I/O up to 0xffff */
+GENIO_END = 0xffff,
 ROM_BASE = 0xf000, /* Start addr. of ROM up to 0xffff */
 };
 

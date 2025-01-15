@@ -28,8 +28,7 @@
 #include "bobserv.h"
 
 
-Via1::Via1(Scheduler &x_scheduler) :
-    scheduler(x_scheduler)
+Via1::Via1(Scheduler &x_scheduler) : scheduler(x_scheduler)
 {
 }
 
@@ -70,7 +69,15 @@ Byte Via1::readInputA()
             case 3: return static_cast<Byte>(lt->tm_min) / 10; // minutes tens register
             case 4: return static_cast<Byte>(lt->tm_hour) % 10; // hours units register
             case 5: return static_cast<Byte>(lt->tm_hour) / 10; // hours tens register
-            case 6: return static_cast<Byte>(lt->tm_wday); // day-of-week register
+            case 6: 
+                {       // to be fixed in FLEX
+                    Byte weekofday = static_cast<Byte>(lt->tm_wday);
+                    if(weekofday==0)
+                        return 7;
+                    else
+                        return weekofday;
+                }
+            // correct implementation:                     return static_cast<Byte>(lt->tm_wday); // day-of-week register
             case 7: return static_cast<Byte>(lt->tm_mday) % 10; // day units register
             case 8: return static_cast<Byte>(lt->tm_mday) / 10; // day tens register
             case 9: return static_cast<Byte>(lt->tm_mon + 1) % 10; // month units register

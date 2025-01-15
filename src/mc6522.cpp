@@ -27,14 +27,17 @@
 
 #include "mc6522.h"
 
-Mc6522::Mc6522() : ora(0), ddra(0), orb(0), ddrb(0),
+/* Mc6522::Mc6522() : ora(0), ddra(0), orb(0), ddrb(0),
                    cls(ControlLine::NONE)
 {
 }
 
+
 Mc6522::~Mc6522()
 {
 }
+
+*/
 
 void Mc6522::resetIo()
 {

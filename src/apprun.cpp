@@ -133,7 +133,6 @@ ApplicationRunner::ApplicationRunner(struct sOptions &p_options,
     ioDevices.insert({ acia1.getName(), acia1 });
     ioDevices.insert({ pia1.getName(), pia1 });
     ioDevices.insert({ via1.getName(), via1 });
-
     if (options.isEurocom2V5)
     {
         ioDevices.insert({ pia2v5.getName(), pia2v5 });

@@ -90,11 +90,9 @@ libfmt_a_CXXFLAGS   = --std=c++11 $(MACOSX_VERSION_MIN) \
 			-I$(top_srcdir)/fmt/include
 libflex_a_CXXFLAGS  = -I$(top_srcdir)/fmt/include \
 			$(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
-# Avoid using @CURSES_CFLAGS@. It causes warnings about redefining
-# _XOPEN_SOURCE when compiling with clang. Instead use _DEFAULT_SOURCE.
 flexemu_CXXFLAGS    = -I$(top_srcdir)/fmt/include \
 			$(QT_CXXFLAGS) $(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH) \
-			-D_DEFAULT_SOURCE -DADD_NCURSES_VERSION
+			@CURSES_CFLAGS@ -DADD_NCURSES_VERSION
 flexplorer_CXXFLAGS = -I$(top_srcdir)/fmt/include \
 			$(QT_CXXFLAGS) $(ALL_TARGETS_CXXFLAGS) $(INCLUDE_PCH)
 mdcrtool_CXXFLAGS   = -I$(top_srcdir)/fmt/include \
@@ -118,12 +116,12 @@ flexemu_LDADD    = \
 	libflex.a libfmt.a @CURSES_LIBS@
 updatemd_LDADD    = $(PTHREAD_LD) libflex.a libfmt.a libjsoncpp.a
 
-libflex_a_DEPENDENCIES  = libfmt.a
-flexemu_DEPENDENCIES    = libflex.a libfmt.a
-flexplorer_DEPENDENCIES = libflex.a libfmt.a
-flex2hex_DEPENDENCIES   = libflex.a libfmt.a
-dsktool_DEPENDENCIES    = libflex.a libfmt.a
-mdcrtool_DEPENDENCIES   = libflex.a libfmt.a
+libflex_a_DEPENDENCIES  = $(PCH_H_GCH) libfmt.a
+flexemu_DEPENDENCIES    = $(PCH_H_GCH) libflex.a libfmt.a
+flexplorer_DEPENDENCIES = $(PCH_H_GCH) libflex.a libfmt.a
+flex2hex_DEPENDENCIES   = $(PCH_H_GCH) libflex.a libfmt.a
+dsktool_DEPENDENCIES    = $(PCH_H_GCH) libflex.a libfmt.a
+mdcrtool_DEPENDENCIES   = $(PCH_H_GCH) libflex.a libfmt.a
 updatemd_DEPENDENCIES   = libflex.a libfmt.a libjsoncpp.a
 
 # Rule for precompiled header:
@@ -183,7 +181,6 @@ nodist_flexplorer_SOURCES = \
 	$(flexplorer_ui_hdr) $(flexplorer_qrc_src) $(flexplorer_moc_src)
 
 BUILT_SOURCES = \
-	$(PCH_H_GCH) \
 	$(nodist_flexemu_SOURCES) \
 	$(nodist_flexplorer_SOURCES)
 
@@ -224,19 +221,18 @@ flexemu_SOURCES = \
 	logfilui.cpp \
 	main.cpp \
 	mc146818.cpp \
+	mc6522.cpp \
 	mc6809.cpp \
 	mc6809in.cpp \
 	mc6809lg.cpp \
 	mc6809st.cpp \
 	mc6821.cpp \
-	mc6522.cpp \
 	mc6850.cpp \
 	mmu.cpp \
 	ndircont.cpp \
 	pagedet.cpp \
 	pagedetd.cpp \
 	pia1.cpp \
-	via1.cpp \
 	pia2.cpp \
 	pia2v5.cpp \
 	poutwin.cpp \
@@ -251,6 +247,7 @@ flexemu_SOURCES = \
 	termimpf.cpp \
 	termimps.cpp \
 	terminal.cpp \
+	via1.cpp \
 	vico1.cpp \
 	vico2.cpp \
 	wd1793.cpp \
@@ -328,11 +325,11 @@ flexemu_SOURCES = \
 	keyboard.h \
 	logfilui.h \
 	mc146818.h \
+	mc6522.h \
 	mc6809.h \
 	mc6809lg.h \
 	mc6809st.h \
 	mc6821.h \
-	mc6522.h \
 	mc6850.h \
 	mdcrtape.h \
 	memory.h \
@@ -344,7 +341,6 @@ flexemu_SOURCES = \
 	pagedet.h \
 	pagedetd.h \
 	pia1.h \
-	via1.h \
 	pia2.h \
 	pia2v5.h \
 	poutwin.h \
@@ -366,6 +362,7 @@ flexemu_SOURCES = \
 	termimps.h \
 	terminal.h \
 	typedefs.h \
+	via1.h \
 	vico1.h \
 	vico2.h \
 	warnoff.h \

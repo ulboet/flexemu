@@ -99,8 +99,8 @@ protected:
 
 public:
 
-    Mc6522();
-    virtual ~Mc6522();
+    Mc6522() = default;
+    ~Mc6522() override = default;
 };
 
 inline Mc6522::ControlLine operator| (Mc6522::ControlLine lhs,
