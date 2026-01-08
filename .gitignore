@@ -1,3 +1,11 @@
+# Build-Reste
+Makefile
+config.status
+libtool
+autom4te.cache/
+bld/
+.deps/
+
 # Precompiled Headers
 *.gch
 *.pch

@@ -58,6 +58,7 @@ ApplicationRunner::ApplicationRunner(struct sOptions &p_options,
     acia1(terminalIO, inout),
     pia1(scheduler, keyboardIO, p_options),
     pia2(cpu, keyboardIO, joystickIO),
+    via1(scheduler),
     pia2v5(cpu),
     drisel(fdc),
     command(inout, scheduler, fdc, options),
@@ -128,6 +129,7 @@ ApplicationRunner::ApplicationRunner(struct sOptions &p_options,
 
     ioDevices.insert({ acia1.getName(), acia1 });
     ioDevices.insert({ pia1.getName(), pia1 });
+    ioDevices.insert({ via1.getName(),via1});
     if (options.isEurocom2V5)
     {
         ioDevices.insert({ pia2v5.getName(), pia2v5 });
@@ -163,6 +165,8 @@ ApplicationRunner::ApplicationRunner(struct sOptions &p_options,
 
     pia1.Attach(inout);
     pia1.Attach(cpu);
+    via1.Attach(inout);
+    via1.Attach(cpu);
     acia1.Attach(cpu);
     terminalIO.Attach(cpu);
     terminalIO.Attach(gui);

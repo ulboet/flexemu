@@ -458,6 +458,7 @@ set(flexemu_SOURCES
     logfilui.cpp
     main.cpp
     mc146818.cpp
+    mc6522.cpp
     mc6809.cpp
     mc6809in.cpp
     mc6809lg.cpp
@@ -488,6 +489,7 @@ set(flexemu_SOURCES
     termimps.cpp
     terminal.cpp
     tstdev.cpp
+    via1.cpp
     vico1.cpp
     vico2.cpp
     wd1793.cpp
@@ -575,6 +577,7 @@ set(flexemu_HEADER
     keyboard.h
     logfilui.h
     mc146818.h
+    mc6522.h
     mc6809.h
     mc6809lg.h
     mc6809st.h
@@ -617,6 +620,7 @@ set(flexemu_HEADER
     terminal.h
     tstdev.h
     typedefs.h
+    via1.h
     vico1.h
     vico2.h
     warnoff.h

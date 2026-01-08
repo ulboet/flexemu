@@ -37,6 +37,7 @@
 #include "acia1.h"
 #include "pia1.h"
 #include "pia2.h"
+#include "via1.h"
 #include "pia2v5.h"
 #include "e2floppy.h"
 #include "command.h"
@@ -91,6 +92,7 @@ private:
     Acia1 acia1;
     Pia1 pia1;
     Pia2 pia2;
+    Via1 via1;
     Pia2V5 pia2v5;
     DriveSelect drisel;
     Command command;

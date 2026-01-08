@@ -39,6 +39,7 @@ if(UNIX)
     add_executable(toflex toflex.c)
     add_executable(send2flx send2flx.c)
     add_executable(testdaa testdaa.c)
+    add_executable(s19toflex s19toflex.c)
 
     install(TARGETS bin2s19 fromflex toflex)
 endif()
